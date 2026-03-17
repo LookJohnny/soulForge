@@ -32,16 +32,28 @@ export default function ChatPanel({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
-  const playAudio = (audioBase64: string, msgId: string) => {
+  const playAudio = async (audioBase64: string, msgId: string) => {
+    // Stop previous audio safely
     if (audioRef.current) {
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
       audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
     }
+    setPlayingId(msgId);
+
     const audio = new Audio(`data:audio/wav;base64,${audioBase64}`);
     audioRef.current = audio;
-    setPlayingId(msgId);
-    audio.onended = () => setPlayingId(null);
-    audio.onerror = () => setPlayingId(null);
-    audio.play();
+    audio.onended = () => { setPlayingId(null); audioRef.current = null; };
+    audio.onerror = () => { setPlayingId(null); audioRef.current = null; };
+
+    try {
+      await audio.play();
+    } catch {
+      // Interrupted by user action or new playback — safe to ignore
+      setPlayingId(null);
+    }
   };
 
   const sendMessage = async () => {
