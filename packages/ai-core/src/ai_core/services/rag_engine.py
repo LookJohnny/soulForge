@@ -13,7 +13,8 @@ class RagEngine:
 
     async def connect(self):
         self.client = MilvusClient(
-            uri=f"http://{settings.milvus_host}:{settings.milvus_port}"
+            uri=f"http://{settings.milvus_host}:{settings.milvus_port}",
+            timeout=5,
         )
 
     def _collection_name(self, character_id: str) -> str:

@@ -6,6 +6,7 @@ All use the same OpenAI SDK with different base_url + api_key.
 
 from collections.abc import AsyncIterator
 
+import httpx
 import structlog
 from openai import AsyncOpenAI
 
@@ -21,7 +22,9 @@ class OpenAICompatProvider(LLMProvider):
 
     def __init__(self, base_url: str, api_key: str, model: str):
         self.model = model
-        self.client = AsyncOpenAI(base_url=base_url, api_key=api_key)
+        # Use a custom httpx client to bypass system SOCKS proxy
+        http_client = httpx.AsyncClient(proxy=None)
+        self.client = AsyncOpenAI(base_url=base_url, api_key=api_key, http_client=http_client)
         logger.info("llm.provider_init", provider=self.name, base_url=base_url, model=model)
 
     def _build_messages(
