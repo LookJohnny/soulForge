@@ -59,7 +59,7 @@ async def chat_preview(req: ChatPreviewRequest):
             speed=prompt_result.get("voice_speed", 1.0),
         )
         audio_b64 = base64.b64encode(wav_data).decode()
-        audio_fmt = "wav"
+        audio_fmt = "mp3" if wav_data[:3] == b"ID3" or (wav_data[0] == 0xFF and (wav_data[1] & 0xE0) == 0xE0) else "wav"
 
     latency = int((time.monotonic() - start) * 1000)
 

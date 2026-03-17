@@ -1,8 +1,5 @@
 """DashScope CosyVoice TTS provider."""
 
-import io
-import struct
-
 import dashscope
 from dashscope.audio.tts_v2 import SpeechSynthesizer
 
@@ -23,36 +20,16 @@ PRESET_VOICES = {
 DEFAULT_VOICE = "longxiaochun"
 
 
-def pcm_to_wav(
-    pcm_data: bytes, sample_rate: int = 16000, channels: int = 1, bits: int = 16
-) -> bytes:
-    """Convert raw PCM bytes to WAV format."""
-    data_size = len(pcm_data)
-    byte_rate = sample_rate * channels * bits // 8
-    block_align = channels * bits // 8
-
-    buf = io.BytesIO()
-    buf.write(b"RIFF")
-    buf.write(struct.pack("<I", 36 + data_size))
-    buf.write(b"WAVE")
-    buf.write(b"fmt ")
-    buf.write(struct.pack("<I", 16))
-    buf.write(struct.pack("<H", 1))
-    buf.write(struct.pack("<H", channels))
-    buf.write(struct.pack("<I", sample_rate))
-    buf.write(struct.pack("<I", byte_rate))
-    buf.write(struct.pack("<H", block_align))
-    buf.write(struct.pack("<H", bits))
-    buf.write(b"data")
-    buf.write(struct.pack("<I", data_size))
-    buf.write(pcm_data)
-    return buf.getvalue()
-
-
 class DashScopeTTSProvider(TTSProvider):
-    """DashScope CosyVoice TTS provider."""
+    """DashScope CosyVoice TTS provider.
+
+    Note: CosyVoice v2 SDK returns MP3 format (not raw PCM).
+    """
 
     name = "dashscope"
+
+    # The actual format returned by DashScope
+    output_format = "mp3"
 
     async def synthesize(
         self,
@@ -76,8 +53,8 @@ class DashScopeTTSProvider(TTSProvider):
         voice: str | None = None,
         speed: float = 1.0,
     ) -> bytes:
-        pcm_data = await self.synthesize(text, voice, speed)
-        return pcm_to_wav(pcm_data)
+        # DashScope returns MP3 directly — browsers can play MP3 natively
+        return await self.synthesize(text, voice, speed)
 
     def get_voices(self) -> dict[str, str]:
         return dict(PRESET_VOICES)

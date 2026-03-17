@@ -45,11 +45,25 @@ export default function ChatPanel({
     }
     setPlayingId(msgId);
 
-    // Convert base64 to Blob URL — more reliable than data: URI for large audio
-    const raw = atob(audioBase64);
-    const bytes = new Uint8Array(raw.length);
-    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-    const blob = new Blob([bytes], { type: "audio/wav" });
+    // Convert base64 to Blob URL
+    let bytes: Uint8Array;
+    try {
+      const raw = atob(audioBase64);
+      bytes = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    } catch (e) {
+      console.error("Base64 decode failed:", e, "length:", audioBase64.length);
+      setPlayingId(null);
+      return;
+    }
+
+    // Auto-detect audio format from header bytes
+    const isWAV = bytes[0] === 0x52 && bytes[1] === 0x49; // "RI" (RIFF)
+    const isMP3 = (bytes[0] === 0x49 && bytes[1] === 0x44) || // "ID" (ID3 tag)
+                  (bytes[0] === 0xFF && (bytes[1] & 0xE0) === 0xE0); // MPEG sync
+    const mimeType = isWAV ? "audio/wav" : isMP3 ? "audio/mpeg" : "audio/wav";
+
+    const blob = new Blob([bytes], { type: mimeType });
     const url = URL.createObjectURL(blob);
 
     const audio = new Audio(url);
