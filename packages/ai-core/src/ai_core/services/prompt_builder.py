@@ -141,6 +141,8 @@ class PromptBuilder:
         # Get voice info — explicit assignment or auto-match
         voice_id = None
         voice_speed = base.get("voice_speed", 1.0)
+        pitch_rate = 0
+        speech_rate = 0
 
         if base.get("voice_id"):
             # Designer explicitly assigned a voice
@@ -158,11 +160,15 @@ class PromptBuilder:
             )
             voice_id = matched["voice_id"]
             voice_speed = matched["speed"]
+            pitch_rate = matched["pitch_rate"]
+            speech_rate = matched["speech_rate"]
 
         return {
             "system_prompt": system_prompt,
             "voice_id": voice_id,
             "voice_speed": voice_speed,
+            "pitch_rate": pitch_rate,
+            "speech_rate": speech_rate,
         }
 
     async def _get_character(self, character_id: str) -> dict | None:

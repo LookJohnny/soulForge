@@ -14,8 +14,10 @@ class TTSProvider(ABC):
         text: str,
         voice: str | None = None,
         speed: float = 1.0,
+        pitch_rate: int = 0,
+        speech_rate: int = 0,
     ) -> bytes:
-        """Synthesize text to PCM audio bytes (16kHz 16bit mono)."""
+        """Synthesize text to audio bytes."""
         ...
 
     @abstractmethod
@@ -24,8 +26,10 @@ class TTSProvider(ABC):
         text: str,
         voice: str | None = None,
         speed: float = 1.0,
+        pitch_rate: int = 0,
+        speech_rate: int = 0,
     ) -> bytes:
-        """Synthesize text and return WAV format."""
+        """Synthesize text and return playable audio format."""
         ...
 
     @abstractmethod

@@ -1,8 +1,12 @@
-"""Voice auto-matcher — selects the best voice + speed based on character traits.
+"""Voice Persona Engine — builds a complete voice profile for each character.
 
-When a character has no explicit voice assigned, this service analyzes
-species, age, personality to pick the most fitting DashScope preset voice
-and appropriate speech speed.
+Combines three layers:
+1. Voice selection — pick the best DashScope preset
+2. Pitch shift — DashScope pitch_rate (-500 to 500) to match species/age
+3. Speech rate — DashScope speech_rate (-500 to 500) for energy/personality
+
+When a character has no explicit voice assigned, this engine analyzes
+species, age, personality to produce a complete voice persona.
 """
 
 
@@ -18,17 +22,28 @@ VOICE_PROFILES = {
     "longcheng":    {"gender": "male",   "age": "adult", "style": "deep", "energy": 25, "pitch": "low"},
 }
 
-# Species → preferred voice traits
+# Species → voice persona hints
+# pitch_shift: DashScope pitch_rate value (-500 to 500), positive = higher
+# speech_shift: DashScope speech_rate value (-500 to 500), positive = faster
 SPECIES_HINTS = {
-    "猫":       {"pitch": "high", "energy": 65, "prefer_style": ["sweet", "energetic", "gentle"], "speed_boost": 0.08},
-    "小猫":     {"pitch": "high", "energy": 75, "prefer_style": ["energetic", "sweet"], "speed_boost": 0.1},
-    "兔子":     {"pitch": "high", "energy": 75, "prefer_style": ["sweet", "energetic"]},
-    "熊":       {"pitch": "low",  "energy": 40, "prefer_style": ["gentle", "calm", "deep"]},
-    "狗":       {"pitch": "medium", "energy": 70, "prefer_style": ["bright", "hearty"]},
-    "狐狸":     {"pitch": "medium", "energy": 50, "prefer_style": ["elegant", "gentle"]},
-    "龙":       {"pitch": "low",  "energy": 60, "prefer_style": ["deep", "calm"]},
-    "企鹅":     {"pitch": "high", "energy": 55, "prefer_style": ["sweet", "bright"]},
-    "独角兽":   {"pitch": "high", "energy": 50, "prefer_style": ["elegant", "gentle"]},
+    "猫":       {"pitch": "high", "energy": 65, "prefer_style": ["sweet", "energetic", "gentle"],
+                 "pitch_shift": 100, "speech_shift": 50},
+    "小猫":     {"pitch": "high", "energy": 75, "prefer_style": ["energetic", "sweet"],
+                 "pitch_shift": 150, "speech_shift": 80},
+    "兔子":     {"pitch": "high", "energy": 75, "prefer_style": ["sweet", "energetic"],
+                 "pitch_shift": 80, "speech_shift": 60},
+    "熊":       {"pitch": "low",  "energy": 40, "prefer_style": ["gentle", "calm", "deep"],
+                 "pitch_shift": -200, "speech_shift": -80},
+    "狗":       {"pitch": "medium", "energy": 70, "prefer_style": ["bright", "hearty"],
+                 "pitch_shift": 0, "speech_shift": 30},
+    "狐狸":     {"pitch": "medium", "energy": 50, "prefer_style": ["elegant", "gentle"],
+                 "pitch_shift": 50, "speech_shift": 0},
+    "龙":       {"pitch": "low",  "energy": 60, "prefer_style": ["deep", "calm"],
+                 "pitch_shift": -250, "speech_shift": -50},
+    "企鹅":     {"pitch": "high", "energy": 55, "prefer_style": ["sweet", "bright"],
+                 "pitch_shift": 100, "speech_shift": 20},
+    "独角兽":   {"pitch": "high", "energy": 50, "prefer_style": ["elegant", "gentle"],
+                 "pitch_shift": 60, "speech_shift": 0},
 }
 
 
@@ -98,22 +113,42 @@ def match_voice(
     best_vid = max(scores, key=scores.get)  # type: ignore
     best_profile = VOICE_PROFILES[best_vid]
 
-    # Calculate speed adjustment
-    speed = 1.0
-    # Species-specific speed boost (e.g., small animals sound cuter faster)
-    speed += hints.get("speed_boost", 0)
-    if age_setting is not None and age_setting <= 10:
-        speed += 0.1  # Kids speak slightly faster
+    # ─── Pitch rate (DashScope -500 to 500) ───
+    pitch_rate = hints.get("pitch_shift", 0)
+    # Age adjusts pitch further
+    if age_setting is not None:
+        if age_setting <= 5:
+            pitch_rate += 80   # Very young = higher pitch
+        elif age_setting <= 10:
+            pitch_rate += 40
+        elif age_setting > 50:
+            pitch_rate -= 30   # Older = slightly lower
+    # Personality fine-tune
     if personality:
         energy = personality.get("energy", 50)
-        if energy > 70:
-            speed += 0.05
-        elif energy < 30:
-            speed -= 0.05
-    speed = round(max(0.8, min(1.3, speed)), 2)
+        if energy > 75:
+            pitch_rate += 20
+        elif energy < 25:
+            pitch_rate -= 20
+    pitch_rate = max(-500, min(500, pitch_rate))
+
+    # ─── Speech rate (DashScope -500 to 500) ───
+    speech_rate = hints.get("speech_shift", 0)
+    if age_setting is not None and age_setting <= 10:
+        speech_rate += 50
+    if personality:
+        energy = personality.get("energy", 50)
+        extrovert = personality.get("extrovert", 50)
+        speech_rate += int((energy - 50) * 0.5 + (extrovert - 50) * 0.3)
+    speech_rate = max(-500, min(500, speech_rate))
+
+    # Also compute a float speed for backward compatibility
+    speed = round(1.0 + speech_rate / 500, 2)
 
     return {
         "voice_id": best_vid,
         "speed": speed,
-        "reason": f"species={species}, voice={best_vid}({best_profile['style']}), speed={speed}",
+        "pitch_rate": pitch_rate,
+        "speech_rate": speech_rate,
+        "reason": f"{species} → {best_vid}({best_profile['style']}), pitch={pitch_rate}, speech={speech_rate}",
     }

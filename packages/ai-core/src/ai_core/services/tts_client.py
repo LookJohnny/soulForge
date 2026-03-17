@@ -12,18 +12,20 @@ class TTSClient:
         text: str,
         voice: str | None = None,
         speed: float = 1.0,
+        pitch_rate: int = 0,
+        speech_rate: int = 0,
     ) -> bytes:
-        """Synthesize text to PCM audio bytes (16kHz 16bit mono)."""
-        return await self._provider.synthesize(text, voice, speed)
+        return await self._provider.synthesize(text, voice, speed, pitch_rate, speech_rate)
 
     async def synthesize_to_wav(
         self,
         text: str,
         voice: str | None = None,
         speed: float = 1.0,
+        pitch_rate: int = 0,
+        speech_rate: int = 0,
     ) -> bytes:
-        """Synthesize text and return WAV format."""
-        return await self._provider.synthesize_to_wav(text, voice, speed)
+        return await self._provider.synthesize_to_wav(text, voice, speed, pitch_rate, speech_rate)
 
     def get_preset_voices(self) -> dict[str, str]:
         return self._provider.get_voices()

@@ -66,6 +66,8 @@ async def chat(req: ChatRequest, request: Request):
             text=ai_text,
             voice=prompt_result["voice_id"],
             speed=prompt_result.get("voice_speed", 1.0),
+            pitch_rate=prompt_result.get("pitch_rate", 0),
+            speech_rate=prompt_result.get("speech_rate", 0),
         )
         audio_b64 = base64.b64encode(audio_bytes).decode()
 
