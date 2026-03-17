@@ -38,21 +38,40 @@ export default function ChatPanel({
       audioRef.current.onended = null;
       audioRef.current.onerror = null;
       audioRef.current.pause();
-      audioRef.current.src = "";
+      if (audioRef.current.src.startsWith("blob:")) {
+        URL.revokeObjectURL(audioRef.current.src);
+      }
       audioRef.current = null;
     }
     setPlayingId(msgId);
 
-    const audio = new Audio(`data:audio/wav;base64,${audioBase64}`);
+    // Convert base64 to Blob URL — more reliable than data: URI for large audio
+    const raw = atob(audioBase64);
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    const blob = new Blob([bytes], { type: "audio/wav" });
+    const url = URL.createObjectURL(blob);
+
+    const audio = new Audio(url);
     audioRef.current = audio;
-    audio.onended = () => { setPlayingId(null); audioRef.current = null; };
-    audio.onerror = () => { setPlayingId(null); audioRef.current = null; };
+    audio.onended = () => {
+      setPlayingId(null);
+      URL.revokeObjectURL(url);
+      audioRef.current = null;
+    };
+    audio.onerror = (e) => {
+      console.error("Audio playback error:", e);
+      setPlayingId(null);
+      URL.revokeObjectURL(url);
+      audioRef.current = null;
+    };
 
     try {
       await audio.play();
-    } catch {
-      // Interrupted by user action or new playback — safe to ignore
+    } catch (e) {
+      console.warn("Audio play failed:", e);
       setPlayingId(null);
+      URL.revokeObjectURL(url);
     }
   };
 
