@@ -1,0 +1,26 @@
+{
+  "name": "@soulforge/database",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev --name init",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio",
+    "build": "echo 'No build step'",
+    "lint": "echo 'No lint step'"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.3",
+    "bcryptjs": "^3.0.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^3.0.0",
+    "prisma": "^6.3",
+    "tsx": "^4.19",
+    "typescript": "^5.7"
+  }
+}

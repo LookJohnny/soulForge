@@ -1,0 +1,29 @@
+"""TTS Client — thin wrapper delegating to provider abstraction layer."""
+
+from ai_core.services.tts.registry import create_tts_provider
+
+
+class TTSClient:
+    def __init__(self, provider: str | None = None):
+        self._provider = create_tts_provider(provider=provider)
+
+    async def synthesize(
+        self,
+        text: str,
+        voice: str | None = None,
+        speed: float = 1.0,
+    ) -> bytes:
+        """Synthesize text to PCM audio bytes (16kHz 16bit mono)."""
+        return await self._provider.synthesize(text, voice, speed)
+
+    async def synthesize_to_wav(
+        self,
+        text: str,
+        voice: str | None = None,
+        speed: float = 1.0,
+    ) -> bytes:
+        """Synthesize text and return WAV format."""
+        return await self._provider.synthesize_to_wav(text, voice, speed)
+
+    def get_preset_voices(self) -> dict[str, str]:
+        return self._provider.get_voices()

@@ -1,0 +1,224 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  --background: #07060e;
+  --foreground: #e8e0d4;
+  --accent: #c9944a;
+  --accent-glow: rgba(201, 148, 74, 0.4);
+  --sacred-gold: #d4a574;
+  --sacred-deep: #8b6914;
+  --card-bg: rgba(201, 148, 74, 0.03);
+  --card-border: rgba(201, 148, 74, 0.1);
+  --card-hover: rgba(201, 148, 74, 0.06);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
+}
+
+/* Sacred temple background — dark cathedral with golden light shafts */
+.bg-cosmic {
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(201, 148, 74, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 20% 60%, rgba(139, 105, 20, 0.06) 0%, transparent 40%),
+    radial-gradient(ellipse at 80% 40%, rgba(201, 148, 74, 0.04) 0%, transparent 45%),
+    radial-gradient(ellipse at 50% 100%, rgba(30, 20, 10, 0.8) 0%, transparent 50%),
+    var(--background);
+  min-height: 100vh;
+}
+
+/* Sacred parchment cards */
+.glass {
+  background: var(--card-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--card-border);
+}
+
+.glass:hover {
+  background: var(--card-hover);
+  border-color: rgba(201, 148, 74, 0.18);
+}
+
+/* Sacred glow — warm candlelight */
+.glow-purple {
+  box-shadow:
+    0 0 20px rgba(201, 148, 74, 0.12),
+    0 0 60px rgba(201, 148, 74, 0.04),
+    inset 0 0 30px rgba(201, 148, 74, 0.02);
+}
+
+.glow-text {
+  text-shadow: 0 0 30px rgba(201, 148, 74, 0.5);
+}
+
+/* Ritual sliders */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(201, 148, 74, 0.08);
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #d4a574, #8b6914);
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(201, 148, 74, 0.6);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 24px rgba(201, 148, 74, 0.8);
+}
+
+input[type="range"]::-webkit-slider-thumb:active {
+  transform: scale(1.3);
+}
+
+/* Form inputs — ancient scroll feel */
+.input-dark {
+  background: rgba(201, 148, 74, 0.04);
+  border: 1px solid rgba(201, 148, 74, 0.12);
+  border-radius: 12px;
+  padding: 10px 14px;
+  color: #e8e0d4;
+  transition: all 0.2s ease;
+}
+
+.input-dark:focus {
+  outline: none;
+  border-color: rgba(201, 148, 74, 0.4);
+  box-shadow: 0 0 0 3px rgba(201, 148, 74, 0.1);
+  background: rgba(201, 148, 74, 0.06);
+}
+
+.input-dark::placeholder {
+  color: rgba(201, 148, 74, 0.25);
+}
+
+/* Sacred animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); opacity: 0.3; }
+  50% { transform: translateY(-12px); opacity: 0.7; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+@keyframes candleflicker {
+  0%, 100% { opacity: 0.7; filter: brightness(1); }
+  25% { opacity: 0.85; filter: brightness(1.1); }
+  50% { opacity: 0.6; filter: brightness(0.95); }
+  75% { opacity: 0.9; filter: brightness(1.05); }
+}
+
+@keyframes incense {
+  0% { transform: translateY(0) scaleX(1); opacity: 0.15; }
+  50% { transform: translateY(-30px) scaleX(1.3); opacity: 0.05; }
+  100% { transform: translateY(-60px) scaleX(0.8); opacity: 0; }
+}
+
+@keyframes halo-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+.animate-candle {
+  animation: candleflicker 4s ease-in-out infinite;
+}
+
+.animate-halo {
+  animation: halo-rotate 20s linear infinite;
+}
+
+/* Scrollbar — dark brass */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(201, 148, 74, 0.15);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(201, 148, 74, 0.3);
+}
+
+/* Soul bar fill animation */
+.stat-bar-fill {
+  transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Sacred button — flame gradient */
+.btn-primary {
+  background: linear-gradient(135deg, #c9944a, #8b6914);
+  color: #0a0a14;
+  font-weight: 600;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 24px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.02em;
+}
+
+.btn-primary:hover {
+  box-shadow: 0 0 30px rgba(201, 148, 74, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Sacred divider */
+.sacred-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201, 148, 74, 0.2), transparent);
+}
+
+/* Rune text effect */
+.rune-text {
+  background: linear-gradient(135deg, #d4a574, #f0d9b5, #c9944a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}

@@ -1,0 +1,312 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ─────────────────────────────────────────
+
+enum CharacterStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ResponseLength {
+  SHORT
+  MEDIUM
+  LONG
+}
+
+enum DeviceStatus {
+  ACTIVE
+  OFFLINE
+  MAINTENANCE
+}
+
+enum LicenseTier {
+  FREE
+  TRIAL
+  PRO
+  ENTERPRISE
+}
+
+enum UsageType {
+  CONVERSATION
+  TTS_CALL
+  LLM_TOKEN
+}
+
+// ─── Brand / Tenant ────────────────────────────────
+
+model Brand {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(100)
+  slug      String   @unique @db.VarChar(50)
+  logo      String?  @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  characters Character[]
+  users      User[]
+  licenses   License[]
+  apiKeys    ApiKey[]
+  soulPacks  SoulPack[]
+
+  @@map("brands")
+}
+
+// ─── Users (B-end designers + admin) ───────────────
+
+model User {
+  id              String    @id @default(uuid()) @db.Uuid
+  brandId         String    @map("brand_id") @db.Uuid
+  email           String    @unique @db.VarChar(200)
+  name            String    @db.VarChar(100)
+  hashedPassword  String    @map("hashed_password") @db.VarChar(200)
+  role            String    @default("designer") @db.VarChar(20)
+  emailVerified   DateTime? @map("email_verified")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  brand Brand @relation(fields: [brandId], references: [id])
+
+  @@map("users")
+}
+
+// ─── End Users (C-end, from mini program) ──────────
+
+model EndUser {
+  id        String   @id @default(uuid()) @db.Uuid
+  openId    String?  @unique @map("open_id") @db.VarChar(100)
+  unionId   String?  @map("union_id") @db.VarChar(100)
+  nickname  String?  @db.VarChar(50)
+  avatar    String?  @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  customizations UserCustomization[]
+  devices        Device[]
+
+  @@map("end_users")
+}
+
+// ─── Character (designer-authored soul config) ─────
+
+model Character {
+  id             String          @id @default(uuid()) @db.Uuid
+  brandId        String          @map("brand_id") @db.Uuid
+  name           String          @db.VarChar(50)
+  species        String          @db.VarChar(30)
+  ageSetting     Int?            @map("age_setting")
+  backstory      String?         @db.Text
+  relationship   String?         @db.VarChar(20)
+  personality    Json            @default("{}")
+  catchphrases   String[]        @default([])
+  suffix         String?         @db.VarChar(20)
+  topics         String[]        @default([])
+  forbidden      String[]        @default([])
+  responseLength ResponseLength  @default(SHORT) @map("response_length")
+  voiceId        String?         @map("voice_id") @db.Uuid
+  voiceSpeed     Float           @default(1.0) @map("voice_speed")
+  emotionConfig  Json?           @map("emotion_config")
+  avatar         String?         @db.VarChar(200)
+  status         CharacterStatus @default(DRAFT)
+  // Sprint 2: Per-character provider overrides
+  llmProvider    String?         @map("llm_provider") @db.VarChar(50)
+  llmModel       String?         @map("llm_model") @db.VarChar(100)
+  ttsProvider    String?         @map("tts_provider") @db.VarChar(50)
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  brand          Brand              @relation(fields: [brandId], references: [id])
+  voice          VoiceProfile?      @relation(fields: [voiceId], references: [id])
+  customizations UserCustomization[]
+  devices        Device[]
+  logs           ConversationLog[]
+
+  @@index([brandId])
+  @@index([status])
+  @@map("characters")
+}
+
+// ─── Voice Profile ─────────────────────────────────
+
+model VoiceProfile {
+  id               String   @id @default(uuid()) @db.Uuid
+  name             String   @db.VarChar(50)
+  referenceAudio   String   @map("reference_audio") @db.VarChar(200)
+  description      String?  @db.Text
+  tags             String[] @default([])
+  dashscopeVoiceId String?  @map("dashscope_voice_id") @db.VarChar(100)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  characters Character[]
+
+  @@map("voice_profiles")
+}
+
+// ─── User Customization (C-end "face sculpting") ───
+
+model UserCustomization {
+  id                 String   @id @default(uuid()) @db.Uuid
+  endUserId          String   @map("end_user_id") @db.Uuid
+  characterId        String   @map("character_id") @db.Uuid
+  deviceId           String?  @map("device_id") @db.VarChar(100)
+  nickname           String?  @db.VarChar(30)
+  userTitle          String?  @map("user_title") @db.VarChar(20)
+  personalityOffsets Json?    @map("personality_offsets")
+  interestTopics     String[] @default([]) @map("interest_topics")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  endUser   EndUser   @relation(fields: [endUserId], references: [id])
+  character Character @relation(fields: [characterId], references: [id])
+
+  @@unique([endUserId, characterId, deviceId])
+  @@index([endUserId])
+  @@index([characterId])
+  @@map("user_customizations")
+}
+
+// ─── Device ────────────────────────────────────────
+
+model Device {
+  id            String       @id @db.VarChar(100)
+  characterId   String?      @map("character_id") @db.Uuid
+  endUserId     String?      @map("end_user_id") @db.Uuid
+  firmwareVer   String?      @map("firmware_ver") @db.VarChar(20)
+  hardwareModel String?      @map("hardware_model") @db.VarChar(50)
+  lastSeen      DateTime?    @map("last_seen")
+  status        DeviceStatus @default(OFFLINE)
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  character   Character?          @relation(fields: [characterId], references: [id])
+  endUser     EndUser?            @relation(fields: [endUserId], references: [id])
+  logs        ConversationLog[]
+  activations DeviceActivation[]
+
+  @@index([characterId])
+  @@index([endUserId])
+  @@map("devices")
+}
+
+// ─── Conversation Log ──────────────────────────────
+
+model ConversationLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  deviceId    String   @map("device_id") @db.VarChar(100)
+  characterId String   @map("character_id") @db.Uuid
+  sessionId   String?  @map("session_id") @db.VarChar(100)
+  userInput   String   @map("user_input") @db.Text
+  aiResponse  String   @map("ai_response") @db.Text
+  latencyMs   Int?     @map("latency_ms")
+  flagged     Boolean  @default(false)
+  flagReason  String?  @map("flag_reason") @db.VarChar(200)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  device    Device    @relation(fields: [deviceId], references: [id])
+  character Character @relation(fields: [characterId], references: [id])
+
+  @@index([deviceId])
+  @@index([characterId])
+  @@index([createdAt])
+  @@index([flagged])
+  @@map("conversation_logs")
+}
+
+// ─── License (Sprint 3) ───────────────────────────
+
+model License {
+  id              String      @id @default(uuid()) @db.Uuid
+  brandId         String      @map("brand_id") @db.Uuid
+  tier            LicenseTier @default(FREE)
+  maxCharacters   Int         @default(3) @map("max_characters")
+  maxDevices      Int         @default(10) @map("max_devices")
+  maxDailyConvos  Int         @default(100) @map("max_daily_convos")
+  expiresAt       DateTime?   @map("expires_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  brand Brand @relation(fields: [brandId], references: [id])
+
+  @@index([brandId])
+  @@map("licenses")
+}
+
+// ─── API Key (Sprint 3) ──────────────────────────
+
+model ApiKey {
+  id          String    @id @default(uuid()) @db.Uuid
+  brandId     String    @map("brand_id") @db.Uuid
+  name        String    @db.VarChar(100)
+  prefix      String    @db.VarChar(12)
+  hashedKey   String    @unique @map("hashed_key") @db.VarChar(128)
+  lastUsedAt  DateTime? @map("last_used_at")
+  expiresAt   DateTime? @map("expires_at")
+  revoked     Boolean   @default(false)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  brand Brand @relation(fields: [brandId], references: [id])
+
+  @@index([brandId])
+  @@index([hashedKey])
+  @@map("api_keys")
+}
+
+// ─── Usage Record (Sprint 3) ─────────────────────
+
+model UsageRecord {
+  id        String    @id @default(uuid()) @db.Uuid
+  brandId   String    @map("brand_id") @db.Uuid
+  type      UsageType
+  count     Int       @default(0)
+  date      DateTime  @db.Date
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@unique([brandId, type, date])
+  @@index([brandId, date])
+  @@map("usage_records")
+}
+
+// ─── Device Activation Audit (Sprint 3) ──────────
+
+model DeviceActivation {
+  id        String   @id @default(uuid()) @db.Uuid
+  deviceId  String   @map("device_id") @db.VarChar(100)
+  action    String   @db.VarChar(20) // "activate" | "deactivate"
+  reason    String?  @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  device Device @relation(fields: [deviceId], references: [id])
+
+  @@index([deviceId])
+  @@index([createdAt])
+  @@map("device_activations")
+}
+
+// ─── Soul Pack (Sprint 3) ────────────────────────
+
+model SoulPack {
+  id          String   @id @default(uuid()) @db.Uuid
+  brandId     String   @map("brand_id") @db.Uuid
+  characterId String   @map("character_id") @db.Uuid
+  version     String   @db.VarChar(20)
+  checksum    String   @db.VarChar(64)
+  fileUrl     String   @map("file_url") @db.VarChar(500)
+  fileSize    Int      @map("file_size")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  brand Brand @relation(fields: [brandId], references: [id])
+
+  @@index([brandId])
+  @@index([characterId])
+  @@map("soul_packs")
+}

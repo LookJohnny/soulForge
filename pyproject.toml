@@ -1,0 +1,18 @@
+[project]
+name = "soulforge"
+version = "0.1.0"
+description = "SoulForge - AI Toy Soul Injection Platform"
+requires-python = ">=3.12"
+
+[tool.uv.workspace]
+members = [
+    "packages/ai-core",
+    "packages/gateway",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.25",
+]

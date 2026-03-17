@@ -1,0 +1,26 @@
+# ─── Stage 1: Build ──────────────────────────────
+FROM python:3.12-slim AS builder
+WORKDIR /app
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+COPY packages/gateway/pyproject.toml packages/gateway/uv.lock* ./
+
+RUN uv sync --no-dev --frozen 2>/dev/null || uv sync --no-dev
+
+COPY packages/gateway/src ./src
+
+# ─── Stage 2: Production ─────────────────────────
+FROM python:3.12-slim AS runner
+WORKDIR /app
+
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/src /app/src
+
+ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONPATH="/app/src"
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8080
+
+CMD ["uvicorn", "gateway.main:app", "--host", "0.0.0.0", "--port", "8080"]

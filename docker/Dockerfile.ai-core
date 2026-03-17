@@ -1,0 +1,34 @@
+# ─── Stage 1: Build ──────────────────────────────
+FROM python:3.12-slim AS builder
+WORKDIR /app
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Copy dependency files
+COPY packages/ai-core/pyproject.toml packages/ai-core/uv.lock* ./
+
+# Install dependencies
+RUN uv sync --no-dev --frozen 2>/dev/null || uv sync --no-dev
+
+# Copy source
+COPY packages/ai-core/src ./src
+
+# ─── Stage 2: Production ─────────────────────────
+FROM python:3.12-slim AS runner
+WORKDIR /app
+
+# Copy virtual env and source from builder
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/src /app/src
+
+# Copy templates
+COPY packages/ai-core/src/ai_core/templates /app/src/ai_core/templates
+
+ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONPATH="/app/src"
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8100
+
+CMD ["uvicorn", "ai_core.main:app", "--host", "0.0.0.0", "--port", "8100"]

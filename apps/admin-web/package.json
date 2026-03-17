@@ -1,0 +1,35 @@
+{
+  "name": "@soulforge/admin-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@soulforge/database": "workspace:*",
+    "@soulforge/shared": "workspace:*",
+    "@tanstack/react-query": "^5.62",
+    "bcryptjs": "^3.0.3",
+    "framer-motion": "^12.37.0",
+    "lucide-react": "^0.469",
+    "next": "16.1.7",
+    "next-auth": "5.0.0-beta.30",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "zod": "^3.24"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^3.0.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.7",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

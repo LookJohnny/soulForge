@@ -1,0 +1,4 @@
+packages:
+  - "apps/admin-web"
+  - "packages/database"
+  - "packages/shared"

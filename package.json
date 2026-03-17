@@ -1,0 +1,28 @@
+{
+  "name": "soulforge",
+  "private": true,
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "db:generate": "turbo run db:generate --filter=@soulforge/database",
+    "db:migrate": "turbo run db:migrate --filter=@soulforge/database",
+    "db:seed": "turbo run db:seed --filter=@soulforge/database"
+  },
+  "devDependencies": {
+    "turbo": "^2.4",
+    "typescript": "^5.7"
+  },
+  "packageManager": "pnpm@10.11.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "esbuild",
+      "sharp",
+      "unrs-resolver"
+    ]
+  }
+}
