@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Eye } from "lucide-react";
+import { Flame } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,7 +26,7 @@ export default function LoginPage() {
     setLoading(false);
 
     if (result?.error) {
-      setError("凭证不符，圣殿拒绝了你的请求");
+      setError("邮箱或密码错误");
     } else {
       router.push("/dashboard/characters");
       router.refresh();
@@ -35,54 +35,45 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-cosmic flex items-center justify-center px-4 relative overflow-hidden">
-      {/* Sacred geometry background circles */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[600px] h-[600px] rounded-full border border-amber-800/8 animate-halo" />
-        <div className="absolute w-[450px] h-[450px] rounded-full border border-amber-700/6" style={{ animationDirection: "reverse", animation: "halo-rotate 30s linear infinite reverse" }} />
-        <div className="absolute w-[300px] h-[300px] rounded-full border border-amber-600/5 animate-halo" style={{ animationDuration: "25s" }} />
-      </div>
+      {/* Floating gradient orbs — Apple-style */}
+      <div className="orb w-[500px] h-[500px] bg-amber-600/30 top-[-15%] left-[20%] animate-blob" />
+      <div className="orb w-[400px] h-[400px] bg-amber-800/20 bottom-[-10%] right-[15%] animate-blob" style={{ animationDelay: "-4s" }} />
+      <div className="orb w-[300px] h-[300px] bg-orange-900/15 top-[40%] right-[5%] animate-blob" style={{ animationDelay: "-8s" }} />
 
-      <div className="w-full max-w-sm relative z-10">
-        {/* Sacred eye logo */}
-        <div className="flex flex-col items-center mb-10">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-600/80 to-amber-900/80 flex items-center justify-center mb-4 animate-candle shadow-lg shadow-amber-900/30">
-            <Eye className="w-7 h-7 text-amber-200" />
+      <div className="w-full max-w-[380px] relative z-10">
+        {/* Logo */}
+        <div className="flex flex-col items-center mb-12 animate-fade-in">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-700 flex items-center justify-center mb-5 shadow-xl shadow-amber-900/25">
+            <Flame className="w-6 h-6 text-white" />
           </div>
-          <span className="text-2xl font-bold rune-text tracking-wider">
+          <h1 className="text-[28px] font-bold tracking-tight text-shimmer">
             SoulForge
-          </span>
-          <p className="text-xs text-amber-700/50 mt-1 italic tracking-widest">
-            ANIMAE OFFICINA
+          </h1>
+          <p className="text-[13px] text-white/25 mt-1">
+            为角色注入灵魂的设计平台
           </p>
         </div>
 
-        {/* Card — ancient scroll */}
-        <div className="glass rounded-2xl p-8 glow-purple">
-          <h1 className="text-xl font-semibold text-amber-200/90 mb-1 text-center">
-            步入圣殿
-          </h1>
-          <p className="text-sm text-amber-600/40 mb-8 text-center">
-            以你的凭证开启灵魂锻造之门
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Card */}
+        <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-7 backdrop-blur-2xl animate-scale-in shadow-2xl shadow-black/20">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs text-amber-400/40 mb-2 ml-1 tracking-wider uppercase">
-                铭文信箱
+              <label className="block text-[12px] text-white/40 mb-1.5 ml-0.5 font-medium">
+                邮箱
               </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="input-dark w-full"
-                placeholder="forger@soulforge.ai"
+                placeholder="you@example.com"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-xs text-amber-400/40 mb-2 ml-1 tracking-wider uppercase">
-                秘钥
+              <label className="block text-[12px] text-white/40 mb-1.5 ml-0.5 font-medium">
+                密码
               </label>
               <input
                 type="password"
@@ -95,22 +86,18 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <p className="text-sm text-red-400/80 text-center">{error}</p>
+              <p className="text-[13px] text-red-400/80 text-center py-1">{error}</p>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              className="btn-primary w-full text-sm"
+              className="btn-primary w-full mt-2"
             >
-              {loading ? "验证神印中..." : "开启圣殿"}
+              {loading ? "登录中..." : "登录"}
             </button>
           </form>
         </div>
-
-        <p className="text-xs text-amber-800/30 text-center mt-6 italic">
-          以神圣之火锻铸灵魂
-        </p>
       </div>
     </div>
   );

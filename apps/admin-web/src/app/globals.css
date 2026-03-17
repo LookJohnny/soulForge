@@ -8,217 +8,252 @@
 }
 
 :root {
-  --background: #07060e;
-  --foreground: #e8e0d4;
+  --background: #050507;
+  --foreground: #f0ece6;
   --accent: #c9944a;
-  --accent-glow: rgba(201, 148, 74, 0.4);
-  --sacred-gold: #d4a574;
-  --sacred-deep: #8b6914;
-  --card-bg: rgba(201, 148, 74, 0.03);
-  --card-border: rgba(201, 148, 74, 0.1);
-  --card-hover: rgba(201, 148, 74, 0.06);
+  --accent-soft: #d4a574;
+  --card-bg: rgba(255, 255, 255, 0.03);
+  --card-border: rgba(255, 255, 255, 0.06);
+  --card-hover: rgba(255, 255, 255, 0.06);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Sacred temple background — dark cathedral with golden light shafts */
+/* ─── Background: animated gradient mesh ───────── */
 .bg-cosmic {
-  background:
-    radial-gradient(ellipse at 50% 0%, rgba(201, 148, 74, 0.08) 0%, transparent 50%),
-    radial-gradient(ellipse at 20% 60%, rgba(139, 105, 20, 0.06) 0%, transparent 40%),
-    radial-gradient(ellipse at 80% 40%, rgba(201, 148, 74, 0.04) 0%, transparent 45%),
-    radial-gradient(ellipse at 50% 100%, rgba(30, 20, 10, 0.8) 0%, transparent 50%),
-    var(--background);
+  background: var(--background);
   min-height: 100vh;
+  position: relative;
+  overflow: hidden;
 }
 
-/* Sacred parchment cards */
+.bg-cosmic::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(201, 148, 74, 0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 0% 50%, rgba(139, 90, 43, 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 50% at 100% 60%, rgba(201, 148, 74, 0.03) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ─── Glass cards ──────────────────────────────── */
 .glass {
   background: var(--card-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(40px) saturate(1.2);
+  -webkit-backdrop-filter: blur(40px) saturate(1.2);
   border: 1px solid var(--card-border);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass:hover {
   background: var(--card-hover);
-  border-color: rgba(201, 148, 74, 0.18);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
-/* Sacred glow — warm candlelight */
-.glow-purple {
+/* Apple-style hover lift card */
+.card-hover {
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.card-hover:hover {
+  transform: translateY(-4px) scale(1.01);
   box-shadow:
-    0 0 20px rgba(201, 148, 74, 0.12),
-    0 0 60px rgba(201, 148, 74, 0.04),
-    inset 0 0 30px rgba(201, 148, 74, 0.02);
+    0 20px 40px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(201, 148, 74, 0.08),
+    0 0 80px rgba(201, 148, 74, 0.04);
+}
+
+/* Warm glow */
+.glow-gold {
+  box-shadow:
+    0 0 30px rgba(201, 148, 74, 0.08),
+    0 0 80px rgba(201, 148, 74, 0.03);
 }
 
 .glow-text {
-  text-shadow: 0 0 30px rgba(201, 148, 74, 0.5);
+  text-shadow: 0 0 40px rgba(201, 148, 74, 0.4);
 }
 
-/* Ritual sliders */
+/* ─── Sliders ──────────────────────────────────── */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
-  height: 6px;
-  border-radius: 3px;
-  background: rgba(201, 148, 74, 0.08);
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.06);
   outline: none;
+  transition: background 0.2s;
 }
 
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background: radial-gradient(circle, #d4a574, #8b6914);
+  background: linear-gradient(145deg, #f0dcc0, #c9944a);
   cursor: pointer;
-  box-shadow: 0 0 12px rgba(201, 148, 74, 0.6);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 2px rgba(201, 148, 74, 0.2);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s;
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
-  box-shadow: 0 0 24px rgba(201, 148, 74, 0.8);
+  transform: scale(1.15);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 3px rgba(201, 148, 74, 0.25);
 }
 
 input[type="range"]::-webkit-slider-thumb:active {
-  transform: scale(1.3);
+  transform: scale(1.05);
 }
 
-/* Form inputs — ancient scroll feel */
+/* ─── Form inputs ──────────────────────────────── */
 .input-dark {
-  background: rgba(201, 148, 74, 0.04);
-  border: 1px solid rgba(201, 148, 74, 0.12);
-  border-radius: 12px;
-  padding: 10px 14px;
-  color: #e8e0d4;
-  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 11px 16px;
+  color: #f0ece6;
+  font-size: 14px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .input-dark:focus {
   outline: none;
   border-color: rgba(201, 148, 74, 0.4);
-  box-shadow: 0 0 0 3px rgba(201, 148, 74, 0.1);
-  background: rgba(201, 148, 74, 0.06);
+  box-shadow: 0 0 0 4px rgba(201, 148, 74, 0.08);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .input-dark::placeholder {
-  color: rgba(201, 148, 74, 0.25);
+  color: rgba(255, 255, 255, 0.2);
 }
 
-/* Sacred animations */
+/* ─── Animations ───────────────────────────────── */
 @keyframes float {
-  0%, 100% { transform: translateY(0px); opacity: 0.3; }
-  50% { transform: translateY(-12px); opacity: 0.7; }
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
 }
 
-@keyframes pulse-glow {
-  0%, 100% { opacity: 0.4; }
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.5; }
   50% { opacity: 1; }
 }
 
-@keyframes candleflicker {
-  0%, 100% { opacity: 0.7; filter: brightness(1); }
-  25% { opacity: 0.85; filter: brightness(1.1); }
-  50% { opacity: 0.6; filter: brightness(0.95); }
-  75% { opacity: 0.9; filter: brightness(1.05); }
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
-@keyframes incense {
-  0% { transform: translateY(0) scaleX(1); opacity: 0.15; }
-  50% { transform: translateY(-30px) scaleX(1.3); opacity: 0.05; }
-  100% { transform: translateY(-60px) scaleX(0.8); opacity: 0; }
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes halo-rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
 }
 
-.animate-float {
-  animation: float 6s ease-in-out infinite;
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
 }
 
-.animate-pulse-glow {
-  animation: pulse-glow 3s ease-in-out infinite;
+@keyframes blob-move {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(20px, -30px) scale(1.05); }
+  50% { transform: translate(-10px, 15px) scale(0.95); }
+  75% { transform: translate(15px, 10px) scale(1.02); }
 }
 
-.animate-candle {
-  animation: candleflicker 4s ease-in-out infinite;
-}
+.animate-float { animation: float 6s ease-in-out infinite; }
+.animate-pulse-soft { animation: pulse-soft 3s ease-in-out infinite; }
+.animate-fade-in { animation: fade-in-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-scale-in { animation: scale-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-blob { animation: blob-move 12s ease-in-out infinite; }
 
-.animate-halo {
-  animation: halo-rotate 20s linear infinite;
-}
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.3s; }
 
-/* Scrollbar — dark brass */
-::-webkit-scrollbar {
-  width: 6px;
-}
+/* ─── Scrollbar ────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.15); }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(201, 148, 74, 0.15);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(201, 148, 74, 0.3);
-}
-
-/* Soul bar fill animation */
+/* ─── Stat bar ─────────────────────────────────── */
 .stat-bar-fill {
-  transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Sacred button — flame gradient */
+/* ─── Primary button — Apple-style with depth ──── */
 .btn-primary {
-  background: linear-gradient(135deg, #c9944a, #8b6914);
-  color: #0a0a14;
+  background: linear-gradient(145deg, #d4a574, #b07d3a);
+  color: #0a0a0f;
   font-weight: 600;
   border: none;
-  border-radius: 12px;
-  padding: 10px 24px;
+  border-radius: 14px;
+  padding: 11px 26px;
+  font-size: 14px;
   cursor: pointer;
-  transition: all 0.2s ease;
-  letter-spacing: 0.02em;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 8px rgba(201, 148, 74, 0.15);
 }
 
 .btn-primary:hover {
-  box-shadow: 0 0 30px rgba(201, 148, 74, 0.35);
   transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(201, 148, 74, 0.25);
+  filter: brightness(1.08);
 }
 
 .btn-primary:active {
-  transform: translateY(0);
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 1px 4px rgba(201, 148, 74, 0.1);
 }
 
 .btn-primary:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
   transform: none;
+  filter: none;
 }
 
-/* Sacred divider */
-.sacred-divider {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(201, 148, 74, 0.2), transparent);
-}
-
-/* Rune text effect */
-.rune-text {
-  background: linear-gradient(135deg, #d4a574, #f0d9b5, #c9944a);
+/* ─── Gold text gradient ───────────────────────── */
+.text-gold {
+  background: linear-gradient(135deg, #f0dcc0 0%, #c9944a 50%, #f0dcc0 100%);
+  background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+/* Animated shimmer text */
+.text-shimmer {
+  background: linear-gradient(90deg, #d4a574, #f0dcc0, #c9944a, #f0dcc0, #d4a574);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 6s linear infinite;
+}
+
+/* ─── Gradient orb (decorative) ────────────────── */
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  opacity: 0.4;
 }
