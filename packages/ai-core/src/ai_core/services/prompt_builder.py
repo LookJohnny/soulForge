@@ -138,17 +138,31 @@ class PromptBuilder:
             rag_context=rag_context,
         )
 
-        # Get voice info
+        # Get voice info — explicit assignment or auto-match
         voice_id = None
+        voice_speed = base.get("voice_speed", 1.0)
+
         if base.get("voice_id"):
+            # Designer explicitly assigned a voice
             voice = await self._get_voice(base["voice_id"])
             if voice:
                 voice_id = voice.get("dashscope_voice_id")
+        else:
+            # No voice assigned — auto-match based on character traits
+            from ai_core.services.voice_matcher import match_voice
+            matched = match_voice(
+                species=base.get("species", ""),
+                age_setting=base.get("age_setting"),
+                personality=personality,
+                relationship=base.get("relationship"),
+            )
+            voice_id = matched["voice_id"]
+            voice_speed = matched["speed"]
 
         return {
             "system_prompt": system_prompt,
             "voice_id": voice_id,
-            "voice_speed": base.get("voice_speed", 1.0),
+            "voice_speed": voice_speed,
         }
 
     async def _get_character(self, character_id: str) -> dict | None:
