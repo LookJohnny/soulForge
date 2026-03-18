@@ -113,11 +113,18 @@ class PromptBuilder:
         character_id: str,
         end_user_id: str | None = None,
         user_input: str = "",
+        emotion_state: str | None = None,
+        memories: list[dict] | None = None,
     ) -> dict:
         """Build complete system prompt and voice config.
 
+        Args:
+            emotion_state: Current emotion (e.g. "happy", "calm") for prompt injection.
+            memories: List of memory dicts [{"type": "PREFERENCE", "content": "喜欢恐龙"}]
+                      for past-conversation recall.
+
         Returns:
-            {"system_prompt": str, "voice_id": str|None, "voice_speed": float}
+            {"system_prompt": str, "voice_id": str|None, "voice_speed": float, ...}
         """
         base = await self._get_character(character_id)
         if not base:
@@ -155,17 +162,35 @@ class PromptBuilder:
         safe_user_title = _sanitize_user_field(str(raw_user_title), max_length=20)
         safe_interests = [_sanitize_user_field(str(t), max_length=50) for t in raw_interests][:20]
 
+        # Format emotion for template
+        current_emotion = bool(emotion_state and emotion_state != "calm")
+        current_emotion_description = ""
+        if current_emotion:
+            from ai_core.services.emotion import EMOTION_DESCRIPTIONS
+            current_emotion_description = EMOTION_DESCRIPTIONS.get(emotion_state, "")
+
+        # Format memories for template
+        memory_context = []
+        if memories:
+            _MEMORY_FMT = {"TOPIC": "上次聊了{content}", "PREFERENCE": "主人{content}", "EVENT": "主人说过{content}"}
+            for m in memories:
+                fmt = _MEMORY_FMT.get(m.get("type", ""), "主人说过{content}")
+                memory_context.append(fmt.format(content=m.get("content", "")))
+
         # Render template
         system_prompt = self.template.render(
             name=safe_nickname,
             species=base["species"],
             backstory=base.get("backstory", ""),
             personality_description=personality_desc,
+            current_emotion=current_emotion,
+            current_emotion_description=current_emotion_description,
             catchphrases=base.get("catchphrases", []),
             suffix=base.get("suffix", ""),
             relationship=base.get("relationship", "朋友"),
             user_title=safe_user_title,
             interests=safe_interests,
+            memory_context=memory_context,
             response_length_instruction=RESPONSE_LENGTH_MAP.get(
                 base.get("response_length", "SHORT"), RESPONSE_LENGTH_MAP["SHORT"]
             ),

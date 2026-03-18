@@ -71,6 +71,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     text: str
     audio_data: str | None = None  # base64 audio
+    emotion: str | None = None  # character's detected emotion state
     latency_ms: int
 
 

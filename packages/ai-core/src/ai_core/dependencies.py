@@ -5,19 +5,31 @@ import structlog
 from ai_core.db import get_pool
 from ai_core.services.asr_client import ASRClient
 from ai_core.services.cache import CacheService
+from ai_core.services.emotion import EmotionEngine
 from ai_core.services.llm_client import LLMClient
+from ai_core.services.memory import MemoryService
 from ai_core.services.prompt_builder import PromptBuilder
 from ai_core.services.rag_engine import RagEngine
 from ai_core.services.tts_client import TTSClient
 
 logger = structlog.get_logger()
 
+_cache: CacheService | None = None
 _prompt_builder: PromptBuilder | None = None
 _rag_engine: RagEngine | None = None
 _rag_failed: bool = False
 _llm_client: LLMClient | None = None
 _tts_client: TTSClient | None = None
 _asr_client: ASRClient | None = None
+_emotion_engine: EmotionEngine | None = None
+_memory_service: MemoryService | None = None
+
+
+def get_cache() -> CacheService:
+    global _cache
+    if _cache is None:
+        _cache = CacheService()
+    return _cache
 
 
 async def get_rag_engine() -> RagEngine | None:
@@ -40,8 +52,8 @@ async def get_prompt_builder() -> PromptBuilder:
     global _prompt_builder
     if _prompt_builder is None:
         pool = await get_pool()
-        rag = await get_rag_engine()  # None if Milvus unavailable
-        cache = CacheService()
+        rag = await get_rag_engine()
+        cache = get_cache()
         _prompt_builder = PromptBuilder(pool, rag, cache)
     return _prompt_builder
 
@@ -65,3 +77,20 @@ async def get_asr_client() -> ASRClient:
     if _asr_client is None:
         _asr_client = ASRClient()
     return _asr_client
+
+
+def get_emotion_engine() -> EmotionEngine:
+    global _emotion_engine
+    if _emotion_engine is None:
+        _emotion_engine = EmotionEngine(get_cache())
+    return _emotion_engine
+
+
+async def get_memory_service() -> MemoryService:
+    global _memory_service
+    if _memory_service is None:
+        pool = await get_pool()
+        llm = await get_llm_client()
+        cache = get_cache()
+        _memory_service = MemoryService(pool, llm, cache)
+    return _memory_service

@@ -1,4 +1,4 @@
-"""Chat endpoint — supports history (multi-turn) and streaming."""
+"""Chat endpoint — supports history (multi-turn), streaming, emotion tracking, and memory."""
 
 import base64
 import json
@@ -9,7 +9,10 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from ai_core.dependencies import get_llm_client, get_prompt_builder, get_tts_client
+from ai_core.dependencies import (
+    get_llm_client, get_prompt_builder, get_tts_client,
+    get_emotion_engine,
+)
 from ai_core.middleware.rate_limit import limiter
 from ai_core.services.content_filter import ContentFilter
 from ai_core.services.text_splitter import split_sentences
@@ -26,19 +29,21 @@ class ChatPreviewRequest(BaseModel):
     history: list[HistoryMessage] = Field(default_factory=list, max_length=50)
     voice: str | None = None
     with_audio: bool = True
+    session_id: str | None = None  # optional, enables emotion tracking
 
 
 class ChatPreviewResponse(BaseModel):
     text: str
     audio_base64: str | None = None
     audio_format: str | None = None
+    emotion: str | None = None
     latency_ms: int = 0
 
 
 @router.post("/preview", response_model=ChatPreviewResponse)
 @limiter.limit("30/minute")
 async def chat_preview(req: ChatPreviewRequest, request: Request):
-    """Chat with a character (supports multi-turn history)."""
+    """Chat with a character (supports multi-turn history + emotion tracking)."""
     start = time.monotonic()
 
     # Content safety check on input
@@ -47,11 +52,18 @@ async def chat_preview(req: ChatPreviewRequest, request: Request):
         logger.warning("content_filter.blocked_input", reason=reason, endpoint="chat_preview")
         raise HTTPException(status_code=400, detail=f"输入内容被拦截: {reason}")
 
+    # Retrieve emotion state if session_id provided
+    emotion_engine = get_emotion_engine()
+    emotion_state = None
+    if req.session_id:
+        emotion_state = await emotion_engine.get_emotion(req.session_id)
+
     builder = await get_prompt_builder()
     try:
         prompt_result = await builder.build(
             character_id=req.character_id,
             user_input=req.text,
+            emotion_state=emotion_state,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -69,11 +81,22 @@ async def chat_preview(req: ChatPreviewRequest, request: Request):
     # Content safety filter on output (PII + blocked content)
     ai_text = content_filter.filter_output(ai_text)
 
-    # TTS
+    # Detect and store emotion
+    new_emotion = None
+    if req.session_id:
+        new_emotion = emotion_engine.detect_emotion(ai_text, previous=emotion_state or "calm")
+        await emotion_engine.set_emotion(req.session_id, new_emotion)
+
+    # TTS with emotion-adjusted parameters
     audio_b64 = None
     audio_fmt = None
     if req.with_audio:
         voice_id = req.voice or prompt_result.get("voice_id")
+        ssml_pitch = prompt_result.get("ssml_pitch", 1.0)
+        ssml_rate = prompt_result.get("ssml_rate", 1.0)
+        if new_emotion:
+            ssml_pitch, ssml_rate = emotion_engine.apply_tts_offsets(new_emotion, ssml_pitch, ssml_rate)
+
         tts = await get_tts_client()
         audio_data = await tts.synthesize_to_wav(
             text=ai_text,
@@ -81,8 +104,8 @@ async def chat_preview(req: ChatPreviewRequest, request: Request):
             speed=prompt_result.get("voice_speed", 1.0),
             pitch_rate=prompt_result.get("pitch_rate", 0),
             speech_rate=prompt_result.get("speech_rate", 0),
-            ssml_pitch=prompt_result.get("ssml_pitch", 1.0),
-            ssml_rate=prompt_result.get("ssml_rate", 1.0),
+            ssml_pitch=ssml_pitch,
+            ssml_rate=ssml_rate,
             ssml_effect=prompt_result.get("ssml_effect", ""),
         )
         audio_b64 = base64.b64encode(audio_data).decode()
@@ -94,6 +117,7 @@ async def chat_preview(req: ChatPreviewRequest, request: Request):
         text=ai_text,
         audio_base64=audio_b64,
         audio_format=audio_fmt,
+        emotion=new_emotion,
         latency_ms=latency,
     )
 
@@ -101,7 +125,7 @@ async def chat_preview(req: ChatPreviewRequest, request: Request):
 @router.post("/preview/stream")
 @limiter.limit("30/minute")
 async def chat_preview_stream(req: ChatPreviewRequest, request: Request):
-    """Streaming chat — returns SSE events with text chunks, then audio."""
+    """Streaming chat — returns SSE events with text chunks, sentence-level audio, and emotion."""
 
     # Content safety check on input
     is_safe, reason = content_filter.check_input(req.text)
@@ -109,11 +133,18 @@ async def chat_preview_stream(req: ChatPreviewRequest, request: Request):
         logger.warning("content_filter.blocked_input", reason=reason, endpoint="chat_preview_stream")
         raise HTTPException(status_code=400, detail=f"输入内容被拦截: {reason}")
 
+    # Retrieve emotion state
+    emotion_engine = get_emotion_engine()
+    emotion_state = None
+    if req.session_id:
+        emotion_state = await emotion_engine.get_emotion(req.session_id)
+
     builder = await get_prompt_builder()
     try:
         prompt_result = await builder.build(
             character_id=req.character_id,
             user_input=req.text,
+            emotion_state=emotion_state,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -136,13 +167,24 @@ async def chat_preview_stream(req: ChatPreviewRequest, request: Request):
         # Filter complete output for safety
         filtered_text = content_filter.filter_output(full_text)
         if filtered_text != full_text:
-            # Output was blocked/modified — send correction event
             yield f"data: {json.dumps({'type': 'text_replace', 'text': filtered_text}, ensure_ascii=False)}\n\n"
             full_text = filtered_text
+
+        # Detect emotion and send as event
+        new_emotion = None
+        if req.session_id:
+            new_emotion = emotion_engine.detect_emotion(full_text, previous=emotion_state or "calm")
+            await emotion_engine.set_emotion(req.session_id, new_emotion)
+            yield f"data: {json.dumps({'type': 'emotion', 'emotion': new_emotion}, ensure_ascii=False)}\n\n"
 
         # TTS: split into sentences and synthesize each for progressive audio
         if req.with_audio and full_text:
             voice_id = req.voice or prompt_result.get("voice_id")
+            ssml_pitch = prompt_result.get("ssml_pitch", 1.0)
+            ssml_rate = prompt_result.get("ssml_rate", 1.0)
+            if new_emotion:
+                ssml_pitch, ssml_rate = emotion_engine.apply_tts_offsets(new_emotion, ssml_pitch, ssml_rate)
+
             tts = await get_tts_client()
             sentences = split_sentences(full_text)
 
@@ -154,8 +196,8 @@ async def chat_preview_stream(req: ChatPreviewRequest, request: Request):
                         speed=prompt_result.get("voice_speed", 1.0),
                         pitch_rate=prompt_result.get("pitch_rate", 0),
                         speech_rate=prompt_result.get("speech_rate", 0),
-                        ssml_pitch=prompt_result.get("ssml_pitch", 1.0),
-                        ssml_rate=prompt_result.get("ssml_rate", 1.0),
+                        ssml_pitch=ssml_pitch,
+                        ssml_rate=ssml_rate,
                         ssml_effect=prompt_result.get("ssml_effect", ""),
                     )
                     audio_b64 = base64.b64encode(audio_data).decode()

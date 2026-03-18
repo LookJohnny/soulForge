@@ -40,6 +40,12 @@ enum UsageType {
   LLM_TOKEN
 }
 
+enum MemoryType {
+  TOPIC
+  PREFERENCE
+  EVENT
+}
+
 // ─── Brand / Tenant ────────────────────────────────
 
 model Brand {
@@ -90,6 +96,7 @@ model EndUser {
 
   customizations UserCustomization[]
   devices        Device[]
+  memories       ConversationMemory[]
 
   @@map("end_users")
 }
@@ -127,6 +134,7 @@ model Character {
   customizations UserCustomization[]
   devices        Device[]
   logs           ConversationLog[]
+  memories       ConversationMemory[]
 
   @@index([brandId])
   @@index([status])
@@ -310,4 +318,25 @@ model SoulPack {
   @@index([brandId])
   @@index([characterId])
   @@map("soul_packs")
+}
+
+// ─── Conversation Memory ────────────────────────
+
+model ConversationMemory {
+  id          String     @id @default(uuid()) @db.Uuid
+  endUserId   String     @map("end_user_id") @db.Uuid
+  characterId String     @map("character_id") @db.Uuid
+  type        MemoryType
+  content     String     @db.VarChar(200)
+  source      String?    @db.Text
+  sessionId   String?    @map("session_id") @db.VarChar(100)
+  confidence  Float      @default(1.0)
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  endUser   EndUser   @relation(fields: [endUserId], references: [id])
+  character Character @relation(fields: [characterId], references: [id])
+
+  @@index([endUserId, characterId])
+  @@index([createdAt])
+  @@map("conversation_memories")
 }
