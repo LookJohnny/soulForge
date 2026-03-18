@@ -3,7 +3,7 @@
 import base64
 
 import structlog
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -15,32 +15,38 @@ logger = structlog.get_logger()
 builder = SoulPackBuilder()
 
 
+def _get_brand_id(request: Request) -> str:
+    """Extract brand_id from auth context. Never trust client-provided brand_id."""
+    auth = getattr(request.state, "auth", None)
+    if not auth or not auth.brand_id:
+        raise HTTPException(status_code=403, detail="No brand context in auth token")
+    return auth.brand_id
+
+
 class ExportRequest(BaseModel):
     character_id: str
-    brand_id: str
 
 
 class ImportRequest(BaseModel):
-    brand_id: str
     soulpack_b64: str  # base64-encoded .soulpack bytes
 
 
 @router.post("/export")
-async def export_soul_pack(req: ExportRequest):
+async def export_soul_pack(req: ExportRequest, request: Request):
     """Export a character as an encrypted .soulpack file."""
+    brand_id = _get_brand_id(request)
     pool = await get_pool()
 
-    # Fetch character from DB
+    # Fetch character — must belong to the authenticated brand
     row = await pool.fetchrow(
         "SELECT * FROM characters WHERE id = $1 AND brand_id = $2",
         req.character_id,
-        req.brand_id,
+        brand_id,
     )
     if not row:
         raise HTTPException(status_code=404, detail="Character not found")
 
     character_data = dict(row)
-    # Convert non-serializable types
     for key in list(character_data.keys()):
         val = character_data[key]
         if hasattr(val, "isoformat"):
@@ -61,7 +67,7 @@ async def export_soul_pack(req: ExportRequest):
 
     # Build .soulpack
     soulpack_bytes = builder.build(
-        brand_id=req.brand_id,
+        brand_id=brand_id,
         character_data=character_data,
         voice_profile=voice_profile,
     )
@@ -74,14 +80,15 @@ async def export_soul_pack(req: ExportRequest):
 
 
 @router.post("/export.bin")
-async def export_soul_pack_binary(req: ExportRequest):
+async def export_soul_pack_binary(req: ExportRequest, request: Request):
     """Export as raw binary download."""
+    brand_id = _get_brand_id(request)
     pool = await get_pool()
 
     row = await pool.fetchrow(
         "SELECT * FROM characters WHERE id = $1 AND brand_id = $2",
         req.character_id,
-        req.brand_id,
+        brand_id,
     )
     if not row:
         raise HTTPException(status_code=404, detail="Character not found")
@@ -105,7 +112,7 @@ async def export_soul_pack_binary(req: ExportRequest):
                     voice_profile[key] = val.isoformat()
 
     soulpack_bytes = builder.build(
-        brand_id=req.brand_id,
+        brand_id=brand_id,
         character_data=character_data,
         voice_profile=voice_profile,
     )
@@ -119,15 +126,17 @@ async def export_soul_pack_binary(req: ExportRequest):
 
 
 @router.post("/import")
-async def import_soul_pack(req: ImportRequest):
+async def import_soul_pack(req: ImportRequest, request: Request):
     """Import a .soulpack file and restore the character."""
+    brand_id = _get_brand_id(request)
+
     try:
         soulpack_bytes = base64.b64decode(req.soulpack_b64)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid base64 data")
 
     try:
-        data = builder.read(soulpack_bytes, req.brand_id)
+        data = builder.read(soulpack_bytes, brand_id)
     except Exception as e:
         raise HTTPException(
             status_code=400,
