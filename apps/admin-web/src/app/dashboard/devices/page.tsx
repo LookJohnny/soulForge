@@ -31,8 +31,8 @@ export default async function DevicesPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white/90">设备星图</h1>
-        <p className="text-sm text-white/30 mt-1">查看已连接的设备状态</p>
+        <h1 className="text-[26px] font-bold tracking-tight text-gold">设备</h1>
+        <p className="text-[13px] text-white/30 mt-1">查看已连接的设备状态</p>
       </div>
 
       {devices.length === 0 ? (
@@ -40,7 +40,7 @@ export default async function DevicesPage() {
           <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-amber-500/10 flex items-center justify-center">
             <Cpu className="w-8 h-8 text-amber-400/50" />
           </div>
-          <p className="text-white/30 mb-2">星图中还没有设备</p>
+          <p className="text-white/30 mb-2">还没有设备</p>
           <p className="text-xs text-white/20">
             当ESP32设备连接到Gateway后会自动显示在这里
           </p>
@@ -83,9 +83,9 @@ export default async function DevicesPage() {
                 </div>
 
                 {device.character && (
-                  <div className="mb-3 px-3 py-2 rounded-lg bg-purple-500/8">
+                  <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/8">
                     <span className="text-[10px] text-white/25">绑定角色</span>
-                    <p className="text-sm text-purple-300/70">
+                    <p className="text-sm text-amber-300/70">
                       {device.character.name}
                     </p>
                   </div>
