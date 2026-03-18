@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Flame, Music, Cpu, Package, Settings } from "lucide-react";
+import { Flame, Music, Cpu, Package, Settings, Sparkles } from "lucide-react";
 
 const navItems = [
   { href: "/dashboard/characters", label: "角色", icon: Flame },
+  { href: "/dashboard/idol", label: "虚拟偶像", icon: Sparkles },
   { href: "/dashboard/voices", label: "音色", icon: Music },
   { href: "/dashboard/devices", label: "设备", icon: Cpu },
   { href: "/dashboard/soul-packs", label: "灵魂包", icon: Package },

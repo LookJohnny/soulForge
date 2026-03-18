@@ -4,11 +4,17 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Volume2, Loader2, MessageCircle } from "lucide-react";
 
+const emotionEmojis: Record<string, string> = {
+  happy: "😊", sad: "😢", shy: "😳", angry: "😤",
+  playful: "😝", curious: "🤔", worried: "😟", calm: "😌",
+};
+
 interface Message {
   id: string;
   role: "user" | "assistant";
   text: string;
   audioBase64?: string;
+  emotion?: string;
   latencyMs?: number;
 }
 
@@ -26,6 +32,7 @@ export default function ChatPanel({
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [currentEmotion, setCurrentEmotion] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -126,6 +133,11 @@ export default function ChatPanel({
             if (event.type === "text" && event.chunk) {
               fullText += event.chunk;
               setStreamingText(fullText);
+            } else if (event.type === "text_replace") {
+              fullText = event.text;
+              setStreamingText(fullText);
+            } else if (event.type === "emotion") {
+              setCurrentEmotion(event.emotion);
             } else if (event.type === "audio") {
               audioBase64 = event.audio_base64;
             } else if (event.type === "done") {
@@ -143,6 +155,7 @@ export default function ChatPanel({
         role: "assistant",
         text: fullText || "...",
         audioBase64,
+        emotion: currentEmotion || undefined,
       };
       setStreamingText("");
       setMessages((prev) => [...prev, aiMsg]);
@@ -167,6 +180,11 @@ export default function ChatPanel({
         <span className="text-[13px] font-medium text-white/50">
           与 {characterName} 对话
         </span>
+        {currentEmotion && currentEmotion !== "calm" && (
+          <span className="text-[12px] ml-1.5" title={currentEmotion}>
+            {emotionEmojis[currentEmotion] || ""}
+          </span>
+        )}
         {messages.length > 0 && (
           <span className="text-[10px] text-white/20 ml-auto">
             {messages.filter((m) => m.role === "assistant").length} 条回复
@@ -214,6 +232,9 @@ export default function ChatPanel({
                   <div className="flex items-center gap-1.5 mb-1">
                     <span className="text-[11px]">{characterEmoji}</span>
                     <span className="text-[10px] text-white/25">{characterName}</span>
+                    {msg.emotion && msg.emotion !== "calm" && (
+                      <span className="text-[10px]" title={msg.emotion}>{emotionEmojis[msg.emotion] || ""}</span>
+                    )}
                   </div>
                 )}
                 <p className="text-[13px] text-white/70 leading-relaxed">{msg.text}</p>

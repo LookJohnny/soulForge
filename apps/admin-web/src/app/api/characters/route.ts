@@ -38,7 +38,8 @@ export async function POST(req: NextRequest) {
     data: {
       brandId: session.user.brandId,
       name: body.name,
-      species: body.species,
+      archetype: body.archetype || "ANIMAL",
+      species: body.species ?? null,
       ageSetting: body.ageSetting ?? null,
       backstory: body.backstory ?? null,
       relationship: body.relationship ?? null,

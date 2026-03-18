@@ -35,6 +35,18 @@ const traitConfig: {
   { key: "energy", label: "活力值", low: "慵懒", high: "活力", color: "from-amber-600 to-amber-400" },
 ];
 
+const archetypeOptions = [
+  { value: "ANIMAL", label: "动物角色", emoji: "🐾", desc: "毛绒玩具 / 动物伙伴" },
+  { value: "HUMAN", label: "人类角色", emoji: "👤", desc: "老师 / 朋友 / 偶像" },
+  { value: "FANTASY", label: "幻想角色", emoji: "✨", desc: "精灵 / 机器人 / 仙女" },
+  { value: "ABSTRACT", label: "语音助手", emoji: "🎙️", desc: "无具体形象的助手" },
+];
+
+const contentTierOptions = [
+  { value: "children", label: "儿童模式", desc: "全量安全过滤" },
+  { value: "adult", label: "成人模式", desc: "放开恋爱场景" },
+];
+
 const speciesOptions = [
   { value: "兔子", emoji: "🐰" },
   { value: "熊", emoji: "🐻" },
@@ -46,12 +58,17 @@ const speciesOptions = [
   { value: "独角兽", emoji: "🦄" },
 ];
 
+const humanRoles = ["温柔姐姐", "老师", "朋友", "少年", "学长", "偶像"];
+const fantasyRoles = ["精灵", "机器人", "天使", "仙女", "恶魔", "吸血鬼"];
+
 export default function NewCharacterPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [form, setForm] = useState({
+    archetype: "ANIMAL" as "ANIMAL" | "HUMAN" | "FANTASY" | "ABSTRACT",
+    contentTier: "children" as "children" | "adult",
     name: "",
     species: "",
     customSpecies: "",
@@ -70,7 +87,7 @@ export default function NewCharacterPage() {
     setSaving(true);
     const payload = {
       ...form,
-      species: form.species || form.customSpecies,
+      species: form.archetype === "ABSTRACT" ? null : (form.species || form.customSpecies || null),
       ageSetting: form.ageSetting ? parseInt(form.ageSetting) : null,
       catchphrases: form.catchphrases.filter(Boolean),
       topics: form.topics.filter(Boolean),
@@ -118,7 +135,11 @@ export default function NewCharacterPage() {
   };
 
   const canNext = () => {
-    if (step === 0) return form.name && (form.species || form.customSpecies);
+    if (step === 0) {
+      if (!form.name) return false;
+      if (form.archetype === "ABSTRACT") return true;
+      return form.species || form.customSpecies;
+    }
     return true;
   };
 
@@ -173,41 +194,99 @@ export default function NewCharacterPage() {
             <div className="max-w-xl mx-auto">
               <div className="text-center mb-8">
                 <h2 className="text-[22px] font-bold tracking-tight text-gold">基本信息</h2>
-                <p className="text-[13px] text-white/25 mt-1">选择物种和名字</p>
+                <p className="text-[13px] text-white/25 mt-1">选择角色类型和基本设定</p>
               </div>
 
-              <div className="mb-8">
-                <label className="block text-[11px] text-white/35 mb-3 font-medium tracking-wide uppercase">物种</label>
+              {/* Archetype selector */}
+              <div className="mb-6">
+                <label className="block text-[11px] text-white/35 mb-3 font-medium tracking-wide uppercase">角色类型</label>
                 <div className="grid grid-cols-4 gap-2.5">
-                  {speciesOptions.map((s) => (
+                  {archetypeOptions.map((a) => (
                     <button
-                      key={s.value}
+                      key={a.value}
                       type="button"
-                      onClick={() => setForm({ ...form, species: s.value, customSpecies: "" })}
+                      onClick={() => setForm({ ...form, archetype: a.value as typeof form.archetype, species: "", customSpecies: "" })}
                       className={`p-3.5 rounded-2xl text-center transition-all duration-300 ${
-                        form.species === s.value
-                          ? "bg-amber-500/10 ring-1 ring-amber-500/25 scale-[1.02]"
+                        form.archetype === a.value
+                          ? "bg-violet-500/10 ring-1 ring-violet-500/25 scale-[1.02]"
                           : "bg-white/[0.02] hover:bg-white/[0.04] border border-white/[0.04]"
                       }`}
                     >
-                      <div className="text-2xl mb-0.5">{s.emoji}</div>
-                      <div className="text-[11px] text-white/40">{s.value}</div>
+                      <div className="text-2xl mb-0.5">{a.emoji}</div>
+                      <div className="text-[11px] text-white/40">{a.label}</div>
                     </button>
                   ))}
                 </div>
-                <input
-                  value={form.customSpecies}
-                  onChange={(e) => setForm({ ...form, customSpecies: e.target.value, species: "" })}
-                  className="input-dark w-full text-[13px] mt-2.5"
-                  placeholder="或输入自定义物种..."
-                />
               </div>
 
+              {/* Species/role selector — conditional by archetype */}
+              {form.archetype === "ANIMAL" && (
+                <div className="mb-6">
+                  <label className="block text-[11px] text-white/35 mb-3 font-medium tracking-wide uppercase">物种</label>
+                  <div className="grid grid-cols-4 gap-2.5">
+                    {speciesOptions.map((s) => (
+                      <button
+                        key={s.value}
+                        type="button"
+                        onClick={() => setForm({ ...form, species: s.value, customSpecies: "" })}
+                        className={`p-3.5 rounded-2xl text-center transition-all duration-300 ${
+                          form.species === s.value
+                            ? "bg-amber-500/10 ring-1 ring-amber-500/25 scale-[1.02]"
+                            : "bg-white/[0.02] hover:bg-white/[0.04] border border-white/[0.04]"
+                        }`}
+                      >
+                        <div className="text-2xl mb-0.5">{s.emoji}</div>
+                        <div className="text-[11px] text-white/40">{s.value}</div>
+                      </button>
+                    ))}
+                  </div>
+                  <input value={form.customSpecies} onChange={(e) => setForm({ ...form, customSpecies: e.target.value, species: "" })} className="input-dark w-full text-[13px] mt-2.5" placeholder="或输入自定义物种..." />
+                </div>
+              )}
+              {form.archetype === "HUMAN" && (
+                <div className="mb-6">
+                  <label className="block text-[11px] text-white/35 mb-3 font-medium tracking-wide uppercase">角色类型</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {humanRoles.map((r) => (
+                      <button key={r} type="button" onClick={() => setForm({ ...form, species: r, customSpecies: "" })}
+                        className={`px-3.5 py-[7px] rounded-full text-[12px] transition-all duration-300 ${form.species === r ? "bg-violet-500/12 text-violet-300 ring-1 ring-violet-500/20" : "bg-white/[0.03] text-white/30 hover:text-white/50 border border-white/[0.04]"}`}>{r}</button>
+                    ))}
+                  </div>
+                  <input value={form.customSpecies} onChange={(e) => setForm({ ...form, customSpecies: e.target.value, species: "" })} className="input-dark w-full text-[13px] mt-2.5" placeholder="或输入自定义角色..." />
+                </div>
+              )}
+              {form.archetype === "FANTASY" && (
+                <div className="mb-6">
+                  <label className="block text-[11px] text-white/35 mb-3 font-medium tracking-wide uppercase">角色类型</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {fantasyRoles.map((r) => (
+                      <button key={r} type="button" onClick={() => setForm({ ...form, species: r, customSpecies: "" })}
+                        className={`px-3.5 py-[7px] rounded-full text-[12px] transition-all duration-300 ${form.species === r ? "bg-cyan-500/12 text-cyan-300 ring-1 ring-cyan-500/20" : "bg-white/[0.03] text-white/30 hover:text-white/50 border border-white/[0.04]"}`}>{r}</button>
+                    ))}
+                  </div>
+                  <input value={form.customSpecies} onChange={(e) => setForm({ ...form, customSpecies: e.target.value, species: "" })} className="input-dark w-full text-[13px] mt-2.5" placeholder="或输入自定义角色..." />
+                </div>
+              )}
+
               <div className="space-y-4">
+                {/* Content tier */}
+                <div>
+                  <label className="block text-[11px] text-white/35 mb-2 font-medium">内容分级</label>
+                  <div className="flex gap-2">
+                    {contentTierOptions.map((t) => (
+                      <button key={t.value} type="button" onClick={() => setForm({ ...form, contentTier: t.value as typeof form.contentTier })}
+                        className={`px-3.5 py-[7px] rounded-full text-[12px] transition-all duration-300 ${form.contentTier === t.value ? "bg-amber-500/12 text-amber-300 ring-1 ring-amber-500/20" : "bg-white/[0.03] text-white/30 hover:text-white/50 border border-white/[0.04]"}`}>
+                        {t.label}
+                        <span className="text-[10px] text-white/20 ml-1">({t.desc})</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] text-white/35 mb-1.5 font-medium">名字 *</label>
-                    <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input-dark w-full" placeholder="如：棉花糖" />
+                    <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input-dark w-full" placeholder={form.archetype === "ANIMAL" ? "如：棉花糖" : "如：小雪"} />
                   </div>
                   <div>
                     <label className="block text-[11px] text-white/35 mb-1.5 font-medium">年龄设定</label>
@@ -216,21 +295,14 @@ export default function NewCharacterPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] text-white/35 mb-2 font-medium">与主人的关系</label>
+                  <label className="block text-[11px] text-white/35 mb-2 font-medium">与用户的关系</label>
                   <div className="flex gap-2 flex-wrap">
-                    {["好朋友", "守护者", "小跟班", "导师", "兄弟姐妹"].map((rel) => (
-                      <button
-                        key={rel}
-                        type="button"
-                        onClick={() => setForm({ ...form, relationship: rel })}
-                        className={`px-3.5 py-[7px] rounded-full text-[12px] transition-all duration-300 ${
-                          form.relationship === rel
-                            ? "bg-amber-500/12 text-amber-300 ring-1 ring-amber-500/20"
-                            : "bg-white/[0.03] text-white/30 hover:text-white/50 border border-white/[0.04]"
-                        }`}
-                      >
-                        {rel}
-                      </button>
+                    {(form.archetype === "HUMAN" && form.contentTier === "adult"
+                      ? ["暧昧对象", "恋人", "青梅竹马", "暗恋对象"]
+                      : ["好朋友", "守护者", "小跟班", "导师", "兄弟姐妹"]
+                    ).map((rel) => (
+                      <button key={rel} type="button" onClick={() => setForm({ ...form, relationship: rel })}
+                        className={`px-3.5 py-[7px] rounded-full text-[12px] transition-all duration-300 ${form.relationship === rel ? "bg-amber-500/12 text-amber-300 ring-1 ring-amber-500/20" : "bg-white/[0.03] text-white/30 hover:text-white/50 border border-white/[0.04]"}`}>{rel}</button>
                     ))}
                   </div>
                 </div>

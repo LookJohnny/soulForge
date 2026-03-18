@@ -9,6 +9,13 @@ const statusMap = {
   ARCHIVED: { label: "已归档", color: "bg-white/[0.04] text-white/20" },
 };
 
+const archetypeMap: Record<string, { label: string; color: string }> = {
+  ANIMAL: { label: "动物", color: "bg-amber-500/10 text-amber-400/70" },
+  HUMAN: { label: "人类", color: "bg-violet-500/10 text-violet-400/70" },
+  FANTASY: { label: "幻想", color: "bg-cyan-500/10 text-cyan-400/70" },
+  ABSTRACT: { label: "助手", color: "bg-emerald-500/10 text-emerald-400/70" },
+};
+
 export default async function CharactersPage() {
   const characters = await prisma.character.findMany({
     orderBy: { createdAt: "desc" },
@@ -75,11 +82,16 @@ export default async function CharactersPage() {
                       </p>
                     </div>
                   </div>
-                  <span
-                    className={`px-2.5 py-[3px] text-[10px] rounded-full font-medium ${status.color}`}
-                  >
-                    {status.label}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {archetypeMap[char.archetype as string] && (
+                      <span className={`px-2 py-[2px] text-[9px] rounded-full font-medium ${archetypeMap[char.archetype as string].color}`}>
+                        {archetypeMap[char.archetype as string].label}
+                      </span>
+                    )}
+                    <span className={`px-2.5 py-[3px] text-[10px] rounded-full font-medium ${status.color}`}>
+                      {status.label}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Backstory */}
