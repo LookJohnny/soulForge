@@ -64,9 +64,9 @@ SPECIES_ARCHETYPES = {
     },
     "big_gentle": {
         "keywords": ["熊", "大熊", "熊猫", "大熊猫", "北极熊", "河马", "大象", "牛", "水牛", "海豹", "海象", "树懒"],
-        "prefer_voices": ["longcheng_v3", "longze_v3", "longhao_v3"],
-        "prefer_traits": {"style": ["deep", "steady", "warm"]},
-        "instruction": "用低沉浑厚的嗓音慢慢说话，温和憨厚，可靠踏实",
+        "prefer_voices": ["longhao_v3", "longze_v3", "longcheng_v3"],
+        "prefer_traits": {"style": ["warm", "steady", "deep"]},
+        "instruction": "用温厚低沉的嗓音慢慢说话，语气温暖踏实，像个可靠的大个子",
     },
     "fierce_powerful": {
         "keywords": ["龙", "恐龙", "老虎", "狮子", "豹", "鹰", "老鹰", "猎豹", "鲨鱼", "狼", "野猪", "犀牛", "鳄鱼"],
@@ -146,8 +146,11 @@ def _score_voice(vid: str, profile: dict, archetype: dict | None, age_setting: i
         combined_energy = (personality.get("energy", 50) + personality.get("extrovert", 50)) / 2
         energy_diff = abs(combined_energy - profile["energy"])
         score += max(0, 2.0 - energy_diff / 20)
-        if personality.get("warmth", 50) > 75 and profile["style"] in ("sweet", "warm", "gentle", "kind"):
-            score += 1.0
+        warmth = personality.get("warmth", 50)
+        if warmth > 75 and profile["style"] in ("sweet", "warm", "gentle", "kind"):
+            score += 2.0
+        if warmth > 90 and profile["style"] in ("deep", "authoritative", "rugged"):
+            score -= 1.5  # Very warm characters shouldn't sound too cold/harsh
 
     return score
 
