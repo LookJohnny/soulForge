@@ -51,9 +51,11 @@ async def chat(req: ChatRequest, request: Request):
         logger.warning("content_filter.blocked_input", reason=reason)
         raise HTTPException(status_code=400, detail=f"输入内容被拦截: {reason}")
 
-    # 3. Retrieve emotion state
+    # 3. Retrieve emotion state + detect user mood
     emotion_engine = get_emotion_engine()
     emotion_state = await emotion_engine.get_emotion(req.session_id)
+    user_mood = emotion_engine.detect_user_mood(user_text)
+    await emotion_engine.set_user_mood(req.session_id, user_mood)
 
     # 4. Retrieve memories
     memory_service = await get_memory_service()
@@ -82,7 +84,11 @@ async def chat(req: ChatRequest, request: Request):
             memories=memories,
         )
 
-    # 7. Build prompt (personality with drift + emotion + memories + relationship + trigger)
+    # 7. Time awareness
+    from ai_core.services.time_awareness import build_time_prompt
+    time_context = build_time_prompt(rel_state.get("last_interaction_date"))
+
+    # 8. Build prompt (personality with drift + emotion + user mood + memories + relationship + trigger + time)
     builder = await get_prompt_builder()
     try:
         prompt_result = await builder.build(
@@ -90,9 +96,11 @@ async def chat(req: ChatRequest, request: Request):
             end_user_id=req.end_user_id,
             user_input=user_text,
             emotion_state=emotion_state,
+            user_mood=user_mood,
             memories=memories,
             relationship_stage=rel_state["stage"],
             proactive_trigger=proactive_line,
+            time_context=time_context,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e

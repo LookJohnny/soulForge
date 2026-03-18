@@ -114,17 +114,21 @@ class PromptBuilder:
         end_user_id: str | None = None,
         user_input: str = "",
         emotion_state: str | None = None,
+        user_mood: str | None = None,
         memories: list[dict] | None = None,
         relationship_stage: str | None = None,
         proactive_trigger: str | None = None,
+        time_context: str | None = None,
     ) -> dict:
         """Build complete system prompt and voice config.
 
         Args:
-            emotion_state: Current emotion for prompt injection.
+            emotion_state: Character's current emotion for prompt injection.
+            user_mood: Detected user mood for empathetic response.
             memories: Past-conversation memories for recall.
             relationship_stage: Dynamic stage (STRANGER→BESTFRIEND) for tone control.
             proactive_trigger: Optional opening line for the character to say.
+            time_context: Time-of-day + absence duration context.
 
         Returns:
             {"system_prompt": str, "voice_id": str|None, "voice_speed": float, ...}
@@ -180,6 +184,12 @@ class PromptBuilder:
             from ai_core.services.emotion import EMOTION_DESCRIPTIONS
             current_emotion_description = EMOTION_DESCRIPTIONS.get(emotion_state, "")
 
+        # Format user mood for template
+        user_mood_instruction = ""
+        if user_mood and user_mood != "neutral":
+            from ai_core.services.emotion import USER_MOOD_RESPONSES
+            user_mood_instruction = USER_MOOD_RESPONSES.get(user_mood, "")
+
         # Format memories for template
         memory_context = []
         if memories:
@@ -203,6 +213,8 @@ class PromptBuilder:
             personality_description=personality_desc,
             current_emotion=current_emotion,
             current_emotion_description=current_emotion_description,
+            user_mood_instruction=user_mood_instruction,
+            time_context=time_context or "",
             catchphrases=base.get("catchphrases", []),
             suffix=base.get("suffix", ""),
             relationship=base.get("relationship", "朋友"),

@@ -8,13 +8,16 @@
 ## 性格
 
 {{ personality_description }}
-{% if current_emotion %}
+{% if current_emotion or user_mood_instruction or time_context %}
 
-## 当前情绪
-
-{{ current_emotion_description }}
-保持这个情绪自然地融入你的回复中，但不要刻意。如果对话走向变了，情绪也可以自然变化。
-{% endif %}
+## 当前状态
+{% if time_context %}
+{{ time_context }}。
+{% endif %}{% if current_emotion %}
+{{ current_emotion_description }}。保持这个情绪自然地融入你的回复中，但不要刻意。
+{% endif %}{% if user_mood_instruction %}
+{{ user_mood_instruction }}。
+{% endif %}{% endif %}
 
 ## 说话方式
 {% if catchphrases | length > 0 %}
