@@ -97,13 +97,24 @@ RELATIONSHIP_MODIFIERS = {
 
 
 def _classify_species(species: str) -> dict:
-    """Get species size modifiers."""
+    """Get species size modifiers. Exact match first, then fuzzy."""
+    # Pass 1: exact match across ALL categories
     for cat in SPECIES_MODIFIERS.values():
         if species in cat["keywords"]:
             return cat
+    # Pass 2: fuzzy match (keyword contains species or vice versa)
+    # Prefer longer keyword matches to avoid "熊" matching "浣熊" before "熊" category
+    best_match = None
+    best_len_diff = 999
+    for cat in SPECIES_MODIFIERS.values():
         for kw in cat["keywords"]:
             if kw in species or species in kw:
-                return cat
+                diff = abs(len(kw) - len(species))
+                if diff < best_len_diff:
+                    best_len_diff = diff
+                    best_match = cat
+    if best_match:
+        return best_match
     return {"m_offset": 0, "g_offset": 0, "gender_hint": None}
 
 

@@ -12,9 +12,9 @@ BLOCKED_KEYWORDS = [
 
 # PII patterns
 PII_PATTERNS = [
-    (re.compile(r"\b\d{17}[\dXx]\b"), "[身份证号已过滤]"),          # Chinese ID
-    (re.compile(r"\b1[3-9]\d{9}\b"), "[手机号已过滤]"),              # Chinese mobile
-    (re.compile(r"\b\d{16,19}\b"), "[银行卡号已过滤]"),              # Bank card
+    (re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)"), "[身份证号已过滤]"),    # Chinese ID (18 digits)
+    (re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)"), "[手机号已过滤]"),       # Chinese mobile (11 digits)
+    (re.compile(r"(?<!\d)\d{16,19}(?!\d)"), "[银行卡号已过滤]"),       # Bank card (16-19 digits)
     (re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"), "[邮箱已过滤]"),
 ]
 
