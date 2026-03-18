@@ -115,13 +115,16 @@ class PromptBuilder:
         user_input: str = "",
         emotion_state: str | None = None,
         memories: list[dict] | None = None,
+        relationship_stage: str | None = None,
+        proactive_trigger: str | None = None,
     ) -> dict:
         """Build complete system prompt and voice config.
 
         Args:
-            emotion_state: Current emotion (e.g. "happy", "calm") for prompt injection.
-            memories: List of memory dicts [{"type": "PREFERENCE", "content": "喜欢恐龙"}]
-                      for past-conversation recall.
+            emotion_state: Current emotion for prompt injection.
+            memories: Past-conversation memories for recall.
+            relationship_stage: Dynamic stage (STRANGER→BESTFRIEND) for tone control.
+            proactive_trigger: Optional opening line for the character to say.
 
         Returns:
             {"system_prompt": str, "voice_id": str|None, "voice_speed": float, ...}
@@ -143,7 +146,15 @@ class PromptBuilder:
             custom_offsets = custom["personality_offsets"]
             if isinstance(custom_offsets, str):
                 custom_offsets = json.loads(custom_offsets)
-        personality = _merge_personality(base_personality, custom_offsets)
+        # Load drift for 3-layer merge: base + user_offsets + micro-drift
+        personality_drift = None
+        if custom and custom.get("personality_drift"):
+            personality_drift = custom["personality_drift"]
+            if isinstance(personality_drift, str):
+                personality_drift = json.loads(personality_drift)
+
+        from ai_core.services.personality_drift import merge_personality_with_drift
+        personality = merge_personality_with_drift(base_personality, custom_offsets, personality_drift)
         personality_desc = _personality_to_text(personality)
 
         # RAG retrieval
@@ -177,6 +188,12 @@ class PromptBuilder:
                 fmt = _MEMORY_FMT.get(m.get("type", ""), "主人说过{content}")
                 memory_context.append(fmt.format(content=m.get("content", "")))
 
+        # Relationship stage description
+        relationship_description = ""
+        if relationship_stage:
+            from ai_core.services.relationship import STAGE_PROMPTS
+            relationship_description = STAGE_PROMPTS.get(relationship_stage, "")
+
         # Render template
         system_prompt = self.template.render(
             name=safe_nickname,
@@ -188,9 +205,11 @@ class PromptBuilder:
             catchphrases=base.get("catchphrases", []),
             suffix=base.get("suffix", ""),
             relationship=base.get("relationship", "朋友"),
+            relationship_description=relationship_description,
             user_title=safe_user_title,
             interests=safe_interests,
             memory_context=memory_context,
+            proactive_trigger=proactive_trigger,
             response_length_instruction=RESPONSE_LENGTH_MAP.get(
                 base.get("response_length", "SHORT"), RESPONSE_LENGTH_MAP["SHORT"]
             ),
@@ -270,7 +289,7 @@ class PromptBuilder:
 
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                """SELECT nickname, user_title, personality_offsets, interest_topics
+                """SELECT nickname, user_title, personality_offsets, personality_drift, interest_topics
                    FROM user_customizations
                    WHERE end_user_id = $1 AND character_id = $2 AND is_active = true""",
                 end_user_id,

@@ -8,8 +8,11 @@ from ai_core.services.cache import CacheService
 from ai_core.services.emotion import EmotionEngine
 from ai_core.services.llm_client import LLMClient
 from ai_core.services.memory import MemoryService
+from ai_core.services.personality_drift import PersonalityDriftService
+from ai_core.services.proactive_trigger import ProactiveTriggerService
 from ai_core.services.prompt_builder import PromptBuilder
 from ai_core.services.rag_engine import RagEngine
+from ai_core.services.relationship import RelationshipEngine
 from ai_core.services.tts_client import TTSClient
 
 logger = structlog.get_logger()
@@ -23,6 +26,9 @@ _tts_client: TTSClient | None = None
 _asr_client: ASRClient | None = None
 _emotion_engine: EmotionEngine | None = None
 _memory_service: MemoryService | None = None
+_relationship_engine: RelationshipEngine | None = None
+_personality_drift: PersonalityDriftService | None = None
+_proactive_trigger: ProactiveTriggerService | None = None
 
 
 def get_cache() -> CacheService:
@@ -94,3 +100,28 @@ async def get_memory_service() -> MemoryService:
         cache = get_cache()
         _memory_service = MemoryService(pool, llm, cache)
     return _memory_service
+
+
+async def get_relationship_engine() -> RelationshipEngine:
+    global _relationship_engine
+    if _relationship_engine is None:
+        pool = await get_pool()
+        cache = get_cache()
+        _relationship_engine = RelationshipEngine(pool, cache)
+    return _relationship_engine
+
+
+async def get_personality_drift() -> PersonalityDriftService:
+    global _personality_drift
+    if _personality_drift is None:
+        pool = await get_pool()
+        cache = get_cache()
+        _personality_drift = PersonalityDriftService(pool, cache)
+    return _personality_drift
+
+
+def get_proactive_trigger() -> ProactiveTriggerService:
+    global _proactive_trigger
+    if _proactive_trigger is None:
+        _proactive_trigger = ProactiveTriggerService(get_cache())
+    return _proactive_trigger

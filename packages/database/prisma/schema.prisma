@@ -46,6 +46,14 @@ enum MemoryType {
   EVENT
 }
 
+enum RelationshipStage {
+  STRANGER
+  ACQUAINTANCE
+  FAMILIAR
+  FRIEND
+  BESTFRIEND
+}
+
 // ─── Brand / Tenant ────────────────────────────────
 
 model Brand {
@@ -94,9 +102,10 @@ model EndUser {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  customizations UserCustomization[]
-  devices        Device[]
-  memories       ConversationMemory[]
+  customizations  UserCustomization[]
+  devices         Device[]
+  memories        ConversationMemory[]
+  relationships   RelationshipState[]
 
   @@map("end_users")
 }
@@ -135,6 +144,7 @@ model Character {
   devices        Device[]
   logs           ConversationLog[]
   memories       ConversationMemory[]
+  relationships  RelationshipState[]
 
   @@index([brandId])
   @@index([status])
@@ -168,6 +178,7 @@ model UserCustomization {
   nickname           String?  @db.VarChar(30)
   userTitle          String?  @map("user_title") @db.VarChar(20)
   personalityOffsets Json?    @map("personality_offsets")
+  personalityDrift   Json?    @map("personality_drift")
   interestTopics     String[] @default([]) @map("interest_topics")
   isActive           Boolean  @default(true) @map("is_active")
   createdAt          DateTime @default(now()) @map("created_at")
@@ -339,4 +350,27 @@ model ConversationMemory {
   @@index([endUserId, characterId])
   @@index([createdAt])
   @@map("conversation_memories")
+}
+
+// ─── Relationship State ─────────────────────
+
+model RelationshipState {
+  id                  String            @id @default(uuid()) @db.Uuid
+  endUserId           String            @map("end_user_id") @db.Uuid
+  characterId         String            @map("character_id") @db.Uuid
+  affinity            Int               @default(0)
+  stage               RelationshipStage @default(STRANGER)
+  streakDays          Int               @default(0) @map("streak_days")
+  lastInteractionDate DateTime?         @map("last_interaction_date") @db.Date
+  turnCountToday      Int               @default(0) @map("turn_count_today")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+
+  endUser   EndUser   @relation(fields: [endUserId], references: [id])
+  character Character @relation(fields: [characterId], references: [id])
+
+  @@unique([endUserId, characterId])
+  @@index([endUserId])
+  @@index([characterId])
+  @@map("relationship_states")
 }

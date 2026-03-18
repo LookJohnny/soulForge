@@ -72,6 +72,8 @@ class ChatResponse(BaseModel):
     text: str
     audio_data: str | None = None  # base64 audio
     emotion: str | None = None  # character's detected emotion state
+    relationship_stage: str | None = None  # STRANGER → BESTFRIEND
+    affinity: int | None = None  # 0-1000
     latency_ms: int
 
 
