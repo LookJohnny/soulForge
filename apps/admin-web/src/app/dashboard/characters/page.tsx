@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Plus } from "lucide-react";
+import { getCharacterEmoji, getCharacterGradient } from "@/lib/avatar";
 
 const statusMap = {
   PUBLISHED: { label: "已发布", color: "bg-emerald-500/15 text-emerald-400/80" },
@@ -62,14 +63,8 @@ export default async function CharactersPage() {
                 {/* Header */}
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-[12px] bg-gradient-to-br from-amber-500/15 to-amber-700/10 flex items-center justify-center text-lg transition-transform duration-500 group-hover:scale-110">
-                      {char.species === "兔子"
-                        ? "🐰"
-                        : char.species === "熊"
-                          ? "🐻"
-                          : char.species === "猫" || char.species === "小猫"
-                            ? "🐱"
-                            : "✨"}
+                    <div className={`w-10 h-10 rounded-[12px] bg-gradient-to-br ${getCharacterGradient(char.id)} flex items-center justify-center text-lg transition-transform duration-500 group-hover:scale-110`}>
+                      {getCharacterEmoji(char.species)}
                     </div>
                     <div>
                       <h2 className="font-semibold text-[15px] text-white/85 group-hover:text-amber-200 transition-colors duration-300">

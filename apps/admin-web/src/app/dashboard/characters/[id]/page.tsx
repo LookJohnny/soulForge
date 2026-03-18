@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { personalityToText } from "@soulforge/shared";
 import type { PersonalityTraits } from "@soulforge/shared";
 import ChatPanel from "@/components/chat-panel";
+import { getCharacterEmoji, getCharacterGradient } from "@/lib/avatar";
 
 const traitMeta: Record<string, { label: string; color: string }> = {
   extrovert: { label: "外向度", color: "from-blue-400 to-cyan-300" },
@@ -33,7 +34,8 @@ export default async function CharacterDetailPage({
 
   const personality = character.personality as unknown as PersonalityTraits;
   const personalityDesc = personalityToText(personality);
-  const emoji = speciesEmoji[character.species] || "✨";
+  const emoji = getCharacterEmoji(character.species);
+  const gradient = getCharacterGradient(character.id);
   const soulPower = Math.round(
     Object.values(personality).reduce((a, b) => a + b, 0) / Object.values(personality).length
   );
@@ -51,7 +53,7 @@ export default async function CharacterDetailPage({
       <div className="glass rounded-2xl p-7 mb-5 glow-gold relative overflow-hidden animate-fade-in">
         <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/3 rounded-full blur-3xl" />
         <div className="relative flex items-start gap-5">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500/15 to-amber-700/10 flex items-center justify-center text-3xl shrink-0">
+          <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center text-3xl shrink-0`}>
             {emoji}
           </div>
           <div className="flex-1 min-w-0">

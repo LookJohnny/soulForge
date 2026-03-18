@@ -8,6 +8,8 @@ import {
   ChevronLeft,
   Flame,
   Check,
+  Volume2,
+  Loader2,
 } from "lucide-react";
 import type { PersonalityTraits } from "@soulforge/shared";
 
@@ -48,6 +50,7 @@ export default function NewCharacterPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [form, setForm] = useState({
     name: "",
     species: "",
@@ -85,6 +88,33 @@ export default function NewCharacterPage() {
       setSaving(false);
       alert("创建失败，请重试");
     }
+  };
+
+  const previewVoice = async () => {
+    setPreviewing(true);
+    try {
+      const sampleText = `你好呀，我是${form.name || "角色"}，很高兴认识你！`;
+      const res = await fetch("/api/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "tts", text: sampleText }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.audio_base64) {
+        const raw = atob(data.audio_base64);
+        const bytes = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+        const isMP3 = (bytes[0] === 0x49 && bytes[1] === 0x44) || (bytes[0] === 0xFF && (bytes[1] & 0xE0) === 0xE0);
+        const blob = new Blob([bytes], { type: isMP3 ? "audio/mpeg" : "audio/wav" });
+        const audio = new Audio(URL.createObjectURL(blob));
+        audio.onended = () => URL.revokeObjectURL(audio.src);
+        await audio.play();
+      }
+    } catch {
+      // Silently fail — TTS might not be running
+    }
+    setPreviewing(false);
   };
 
   const canNext = () => {
@@ -420,6 +450,25 @@ export default function NewCharacterPage() {
                     </div>
                   )}
                   <div><span className="text-[10px] text-white/20">回复长度</span><p className="text-[13px] text-white/40 mt-0.5">{form.responseLength === "SHORT" ? "简短" : form.responseLength === "MEDIUM" ? "适中" : "较长"}</p></div>
+                </div>
+              </div>
+
+              {/* Voice preview */}
+              <div className="mt-4 glass rounded-2xl p-5 animate-fade-in stagger-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-[12px] font-medium text-white/35 uppercase tracking-wide">音色预览</h4>
+                    <p className="text-[11px] text-white/20 mt-0.5">系统会根据性格自动匹配音色</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={previewVoice}
+                    disabled={previewing}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-[12px] bg-amber-500/8 text-amber-300/60 border border-amber-500/12 hover:bg-amber-500/15 transition-colors disabled:opacity-40"
+                  >
+                    {previewing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Volume2 className="w-3.5 h-3.5" />}
+                    {previewing ? "生成中..." : "试听音色"}
+                  </button>
                 </div>
               </div>
             </div>
