@@ -197,7 +197,8 @@ class PromptBuilder:
         # Render template
         system_prompt = self.template.render(
             name=safe_nickname,
-            species=base["species"],
+            archetype=base.get("archetype", "ANIMAL"),
+            species=base.get("species") or "",
             backstory=base.get("backstory", ""),
             personality_description=personality_desc,
             current_emotion=current_emotion,
@@ -268,7 +269,7 @@ class PromptBuilder:
 
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                """SELECT id, name, species, age_setting, backstory, relationship,
+                """SELECT id, name, archetype, species, age_setting, backstory, relationship,
                           personality, catchphrases, suffix, topics, forbidden,
                           response_length, voice_id, voice_speed, emotion_config
                    FROM characters WHERE id = $1""",

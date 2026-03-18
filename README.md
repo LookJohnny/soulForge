@@ -1,14 +1,17 @@
-# SoulForge - AI 毛绒玩具灵魂注入平台
+# SoulForge - AI 灵魂注入平台
 
-> 为毛绒玩具注入独一无二的 AI 灵魂：性格、声音、情感、记忆，一个都不少。
+> 为任何设备注入独一无二的 AI 灵魂：性格、声音、情感、记忆，一个都不少。
 
-SoulForge 是一个面向儿童智能玩具的 AI 人格引擎平台。品牌设计师通过 Web 后台定义角色的性格、声音和知识库，平台自动为每个毛绒玩具生成有灵魂的对话体验——不只是问答，而是有情感、有记忆、有个性的陪伴。
+SoulForge 是一个通用 AI 人格引擎平台。为毛绒玩具、耳机、手机 App、桌面应用、智能音箱等任何设备注入有灵魂的 AI 角色——不只是问答，而是有情感、有记忆、有关系进化的真实陪伴。
+
+**支持的设备类型**: 毛绒玩具 / 蓝牙耳机 / 手机 App / 桌面客户端 / 智能音箱 / 网页
+**支持的角色类型**: 动物角色 / 人类角色(老师/朋友) / 幻想角色(精灵/机器人) / 抽象助手
 
 ## 架构
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│              设备端 (小程序 / 硬件)                    │
+│      设备端 (玩具/耳机/手机/电脑/音箱/网页)            │
 └────────────────────┬────────────────────────────────┘
                      │ WebSocket
 ┌────────────────────▼────────────────────────────────┐
@@ -108,6 +111,52 @@ soulForge/
 │   └── verify_security.py  # 安全验证脚本
 └── .env.example            # 环境变量模板
 ```
+
+## 多端接入
+
+### JS SDK (浏览器 / 小程序 / Node.js)
+
+```html
+<script src="soulforge.js"></script>
+<script>
+const soul = new SoulForge({
+  apiKey: "sk-your-api-key",
+  baseUrl: "https://your-server:8100",
+  characterId: "角色UUID",
+  endUserId: "用户UUID",       // 启用记忆+关系进化
+});
+
+// 简单对话
+const reply = await soul.chat("你好呀");
+console.log(reply.text);       // "嗨！今天过得怎么样？"
+console.log(reply.emotion);    // "happy"
+
+// 流式对话 (逐句语音)
+for await (const event of soul.chatStream("给我讲个故事")) {
+  if (event.type === "text")    appendText(event.chunk);
+  if (event.type === "emotion") updateFace(event.emotion);
+  if (event.type === "audio")   playAudio(event.audioBase64);
+}
+
+// 全管线 (带记忆+关系)
+const full = await soul.pipelineChat("我今天考试考了100分！");
+console.log(full.relationshipStage); // "FRIEND"
+console.log(full.affinity);          // 652
+</script>
+```
+
+### 耳机/硬件设备
+
+通过 Gateway WebSocket 接入：
+
+```
+ws://your-server:8080/ws
+
+// 发送: {"type":"hello","device_id":"earbuds-001","device_secret":"xxx"}
+// 然后发送音频流，接收文本+语音回复
+```
+
+支持协议: Xiaozhi / WebAudio / GenericWS，自动检测。
 
 ## 快速开始
 

@@ -84,6 +84,17 @@ SPECIES_MODIFIERS = {
                "keywords": ["机器人", "机器", "AI", "人工智能", "外星", "外星人"]},
     "elder":  {"m_offset": 30, "g_offset": 10, "gender_hint": None,
                "keywords": ["老爷爷", "老奶奶", "智者", "长老", "仙人", "大师"]},
+    # ─── Human archetypes (non-animal characters) ──────
+    "child_human":  {"m_offset": -20, "g_offset": -15, "gender_hint": None,
+                     "keywords": ["小男孩", "小女孩", "小朋友", "小学生"]},
+    "teen_human":   {"m_offset": -5, "g_offset": -5, "gender_hint": None,
+                     "keywords": ["少年", "少女", "中学生", "高中生", "学生"]},
+    "adult_female": {"m_offset": 5, "g_offset": 0, "gender_hint": "female",
+                     "keywords": ["姐姐", "老师", "妈妈", "阿姨", "女声助手", "温柔姐姐"]},
+    "adult_male":   {"m_offset": 10, "g_offset": 5, "gender_hint": "male",
+                     "keywords": ["哥哥", "叔叔", "爸爸", "男声助手", "教练"]},
+    "abstract_assistant": {"m_offset": 0, "g_offset": 0, "gender_hint": None,
+                           "keywords": ["助手", "语音助手", "AI助手", "智能助手"]},
 }
 
 
@@ -100,6 +111,12 @@ SSML_PROFILES = {
     "shadow":   {"pitch": 0.85, "rate": 0.8,  "effect": "echo"},     # 神秘回响
     "mech":     {"pitch": 0.9,  "rate": 0.95, "effect": "robot"},    # 机械金属
     "elder":    {"pitch": 0.8,  "rate": 0.75, "effect": ""},         # 苍老慈祥
+    # Human archetypes
+    "child_human":  {"pitch": 1.25, "rate": 1.05, "effect": "lolita"},  # 童声
+    "teen_human":   {"pitch": 1.1,  "rate": 1.0,  "effect": ""},        # 少年少女
+    "adult_female": {"pitch": 1.0,  "rate": 0.95, "effect": ""},        # 温柔女声
+    "adult_male":   {"pitch": 0.85, "rate": 0.9,  "effect": ""},        # 沉稳男声
+    "abstract_assistant": {"pitch": 1.0, "rate": 1.0, "effect": ""},    # 中性标准
 }
 
 # Default SSML for unknown species

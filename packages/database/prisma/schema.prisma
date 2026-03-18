@@ -9,6 +9,13 @@ datasource db {
 
 // ─── Enums ─────────────────────────────────────────
 
+enum CharacterArchetype {
+  ANIMAL        // 动物角色 (毛绒玩具) — "一只小猫"
+  HUMAN         // 人类角色 (老师/朋友/偶像) — "一位温柔的姐姐"
+  FANTASY       // 幻想角色 (精灵/机器人) — "一个来自星空的精灵"
+  ABSTRACT      // 抽象助手 (无具体形象) — 纯语音助手
+}
+
 enum CharacterStatus {
   DRAFT
   PUBLISHED
@@ -116,7 +123,8 @@ model Character {
   id             String          @id @default(uuid()) @db.Uuid
   brandId        String          @map("brand_id") @db.Uuid
   name           String          @db.VarChar(50)
-  species        String          @db.VarChar(30)
+  archetype      CharacterArchetype @default(ANIMAL)
+  species        String?         @db.VarChar(30)   /// 动物种类(ANIMAL) 或角色描述(HUMAN/FANTASY)
   ageSetting     Int?            @map("age_setting")
   backstory      String?         @db.Text
   relationship   String?         @db.VarChar(20)
@@ -197,6 +205,7 @@ model UserCustomization {
 
 model Device {
   id            String       @id @db.VarChar(100)
+  deviceType    String       @default("toy") @map("device_type") @db.VarChar(20) /// toy|earbuds|phone|desktop|speaker|web
   characterId   String?      @map("character_id") @db.Uuid
   endUserId     String?      @map("end_user_id") @db.Uuid
   deviceSecret  String?      @map("device_secret") @db.VarChar(200) /// SHA-256 hash of device secret for WebSocket auth
