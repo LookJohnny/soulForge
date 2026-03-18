@@ -1,9 +1,13 @@
 """WebSocket server core - handles connections and dispatches to protocol adapters."""
 
+import hashlib
+import json
+
 import structlog
 
 from fastapi import WebSocket, WebSocketDisconnect
 
+from gateway.config import settings
 from gateway.protocols.base import MessageType, OutboundMessage
 from gateway.protocols.registry import registry
 from gateway.session import SessionManager
@@ -25,6 +29,33 @@ class WebSocketServer:
     async def shutdown(self):
         await self.orchestrator.close()
 
+    async def _verify_device(self, device_id: str, device_secret: str | None) -> bool:
+        """Verify device credentials against Redis/DB.
+
+        If device_secret is not provided and we're in development, allow.
+        In production, devices must provide valid credentials.
+        """
+        if settings.environment != "production" and not device_secret:
+            return True
+
+        if not device_secret:
+            return False
+
+        # Check Redis for device info with secret
+        if self.session_manager.redis:
+            device_info = await self.session_manager.redis.get(f"device:{device_id}")
+            if device_info:
+                info = json.loads(device_info)
+                stored_secret = info.get("device_secret")
+                if stored_secret:
+                    hashed = hashlib.sha256(device_secret.encode()).hexdigest()
+                    return hashed == stored_secret
+                # No secret configured for this device — allow in non-production
+                return settings.environment != "production"
+
+        # Device not found in cache — allow in development
+        return settings.environment != "production"
+
     async def handle_connection(self, ws: WebSocket):
         """Handle a new WebSocket connection."""
         await ws.accept()
@@ -43,6 +74,20 @@ class WebSocketServer:
 
             # Handshake
             device_id = await adapter.handshake(ws, initial_data)
+
+            # Device authentication
+            device_secret = None
+            if isinstance(initial_data, str):
+                try:
+                    msg = json.loads(initial_data)
+                    device_secret = msg.get("device_secret")
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+
+            if not await self._verify_device(device_id, device_secret):
+                logger.warning("gateway.device_auth_failed", device_id=device_id)
+                await ws.close(code=4001, reason="Device authentication failed")
+                return
 
             # Create session
             session = await self.session_manager.create_session(device_id, adapter.name)

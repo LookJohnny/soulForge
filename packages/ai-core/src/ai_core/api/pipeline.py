@@ -15,6 +15,9 @@ router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 logger = structlog.get_logger()
 content_filter = ContentFilter()
 
+# 10 MB max for decoded audio
+MAX_AUDIO_BYTES = 10 * 1024 * 1024
+
 
 @router.post("/chat", response_model=ChatResponse)
 @limiter.limit("30/minute")
@@ -24,8 +27,10 @@ async def chat(req: ChatRequest, request: Request):
     # 1. Determine user text input
     user_text = req.text_input
     if not user_text and req.audio_data:
-        asr = await get_asr_client()
         audio_bytes = base64.b64decode(req.audio_data)
+        if len(audio_bytes) > MAX_AUDIO_BYTES:
+            raise HTTPException(status_code=422, detail="Audio data exceeds 10MB limit")
+        asr = await get_asr_client()
         user_text = await asr.recognize(audio_bytes)
 
     if not user_text:
@@ -55,7 +60,7 @@ async def chat(req: ChatRequest, request: Request):
         user_input=user_text,
     )
 
-    # 5. Content safety filter on output (PII redaction)
+    # 5. Content safety filter on output (PII + blocked content)
     ai_text = content_filter.filter_output(ai_text)
 
     # 6. TTS synthesis (optional, if voice configured)
@@ -68,7 +73,9 @@ async def chat(req: ChatRequest, request: Request):
             speed=prompt_result.get("voice_speed", 1.0),
             pitch_rate=prompt_result.get("pitch_rate", 0),
             speech_rate=prompt_result.get("speech_rate", 0),
-            instruction=prompt_result.get("voice_instruction", ""),
+            ssml_pitch=prompt_result.get("ssml_pitch", 1.0),
+            ssml_rate=prompt_result.get("ssml_rate", 1.0),
+            ssml_effect=prompt_result.get("ssml_effect", ""),
         )
         audio_b64 = base64.b64encode(audio_bytes).decode()
 

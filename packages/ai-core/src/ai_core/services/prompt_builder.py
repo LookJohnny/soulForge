@@ -5,12 +5,32 @@ into a complete System Prompt for the LLM.
 """
 
 import json
+import re
 from pathlib import Path
 
 import asyncpg
 from jinja2 import Environment, FileSystemLoader
 
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
+
+# Pattern to strip Jinja2 syntax and control characters from user fields
+_JINJA_PATTERN = re.compile(r"\{\{.*?\}\}|\{%.*?%\}|\{#.*?#\}")
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def _sanitize_user_field(value: str, max_length: int = 200) -> str:
+    """Sanitize user-controlled fields to prevent prompt injection.
+
+    - Strip Jinja2 template syntax ({{ }}, {% %}, {# #})
+    - Remove control characters
+    - Collapse newlines to single space (prevents section injection)
+    - Truncate to max_length
+    """
+    value = _JINJA_PATTERN.sub("", value)
+    value = _CONTROL_CHARS.sub("", value)
+    value = re.sub(r"\n+", " ", value)
+    return value[:max_length].strip()
+
 
 # Personality trait descriptions (Chinese)
 TRAIT_DESCRIPTIONS = {
@@ -120,17 +140,26 @@ class PromptBuilder:
             if results:
                 rag_context = "\n".join(results)
 
+        # Sanitize user-controlled fields to prevent prompt injection
+        raw_nickname = custom.get("nickname") or base["name"] if custom else base["name"]
+        raw_user_title = custom.get("user_title", "主人") if custom else "主人"
+        raw_interests = custom.get("interest_topics", []) if custom else base.get("topics", [])
+
+        safe_nickname = _sanitize_user_field(str(raw_nickname), max_length=50)
+        safe_user_title = _sanitize_user_field(str(raw_user_title), max_length=20)
+        safe_interests = [_sanitize_user_field(str(t), max_length=50) for t in raw_interests][:20]
+
         # Render template
         system_prompt = self.template.render(
-            name=custom.get("nickname") or base["name"] if custom else base["name"],
+            name=safe_nickname,
             species=base["species"],
             backstory=base.get("backstory", ""),
             personality_description=personality_desc,
             catchphrases=base.get("catchphrases", []),
             suffix=base.get("suffix", ""),
             relationship=base.get("relationship", "朋友"),
-            user_title=custom.get("user_title", "主人") if custom else "主人",
-            interests=custom.get("interest_topics", []) if custom else base.get("topics", []),
+            user_title=safe_user_title,
+            interests=safe_interests,
             response_length_instruction=RESPONSE_LENGTH_MAP.get(
                 base.get("response_length", "SHORT"), RESPONSE_LENGTH_MAP["SHORT"]
             ),
@@ -143,7 +172,9 @@ class PromptBuilder:
         voice_speed = base.get("voice_speed", 1.0)
         pitch_rate = 0
         speech_rate = 0
-        voice_instruction = ""
+        ssml_pitch = 1.0
+        ssml_rate = 1.0
+        ssml_effect = ""
 
         if base.get("voice_id"):
             # Designer explicitly assigned a voice
@@ -163,7 +194,9 @@ class PromptBuilder:
             voice_speed = matched["speed"]
             pitch_rate = matched.get("pitch_rate", 0)
             speech_rate = matched.get("speech_rate", 0)
-            voice_instruction = matched.get("instruction", "")
+            ssml_pitch = matched.get("ssml_pitch", 1.0)
+            ssml_rate = matched.get("ssml_rate", 1.0)
+            ssml_effect = matched.get("ssml_effect", "")
 
         return {
             "system_prompt": system_prompt,
@@ -171,7 +204,9 @@ class PromptBuilder:
             "voice_speed": voice_speed,
             "pitch_rate": pitch_rate,
             "speech_rate": speech_rate,
-            "voice_instruction": voice_instruction,
+            "ssml_pitch": ssml_pitch,
+            "ssml_rate": ssml_rate,
+            "ssml_effect": ssml_effect,
         }
 
     async def _get_character(self, character_id: str) -> dict | None:

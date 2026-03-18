@@ -9,10 +9,15 @@ from collections.abc import AsyncIterator
 import httpx
 import structlog
 from openai import AsyncOpenAI
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
+from ai_core.config import settings
 from ai_core.services.llm.base import LLMProvider
 
 logger = structlog.get_logger()
+
+# Retryable exceptions (network/transient errors)
+_RETRYABLE = (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, TimeoutError, ConnectionError)
 
 
 class OpenAICompatProvider(LLMProvider):
@@ -22,8 +27,11 @@ class OpenAICompatProvider(LLMProvider):
 
     def __init__(self, base_url: str, api_key: str, model: str):
         self.model = model
-        # Use a custom httpx client to bypass system SOCKS proxy
-        http_client = httpx.AsyncClient(proxy=None)
+        # Use a custom httpx client to bypass system SOCKS proxy, with timeout
+        http_client = httpx.AsyncClient(
+            proxy=None,
+            timeout=httpx.Timeout(settings.llm_timeout, connect=10.0),
+        )
         self.client = AsyncOpenAI(base_url=base_url, api_key=api_key, http_client=http_client)
         logger.info("llm.provider_init", provider=self.name, base_url=base_url, model=model)
 
@@ -36,6 +44,12 @@ class OpenAICompatProvider(LLMProvider):
         messages.append({"role": "user", "content": user_input})
         return messages
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type(_RETRYABLE),
+        reraise=True,
+    )
     async def generate(
         self,
         system_prompt: str,
@@ -56,6 +70,12 @@ class OpenAICompatProvider(LLMProvider):
         )
         return resp.choices[0].message.content or ""
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type(_RETRYABLE),
+        reraise=True,
+    )
     async def generate_stream(
         self,
         system_prompt: str,

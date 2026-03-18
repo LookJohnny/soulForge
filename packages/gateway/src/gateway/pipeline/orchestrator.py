@@ -13,12 +13,18 @@ logger = logging.getLogger(__name__)
 
 class PipelineOrchestrator:
     def __init__(self):
+        # Build headers for service-to-service auth
+        headers = {}
+        if settings.service_token:
+            headers["X-Service-Token"] = settings.service_token
+
         # Use explicit transport to bypass system SOCKS proxy
         transport = httpx.AsyncHTTPTransport()
         self.client = httpx.AsyncClient(
             base_url=settings.ai_core_url,
             timeout=30.0,
             transport=transport,
+            headers=headers,
         )
 
     async def process_audio(self, session: Session, audio_data: bytes) -> dict:
@@ -38,7 +44,12 @@ class PipelineOrchestrator:
             "audio_data": base64.b64encode(audio_data).decode(),
         }
 
-        resp = await self.client.post("/pipeline/chat", json=payload)
+        # Include brand_id header for license checking
+        headers = {}
+        if session.brand_id:
+            headers["X-Brand-Id"] = session.brand_id
+
+        resp = await self.client.post("/pipeline/chat", json=payload, headers=headers)
         resp.raise_for_status()
         data = resp.json()
 
@@ -66,7 +77,11 @@ class PipelineOrchestrator:
             "text_input": text,
         }
 
-        resp = await self.client.post("/pipeline/chat", json=payload)
+        headers = {}
+        if session.brand_id:
+            headers["X-Brand-Id"] = session.brand_id
+
+        resp = await self.client.post("/pipeline/chat", json=payload, headers=headers)
         resp.raise_for_status()
         data = resp.json()
 

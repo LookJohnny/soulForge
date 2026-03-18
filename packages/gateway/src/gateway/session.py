@@ -15,6 +15,7 @@ class Session:
     device_id: str
     character_id: str | None = None
     end_user_id: str | None = None
+    brand_id: str | None = None
     protocol: str = ""
     history: list[dict] = field(default_factory=list)
 
@@ -43,6 +44,7 @@ class SessionManager:
                 info = json.loads(device_info)
                 session.character_id = info.get("character_id")
                 session.end_user_id = info.get("end_user_id")
+                session.brand_id = info.get("brand_id")
 
             # Store session
             await self.redis.setex(

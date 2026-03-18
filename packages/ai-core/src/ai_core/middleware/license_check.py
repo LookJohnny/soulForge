@@ -1,5 +1,6 @@
 """License enforcement middleware — checks quota before processing requests."""
 
+import time
 from datetime import date
 
 import structlog
@@ -22,11 +23,47 @@ TIER_LIMITS = {
 # Paths that consume conversation quota
 CONVERSATION_PATHS = {"/pipeline/chat", "/chat/preview"}
 
+# In-memory tier cache: {brand_id: (tier, expiry_timestamp)}
+_tier_cache: dict[str, tuple[str, float]] = {}
+_TIER_CACHE_TTL = 3600  # 1 hour
+
+
+async def _get_brand_tier(brand_id: str) -> str:
+    """Get brand tier from DB with in-memory cache (TTL 1h)."""
+    now = time.time()
+
+    # Check cache
+    cached = _tier_cache.get(brand_id)
+    if cached and cached[1] > now:
+        return cached[0]
+
+    # Query DB
+    try:
+        from ai_core.db import get_pool
+
+        pool = await get_pool()
+        row = await pool.fetchrow(
+            """SELECT tier FROM licenses
+               WHERE brand_id = $1
+                 AND (expires_at IS NULL OR expires_at > now())
+               ORDER BY created_at DESC
+               LIMIT 1""",
+            brand_id,
+        )
+        tier = row["tier"] if row else "FREE"
+    except Exception as e:
+        logger.warning("license.db_lookup_failed", brand_id=brand_id, error=str(e))
+        tier = "FREE"
+
+    # Cache result
+    _tier_cache[brand_id] = (tier, now + _TIER_CACHE_TTL)
+    return tier
+
 
 class LicenseCheckMiddleware(BaseHTTPMiddleware):
     """Check license quotas on conversation endpoints.
 
-    Requires brand_id header or defaults to a free-tier check.
+    Uses brand_id from auth context (request.state.auth) instead of trusting headers.
     """
 
     async def dispatch(self, request: Request, call_next):
@@ -36,17 +73,17 @@ class LicenseCheckMiddleware(BaseHTTPMiddleware):
         if path not in CONVERSATION_PATHS:
             return await call_next(request)
 
-        brand_id = request.headers.get("x-brand-id", "")
+        # Get brand_id from auth context (set by AuthMiddleware)
+        auth = getattr(request.state, "auth", None)
+        brand_id = auth.brand_id if auth else ""
         if not brand_id:
-            # No brand context — skip quota check (direct API usage)
             return await call_next(request)
 
         # Get current usage
         current = await usage_meter.get_count(brand_id, "conversation")
 
-        # Get brand tier (for now, default to FREE)
-        # In production, fetch from DB via cached lookup
-        tier = "FREE"
+        # Get brand tier from DB (cached)
+        tier = await _get_brand_tier(brand_id)
         limits = TIER_LIMITS.get(tier, TIER_LIMITS["FREE"])
 
         if current >= limits["max_daily_convos"]:

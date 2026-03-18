@@ -7,24 +7,22 @@ import time
 import structlog
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ai_core.dependencies import get_llm_client, get_prompt_builder, get_tts_client
 from ai_core.middleware.rate_limit import limiter
+from ai_core.services.content_filter import ContentFilter
+from ai_core.models.schemas import HistoryMessage
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 logger = structlog.get_logger()
-
-
-class HistoryMessage(BaseModel):
-    role: str  # "user" | "assistant"
-    content: str
+content_filter = ContentFilter()
 
 
 class ChatPreviewRequest(BaseModel):
     character_id: str
-    text: str
-    history: list[HistoryMessage] = []
+    text: str = Field(max_length=2000)
+    history: list[HistoryMessage] = Field(default_factory=list, max_length=50)
     voice: str | None = None
     with_audio: bool = True
 
@@ -41,6 +39,12 @@ class ChatPreviewResponse(BaseModel):
 async def chat_preview(req: ChatPreviewRequest, request: Request):
     """Chat with a character (supports multi-turn history)."""
     start = time.monotonic()
+
+    # Content safety check on input
+    is_safe, reason = content_filter.check_input(req.text)
+    if not is_safe:
+        logger.warning("content_filter.blocked_input", reason=reason, endpoint="chat_preview")
+        raise HTTPException(status_code=400, detail=f"输入内容被拦截: {reason}")
 
     builder = await get_prompt_builder()
     try:
@@ -61,6 +65,9 @@ async def chat_preview(req: ChatPreviewRequest, request: Request):
         history=history,
     )
 
+    # Content safety filter on output (PII + blocked content)
+    ai_text = content_filter.filter_output(ai_text)
+
     # TTS
     audio_b64 = None
     audio_fmt = None
@@ -73,7 +80,9 @@ async def chat_preview(req: ChatPreviewRequest, request: Request):
             speed=prompt_result.get("voice_speed", 1.0),
             pitch_rate=prompt_result.get("pitch_rate", 0),
             speech_rate=prompt_result.get("speech_rate", 0),
-            instruction=prompt_result.get("voice_instruction", ""),
+            ssml_pitch=prompt_result.get("ssml_pitch", 1.0),
+            ssml_rate=prompt_result.get("ssml_rate", 1.0),
+            ssml_effect=prompt_result.get("ssml_effect", ""),
         )
         audio_b64 = base64.b64encode(audio_data).decode()
         audio_fmt = "mp3" if audio_data[:3] == b"ID3" or (audio_data[0] == 0xFF and (audio_data[1] & 0xE0) == 0xE0) else "wav"
@@ -92,6 +101,12 @@ async def chat_preview(req: ChatPreviewRequest, request: Request):
 @limiter.limit("30/minute")
 async def chat_preview_stream(req: ChatPreviewRequest, request: Request):
     """Streaming chat — returns SSE events with text chunks, then audio."""
+
+    # Content safety check on input
+    is_safe, reason = content_filter.check_input(req.text)
+    if not is_safe:
+        logger.warning("content_filter.blocked_input", reason=reason, endpoint="chat_preview_stream")
+        raise HTTPException(status_code=400, detail=f"输入内容被拦截: {reason}")
 
     builder = await get_prompt_builder()
     try:
@@ -117,6 +132,13 @@ async def chat_preview_stream(req: ChatPreviewRequest, request: Request):
             full_text += chunk
             yield f"data: {json.dumps({'type': 'text', 'chunk': chunk}, ensure_ascii=False)}\n\n"
 
+        # Filter complete output for safety
+        filtered_text = content_filter.filter_output(full_text)
+        if filtered_text != full_text:
+            # Output was blocked/modified — send correction event
+            yield f"data: {json.dumps({'type': 'text_replace', 'text': filtered_text}, ensure_ascii=False)}\n\n"
+            full_text = filtered_text
+
         # TTS after text is complete
         if req.with_audio and full_text:
             voice_id = req.voice or prompt_result.get("voice_id")
@@ -128,7 +150,9 @@ async def chat_preview_stream(req: ChatPreviewRequest, request: Request):
                     speed=prompt_result.get("voice_speed", 1.0),
                     pitch_rate=prompt_result.get("pitch_rate", 0),
                     speech_rate=prompt_result.get("speech_rate", 0),
-                    instruction=prompt_result.get("voice_instruction", ""),
+                    ssml_pitch=prompt_result.get("ssml_pitch", 1.0),
+                    ssml_rate=prompt_result.get("ssml_rate", 1.0),
+                    ssml_effect=prompt_result.get("ssml_effect", ""),
                 )
                 audio_b64 = base64.b64encode(audio_data).decode()
                 audio_fmt = "mp3" if audio_data[:3] == b"ID3" or (audio_data[0] == 0xFF and (audio_data[1] & 0xE0) == 0xE0) else "wav"
