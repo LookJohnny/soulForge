@@ -180,6 +180,7 @@ model Device {
   id            String       @id @db.VarChar(100)
   characterId   String?      @map("character_id") @db.Uuid
   endUserId     String?      @map("end_user_id") @db.Uuid
+  deviceSecret  String?      @map("device_secret") @db.VarChar(200) /// SHA-256 hash of device secret for WebSocket auth
   firmwareVer   String?      @map("firmware_ver") @db.VarChar(20)
   hardwareModel String?      @map("hardware_model") @db.VarChar(50)
   lastSeen      DateTime?    @map("last_seen")

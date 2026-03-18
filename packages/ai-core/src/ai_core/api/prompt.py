@@ -1,13 +1,15 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from ai_core.dependencies import get_prompt_builder
+from ai_core.middleware.rate_limit import limiter
 from ai_core.models.schemas import PromptBuildRequest, PromptBuildResponse
 
 router = APIRouter(prefix="/prompt", tags=["prompt"])
 
 
 @router.post("/build", response_model=PromptBuildResponse)
-async def build_prompt(req: PromptBuildRequest):
+@limiter.limit("30/minute")
+async def build_prompt(req: PromptBuildRequest, request: Request):
     builder = await get_prompt_builder()
     try:
         result = await builder.build(

@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from ai_core.dependencies import get_llm_client, get_prompt_builder, get_tts_client
 from ai_core.middleware.rate_limit import limiter
 from ai_core.services.content_filter import ContentFilter
+from ai_core.services.text_splitter import split_sentences
 from ai_core.models.schemas import HistoryMessage
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -139,26 +140,29 @@ async def chat_preview_stream(req: ChatPreviewRequest, request: Request):
             yield f"data: {json.dumps({'type': 'text_replace', 'text': filtered_text}, ensure_ascii=False)}\n\n"
             full_text = filtered_text
 
-        # TTS after text is complete
+        # TTS: split into sentences and synthesize each for progressive audio
         if req.with_audio and full_text:
             voice_id = req.voice or prompt_result.get("voice_id")
-            try:
-                tts = await get_tts_client()
-                audio_data = await tts.synthesize_to_wav(
-                    text=full_text,
-                    voice=voice_id,
-                    speed=prompt_result.get("voice_speed", 1.0),
-                    pitch_rate=prompt_result.get("pitch_rate", 0),
-                    speech_rate=prompt_result.get("speech_rate", 0),
-                    ssml_pitch=prompt_result.get("ssml_pitch", 1.0),
-                    ssml_rate=prompt_result.get("ssml_rate", 1.0),
-                    ssml_effect=prompt_result.get("ssml_effect", ""),
-                )
-                audio_b64 = base64.b64encode(audio_data).decode()
-                audio_fmt = "mp3" if audio_data[:3] == b"ID3" or (audio_data[0] == 0xFF and (audio_data[1] & 0xE0) == 0xE0) else "wav"
-                yield f"data: {json.dumps({'type': 'audio', 'audio_base64': audio_b64, 'audio_format': audio_fmt}, ensure_ascii=False)}\n\n"
-            except Exception as e:
-                logger.warning("tts.stream_error", error=str(e))
+            tts = await get_tts_client()
+            sentences = split_sentences(full_text)
+
+            for i, sentence in enumerate(sentences):
+                try:
+                    audio_data = await tts.synthesize_to_wav(
+                        text=sentence,
+                        voice=voice_id,
+                        speed=prompt_result.get("voice_speed", 1.0),
+                        pitch_rate=prompt_result.get("pitch_rate", 0),
+                        speech_rate=prompt_result.get("speech_rate", 0),
+                        ssml_pitch=prompt_result.get("ssml_pitch", 1.0),
+                        ssml_rate=prompt_result.get("ssml_rate", 1.0),
+                        ssml_effect=prompt_result.get("ssml_effect", ""),
+                    )
+                    audio_b64 = base64.b64encode(audio_data).decode()
+                    audio_fmt = "mp3" if audio_data[:3] == b"ID3" or (audio_data[0] == 0xFF and (audio_data[1] & 0xE0) == 0xE0) else "wav"
+                    yield f"data: {json.dumps({'type': 'audio', 'index': i, 'total': len(sentences), 'audio_base64': audio_b64, 'audio_format': audio_fmt}, ensure_ascii=False)}\n\n"
+                except Exception as e:
+                    logger.warning("tts.stream_sentence_error", error=str(e), sentence_index=i)
 
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 

@@ -4,6 +4,7 @@ import structlog
 
 from ai_core.db import get_pool
 from ai_core.services.asr_client import ASRClient
+from ai_core.services.cache import CacheService
 from ai_core.services.llm_client import LLMClient
 from ai_core.services.prompt_builder import PromptBuilder
 from ai_core.services.rag_engine import RagEngine
@@ -40,7 +41,8 @@ async def get_prompt_builder() -> PromptBuilder:
     if _prompt_builder is None:
         pool = await get_pool()
         rag = await get_rag_engine()  # None if Milvus unavailable
-        _prompt_builder = PromptBuilder(pool, rag)
+        cache = CacheService()
+        _prompt_builder = PromptBuilder(pool, rag, cache)
     return _prompt_builder
 
 

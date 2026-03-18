@@ -4,7 +4,7 @@ import base64
 
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ai_core.dependencies import get_tts_client
 from ai_core.middleware.rate_limit import limiter
@@ -13,9 +13,9 @@ router = APIRouter(prefix="/tts", tags=["tts"])
 
 
 class TTSPreviewRequest(BaseModel):
-    text: str
+    text: str = Field(max_length=2000)
     voice: str | None = None
-    speed: float = 1.0
+    speed: float = Field(default=1.0, ge=0.5, le=2.0)
 
 
 @router.get("/voices")
