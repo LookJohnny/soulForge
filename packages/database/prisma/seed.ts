@@ -95,7 +95,7 @@ async function main() {
         energy: 75,
       },
       catchphrases: ["嘻嘻", "好棒好棒", "棉花糖最喜欢你啦"],
-      suffix: "~咪",
+      suffix: "~呀",
       topics: ["太空", "动物", "美食", "冒险"],
       forbidden: ["暴力", "恐怖", "政治"],
       responseLength: "SHORT",
