@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # ─── TTS Provider ───────────────────────────
     tts_provider: str = "dashscope"
-    tts_model: str = "cosyvoice-v1"
+    tts_model: str = "cosyvoice-v3-flash"
 
     # ─── ASR Provider ───────────────────────────
     asr_provider: str = "dashscope"

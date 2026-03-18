@@ -16,6 +16,7 @@ class TTSProvider(ABC):
         speed: float = 1.0,
         pitch_rate: int = 0,
         speech_rate: int = 0,
+        instruction: str = "",
     ) -> bytes:
         """Synthesize text to audio bytes."""
         ...
@@ -28,6 +29,7 @@ class TTSProvider(ABC):
         speed: float = 1.0,
         pitch_rate: int = 0,
         speech_rate: int = 0,
+        instruction: str = "",
     ) -> bytes:
         """Synthesize text and return playable audio format."""
         ...

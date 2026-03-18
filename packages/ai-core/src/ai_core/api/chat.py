@@ -59,6 +59,7 @@ async def chat_preview(req: ChatPreviewRequest):
             speed=prompt_result.get("voice_speed", 1.0),
             pitch_rate=prompt_result.get("pitch_rate", 0),
             speech_rate=prompt_result.get("speech_rate", 0),
+            instruction=prompt_result.get("voice_instruction", ""),
         )
         audio_b64 = base64.b64encode(wav_data).decode()
         audio_fmt = "mp3" if wav_data[:3] == b"ID3" or (wav_data[0] == 0xFF and (wav_data[1] & 0xE0) == 0xE0) else "wav"

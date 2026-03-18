@@ -143,6 +143,7 @@ class PromptBuilder:
         voice_speed = base.get("voice_speed", 1.0)
         pitch_rate = 0
         speech_rate = 0
+        voice_instruction = ""
 
         if base.get("voice_id"):
             # Designer explicitly assigned a voice
@@ -160,8 +161,9 @@ class PromptBuilder:
             )
             voice_id = matched["voice_id"]
             voice_speed = matched["speed"]
-            pitch_rate = matched["pitch_rate"]
-            speech_rate = matched["speech_rate"]
+            pitch_rate = matched.get("pitch_rate", 0)
+            speech_rate = matched.get("speech_rate", 0)
+            voice_instruction = matched.get("instruction", "")
 
         return {
             "system_prompt": system_prompt,
@@ -169,6 +171,7 @@ class PromptBuilder:
             "voice_speed": voice_speed,
             "pitch_rate": pitch_rate,
             "speech_rate": speech_rate,
+            "voice_instruction": voice_instruction,
         }
 
     async def _get_character(self, character_id: str) -> dict | None:

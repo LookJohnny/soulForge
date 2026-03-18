@@ -1,4 +1,8 @@
-"""DashScope CosyVoice TTS provider with pitch/speed persona control."""
+"""DashScope CosyVoice TTS — instruct mode for voice persona control.
+
+Uses cosyvoice-v3-flash with natural language voice instructions:
+  "用甜美软萌的奶音说话，语气轻柔活泼"
+"""
 
 import structlog
 import dashscope
@@ -24,12 +28,12 @@ DEFAULT_VOICE = "longxiaochun"
 
 
 class DashScopeTTSProvider(TTSProvider):
-    """DashScope CosyVoice TTS with pitch_rate and speech_rate support.
+    """DashScope CosyVoice TTS with instruct mode.
 
-    CosyVoice v2 supports:
-    - pitch_rate: -500 to 500 (higher = more cute/childlike)
-    - speech_rate: -500 to 500 (higher = faster)
-    - volume: 0 to 100
+    cosyvoice-v3-flash supports the `instruction` parameter:
+    - Natural language voice acting direction (max 100 chars, CN=2)
+    - e.g., "用甜美软萌的奶音说话，语气活泼可爱"
+    - Falls back gracefully if instruct not supported for a voice
 
     Output format: MP3
     """
@@ -43,33 +47,37 @@ class DashScopeTTSProvider(TTSProvider):
         speed: float = 1.0,
         pitch_rate: int = 0,
         speech_rate: int = 0,
+        instruction: str = "",
     ) -> bytes:
         dashscope.api_key = settings.dashscope_api_key
-
         voice_id = voice or DEFAULT_VOICE
 
-        # Build SpeechSynthesizer with persona parameters
-        kwargs = {
+        kwargs: dict = {
             "model": settings.tts_model,
             "voice": voice_id,
         }
 
-        # CosyVoice v2 supports pitch_rate and speech_rate
-        if pitch_rate != 0:
-            kwargs["pitch_rate"] = pitch_rate
-        if speech_rate != 0:
-            kwargs["speech_rate"] = speech_rate
+        # Instruct mode — natural language voice direction
+        if instruction:
+            kwargs["instruction"] = instruction
 
         logger.info(
             "tts.synthesize",
             voice=voice_id,
-            pitch_rate=pitch_rate,
-            speech_rate=speech_rate,
+            model=settings.tts_model,
+            instruction=instruction[:30] + "..." if len(instruction) > 30 else instruction,
             text_len=len(text),
         )
 
         synth = SpeechSynthesizer(**kwargs)
         audio = synth.call(text)
+
+        # If instruct failed (returns None), retry without instruction
+        if audio is None and instruction:
+            logger.warning("tts.instruct_not_available", voice=voice_id)
+            kwargs.pop("instruction", None)
+            synth = SpeechSynthesizer(**kwargs)
+            audio = synth.call(text)
 
         if isinstance(audio, bytes) and len(audio) > 0:
             return audio
@@ -82,9 +90,9 @@ class DashScopeTTSProvider(TTSProvider):
         speed: float = 1.0,
         pitch_rate: int = 0,
         speech_rate: int = 0,
+        instruction: str = "",
     ) -> bytes:
-        # DashScope returns MP3 — browsers play it natively
-        return await self.synthesize(text, voice, speed, pitch_rate, speech_rate)
+        return await self.synthesize(text, voice, speed, pitch_rate, speech_rate, instruction)
 
     def get_voices(self) -> dict[str, str]:
         return dict(PRESET_VOICES)
