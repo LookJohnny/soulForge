@@ -1,12 +1,13 @@
-"""Voice Persona Engine — personality-vector-driven voice matching.
+"""Voice Persona Engine — personality-vector-driven voice matching + SSML effects.
 
 Core idea: Every voice and every character both have a personality vector
 on 4 dimensions: warmth, energy, maturity, gravity.
 
 Match by finding the voice with the smallest distance to the character's vector.
 
-The voice instruction is generated dynamically from the character's traits,
-not hardcoded per species.
+SSML parameters (pitch, rate, effect) are computed per species archetype
+and fine-tuned by personality traits and age, then passed to the TTS engine
+as `<speak pitch="X" rate="Y" effect="Z">text</speak>`.
 """
 
 import math
@@ -84,6 +85,25 @@ SPECIES_MODIFIERS = {
     "elder":  {"m_offset": 30, "g_offset": 10, "gender_hint": None,
                "keywords": ["老爷爷", "老奶奶", "智者", "长老", "仙人", "大师"]},
 }
+
+
+# ─── SSML profiles per species archetype ──────────
+# pitch: 0.5-2.0 (1.0=normal), rate: 0.5-2.0 (1.0=normal)
+# effect: "lolita" | "robot" | "echo" | "lowpass" | "" (none)
+
+SSML_PROFILES = {
+    "tiny":     {"pitch": 1.35, "rate": 1.1,  "effect": "lolita"},   # 奶声奶气，萌
+    "medium":   {"pitch": 1.2,  "rate": 1.15, "effect": "lolita"},   # 活泼元气萌
+    "large":    {"pitch": 0.7,  "rate": 0.85, "effect": ""},         # 低沉浑厚
+    "mythic":   {"pitch": 0.6,  "rate": 0.8,  "effect": ""},         # 威严深沉
+    "ethereal": {"pitch": 1.15, "rate": 0.9,  "effect": ""},         # 空灵优雅
+    "shadow":   {"pitch": 0.85, "rate": 0.8,  "effect": "echo"},     # 神秘回响
+    "mech":     {"pitch": 0.9,  "rate": 0.95, "effect": "robot"},    # 机械金属
+    "elder":    {"pitch": 0.8,  "rate": 0.75, "effect": ""},         # 苍老慈祥
+}
+
+# Default SSML for unknown species
+_DEFAULT_SSML = {"pitch": 1.0, "rate": 1.0, "effect": ""}
 
 # Relationship modifiers
 RELATIONSHIP_MODIFIERS = {
@@ -180,7 +200,10 @@ def _build_character_vector(
     maturity = max(0, min(100, maturity))
     gravity = max(0, min(100, gravity))
 
-    return {"w": warmth, "e": energy, "m": maturity, "g": gravity}
+    return {
+        "w": warmth, "e": energy, "m": maturity, "g": gravity,
+        "_humor": humor,  # raw value preserved for SSML micro-adjustments
+    }
 
 
 def _distance(a: dict, b: dict) -> float:
@@ -193,55 +216,53 @@ def _distance(a: dict, b: dict) -> float:
     return math.sqrt(dw*dw + de*de + dm*dm + dg*dg)
 
 
-def _generate_instruction(char_vec: dict, species: str) -> str:
-    """Generate a natural language voice instruction from personality vector."""
-    parts = []
+def _compute_ssml_params(
+    species: str, char_vec: dict, age_setting: int | None
+) -> dict:
+    """Compute SSML parameters from species archetype + personality/age micro-adjustments.
 
-    # Warmth
-    w = char_vec["w"]
-    if w >= 80:
-        parts.append("语气温暖亲切")
-    elif w >= 60:
-        parts.append("语气友善")
-    elif w <= 25:
-        parts.append("语气冷淡疏离")
+    Returns: {"ssml_pitch": float, "ssml_rate": float, "ssml_effect": str}
+    """
+    # 1. Base profile from species archetype
+    sp = _classify_species(species)
+    # Find which archetype key matched
+    archetype = None
+    for key, cat in SPECIES_MODIFIERS.items():
+        if cat is sp:
+            archetype = key
+            break
+    profile = SSML_PROFILES.get(archetype or "", _DEFAULT_SSML)
+    pitch = profile["pitch"]
+    rate = profile["rate"]
+    effect = profile["effect"]
 
-    # Energy
-    e = char_vec["e"]
-    if e >= 75:
-        parts.append("声音明亮有活力")
-    elif e >= 55:
-        parts.append("声音自然轻快")
-    elif e <= 25:
-        parts.append("声音低缓沉静")
-    elif e <= 40:
-        parts.append("声音平和舒缓")
+    # 2. Personality micro-adjustments (additive)
+    warmth = char_vec["w"]
+    energy = char_vec["e"]
+    humor = char_vec.get("_humor", 50)  # raw humor stored for SSML tuning
 
-    # Maturity
-    m = char_vec["m"]
-    if m <= 20:
-        parts.append("像个孩子一样")
-    elif m >= 75:
-        parts.append("带着阅历的沉稳")
+    if warmth > 80:
+        pitch += 0.05
+    if energy < 25:
+        rate -= 0.05
+    if humor > 70:
+        rate += 0.05
 
-    # Gravity
-    g = char_vec["g"]
-    if g >= 70:
-        parts.append("庄重不苟言笑")
-    elif g <= 15:
-        parts.append("轻松随意")
+    # 3. Age micro-adjustment
+    if age_setting is not None and age_setting <= 5:
+        pitch += 0.1
+        if not effect:
+            effect = "lolita"
 
-    if not parts:
-        parts.append("用自然的声音说话")
+    # 4. Clamp to valid ranges
+    pitch = round(max(0.5, min(2.0, pitch)), 2)
+    rate = round(max(0.5, min(2.0, rate)), 2)
 
-    instruction = "，".join(parts)
-
-    # Keep within 100 char limit
-    char_count = sum(2 if ord(c) > 127 else 1 for c in instruction)
-    if char_count > 100:
-        instruction = instruction[:45]
-
-    return instruction
+    return {
+        "ssml_pitch": pitch,
+        "ssml_rate": rate,
+        "ssml_effect": effect,
+    }
 
 
 def match_voice(
@@ -255,7 +276,9 @@ def match_voice(
     Returns:
         {
             "voice_id": str,
-            "instruction": str,
+            "ssml_pitch": float,   # 0.5-2.0
+            "ssml_rate": float,    # 0.5-2.0
+            "ssml_effect": str,    # "lolita"|"robot"|"echo"|"lowpass"|""
             "speed": float,
             "pitch_rate": int,
             "speech_rate": int,
@@ -287,20 +310,23 @@ def match_voice(
             best_dist = dist
             best_vid = vid
 
-    # 3. Generate instruction
-    instruction = _generate_instruction(char_vec, species)
+    # 3. Compute SSML parameters
+    ssml = _compute_ssml_params(species, char_vec, age_setting)
 
     label = VOICES[best_vid]["label"]
 
     return {
         "voice_id": best_vid,
-        "instruction": instruction,
+        "ssml_pitch": ssml["ssml_pitch"],
+        "ssml_rate": ssml["ssml_rate"],
+        "ssml_effect": ssml["ssml_effect"],
         "speed": 1.0,
         "pitch_rate": 0,
         "speech_rate": 0,
         "reason": (
             f"{species} → {best_vid}({label}) "
             f"dist={best_dist:.0f} "
-            f"char=[w={char_vec['w']:.0f} e={char_vec['e']:.0f} m={char_vec['m']:.0f} g={char_vec['g']:.0f}]"
+            f"char=[w={char_vec['w']:.0f} e={char_vec['e']:.0f} m={char_vec['m']:.0f} g={char_vec['g']:.0f}] "
+            f"ssml=[pitch={ssml['ssml_pitch']} rate={ssml['ssml_rate']} effect={ssml['ssml_effect'] or 'none'}]"
         ),
     }

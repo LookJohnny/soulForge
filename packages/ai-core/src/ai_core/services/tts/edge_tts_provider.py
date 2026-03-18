@@ -46,7 +46,9 @@ class EdgeTTSProvider(TTSProvider):
         speed: float = 1.0,
         pitch_rate: int = 0,
         speech_rate: int = 0,
-        instruction: str = "",
+        ssml_pitch: float = 1.0,
+        ssml_rate: float = 1.0,
+        ssml_effect: str = "",
     ) -> bytes:
         voice_name = voice if voice and voice.endswith("Neural") else DEFAULT_VOICE
         rate_str = f"{int((speed - 1) * 100):+d}%"
@@ -70,7 +72,9 @@ class EdgeTTSProvider(TTSProvider):
         speed: float = 1.0,
         pitch_rate: int = 0,
         speech_rate: int = 0,
-        instruction: str = "",
+        ssml_pitch: float = 1.0,
+        ssml_rate: float = 1.0,
+        ssml_effect: str = "",
     ) -> bytes:
         # edge-tts outputs MP3 natively; return as-is (browsers can play MP3)
         return await self.synthesize(text, voice, speed)

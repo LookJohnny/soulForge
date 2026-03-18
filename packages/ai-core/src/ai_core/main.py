@@ -11,7 +11,9 @@ from ai_core.config import settings
 from ai_core.db import close_pool
 from ai_core.middleware.auth import AuthMiddleware
 from ai_core.middleware.license_check import LicenseCheckMiddleware
+from ai_core.middleware.metrics import MetricsMiddleware, metrics_router
 from ai_core.middleware.rate_limit import limiter
+from ai_core.middleware.request_id import RequestIdMiddleware
 from ai_core.middleware.security_headers import SecurityHeadersMiddleware
 
 # Configure structlog
@@ -48,22 +50,29 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Middleware stack (order matters — outermost first)
-# 1. Security headers (outermost — always applied)
+# 1. Request ID (outermost — always applied, traces every request)
+app.add_middleware(RequestIdMiddleware)
+
+# 2. Metrics — record request count, latency, errors
+app.add_middleware(MetricsMiddleware)
+
+# 3. Security headers
 app.add_middleware(SecurityHeadersMiddleware)
 
-# 2. CORS — configured from environment, not wildcard
+# 4. CORS — configured from environment, not wildcard
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.get_allowed_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Service-Token", "X-Brand-Id"],
+    allow_headers=["Authorization", "Content-Type", "X-Service-Token", "X-Brand-Id", "X-Request-ID"],
 )
 
-# 3. Auth — JWT / API Key / Service Token verification
+# 5. Auth — JWT / API Key / Service Token verification
 app.add_middleware(AuthMiddleware)
 
-# 4. License check — quota enforcement (runs after auth, has brand_id from auth)
+# 6. License check — quota enforcement (runs after auth, has brand_id from auth)
 app.add_middleware(LicenseCheckMiddleware)
 
 app.include_router(api_router)
+app.include_router(metrics_router)

@@ -1,10 +1,11 @@
 """Tests for the Voice Matcher service."""
 
 from ai_core.services.voice_matcher import (
+    SSML_PROFILES,
     VOICES,
     _build_character_vector,
     _classify_species,
-    _generate_instruction,
+    _compute_ssml_params,
     match_voice,
 )
 
@@ -282,80 +283,135 @@ class TestUnknownSpecies:
         assert "voice_id" in result
 
 
-# ─── Instruction generation ─────────────────────────
+# ─── SSML parameter computation ────────────────────
 
 
-class TestInstructionGeneration:
-    def _char_count(self, s: str) -> int:
-        """Count chars: CJK as 2, ASCII as 1 (mirrors the source logic)."""
-        return sum(2 if ord(c) > 127 else 1 for c in s)
+class TestSSMLParams:
+    def test_tiny_species_gets_lolita_effect(self):
+        """Small animals like cats should get lolita effect with high pitch."""
+        result = match_voice(species="小猫")
+        assert result["ssml_effect"] == "lolita"
+        assert result["ssml_pitch"] >= 1.3
 
-    def test_instruction_within_100_chars(self):
-        """All species/personality combos should produce instructions <= 100 chars."""
+    def test_large_species_gets_low_pitch(self):
+        """Large animals like bears should get low pitch, no effect."""
+        result = match_voice(species="熊")
+        assert result["ssml_pitch"] <= 0.8
+        assert result["ssml_effect"] == ""
+
+    def test_mythic_species_gets_deep_voice(self):
+        """Mythic creatures like dragons should get very low pitch."""
+        result = match_voice(species="龙")
+        assert result["ssml_pitch"] <= 0.7
+        assert result["ssml_rate"] <= 0.85
+
+    def test_shadow_species_gets_echo(self):
+        """Shadow creatures like snakes should get echo effect."""
+        result = match_voice(species="蛇")
+        assert result["ssml_effect"] == "echo"
+
+    def test_mech_species_gets_robot(self):
+        """Mechanical species should get robot effect."""
+        result = match_voice(species="机器人")
+        assert result["ssml_effect"] == "robot"
+
+    def test_medium_species_gets_lolita(self):
+        """Medium animals like dogs should get lolita effect."""
+        result = match_voice(species="狗")
+        assert result["ssml_effect"] == "lolita"
+        assert result["ssml_pitch"] >= 1.1
+
+    def test_ethereal_species_gets_clean_voice(self):
+        """Ethereal species like unicorns get elevated pitch, no effect."""
+        result = match_voice(species="独角兽")
+        assert result["ssml_pitch"] >= 1.1
+        assert result["ssml_effect"] == ""
+
+    def test_elder_species_gets_slow_low(self):
+        """Elder species get low pitch and slow rate."""
+        result = match_voice(species="老爷爷")
+        assert result["ssml_pitch"] <= 0.9
+        assert result["ssml_rate"] <= 0.8
+
+    def test_high_warmth_boosts_pitch(self):
+        """Characters with warmth > 80 should get +0.05 pitch."""
+        result_warm = match_voice(
+            species="狗",
+            personality={"warmth": 90, "energy": 50, "extrovert": 50, "humor": 50, "curiosity": 50},
+        )
+        result_cold = match_voice(
+            species="狗",
+            personality={"warmth": 40, "energy": 50, "extrovert": 50, "humor": 50, "curiosity": 50},
+        )
+        assert result_warm["ssml_pitch"] > result_cold["ssml_pitch"]
+
+    def test_low_energy_reduces_rate(self):
+        """Characters with energy < 25 should get -0.05 rate."""
+        result_low = match_voice(
+            species="狗",
+            personality={"warmth": 50, "energy": 10, "extrovert": 10, "humor": 50, "curiosity": 50},
+        )
+        result_high = match_voice(
+            species="狗",
+            personality={"warmth": 50, "energy": 80, "extrovert": 80, "humor": 50, "curiosity": 50},
+        )
+        assert result_low["ssml_rate"] < result_high["ssml_rate"]
+
+    def test_high_humor_boosts_rate(self):
+        """Characters with humor > 70 should get +0.05 rate."""
+        result_funny = match_voice(
+            species="狗",
+            personality={"warmth": 50, "energy": 50, "extrovert": 50, "humor": 90, "curiosity": 50},
+        )
+        result_serious = match_voice(
+            species="狗",
+            personality={"warmth": 50, "energy": 50, "extrovert": 50, "humor": 30, "curiosity": 50},
+        )
+        assert result_funny["ssml_rate"] > result_serious["ssml_rate"]
+
+    def test_young_age_boosts_pitch_and_adds_lolita(self):
+        """Age <= 5 should push pitch +0.1 and prefer lolita effect."""
+        result = match_voice(
+            species="熊", age_setting=3,
+            personality={"warmth": 70, "energy": 80, "extrovert": 70, "humor": 60, "curiosity": 80},
+        )
+        # Even bears get lolita at age 3 (baby bear)
+        assert result["ssml_effect"] == "lolita"
+        # Pitch should be higher than base large profile (0.7)
+        assert result["ssml_pitch"] > 0.7
+
+    def test_ssml_pitch_clamped(self):
+        """SSML pitch should always be in [0.5, 2.0]."""
         test_cases = [
-            {"species": "小猫", "age_setting": 3, "personality": {"warmth": 90, "energy": 90, "extrovert": 90, "humor": 90, "curiosity": 90}},
-            {"species": "龙", "age_setting": 100, "personality": {"warmth": 10, "energy": 10, "extrovert": 10, "humor": 10, "curiosity": 10}},
-            {"species": "狗", "age_setting": None, "personality": None},
-            {"species": "老爷爷", "age_setting": 80, "personality": {"warmth": 80, "energy": 10, "extrovert": 20, "humor": 30, "curiosity": 20}},
+            {"species": "小猫", "age_setting": 3, "personality": {"warmth": 100, "energy": 100, "extrovert": 100, "humor": 100, "curiosity": 100}},
+            {"species": "龙", "age_setting": 100, "personality": {"warmth": 0, "energy": 0, "extrovert": 0, "humor": 0, "curiosity": 0}},
         ]
         for tc in test_cases:
             result = match_voice(**tc)
-            char_count = self._char_count(result["instruction"])
-            assert char_count <= 100, (
-                f"Instruction too long ({char_count} chars) for {tc}: {result['instruction']}"
-            )
+            assert 0.5 <= result["ssml_pitch"] <= 2.0, f"pitch {result['ssml_pitch']} out of range for {tc}"
+            assert 0.5 <= result["ssml_rate"] <= 2.0, f"rate {result['ssml_rate']} out of range for {tc}"
 
-    def test_instruction_is_nonempty(self):
-        result = match_voice(species="猫")
-        assert len(result["instruction"]) > 0
+    def test_unknown_species_gets_defaults(self):
+        """Unknown species should get default SSML (pitch=1.0, rate=1.0, no effect)."""
+        result = match_voice(species="嘟嘟怪兽超级变形")
+        assert result["ssml_pitch"] == 1.0
+        assert result["ssml_rate"] == 1.0
+        assert result["ssml_effect"] == ""
 
-    def test_high_warmth_instruction_mentions_warm(self):
-        vec = {"w": 85, "e": 50, "m": 50, "g": 30}
-        instruction = _generate_instruction(vec, "猫")
-        assert "温暖" in instruction or "亲切" in instruction
+    def test_butterfly_gets_extreme_cute(self):
+        """Tiny insect like butterfly should get high pitch + lolita."""
+        result = match_voice(species="蝴蝶")
+        assert result["ssml_effect"] == "lolita"
+        assert result["ssml_pitch"] >= 1.3
 
-    def test_low_warmth_instruction_mentions_cold(self):
-        vec = {"w": 15, "e": 50, "m": 50, "g": 30}
-        instruction = _generate_instruction(vec, "猫")
-        assert "冷淡" in instruction or "疏离" in instruction
-
-    def test_high_energy_instruction_mentions_lively(self):
-        vec = {"w": 50, "e": 85, "m": 50, "g": 30}
-        instruction = _generate_instruction(vec, "猫")
-        assert "活力" in instruction or "明亮" in instruction
-
-    def test_low_energy_instruction_mentions_calm(self):
-        vec = {"w": 50, "e": 20, "m": 50, "g": 30}
-        instruction = _generate_instruction(vec, "猫")
-        assert "低缓" in instruction or "沉静" in instruction
-
-    def test_child_maturity_instruction(self):
-        vec = {"w": 50, "e": 50, "m": 10, "g": 30}
-        instruction = _generate_instruction(vec, "猫")
-        assert "孩子" in instruction
-
-    def test_high_maturity_instruction(self):
-        vec = {"w": 50, "e": 50, "m": 80, "g": 30}
-        instruction = _generate_instruction(vec, "猫")
-        assert "阅历" in instruction or "沉稳" in instruction
-
-    def test_high_gravity_instruction(self):
-        vec = {"w": 50, "e": 50, "m": 50, "g": 80}
-        instruction = _generate_instruction(vec, "猫")
-        assert "庄重" in instruction
-
-    def test_low_gravity_instruction(self):
-        vec = {"w": 50, "e": 50, "m": 50, "g": 10}
-        instruction = _generate_instruction(vec, "猫")
-        assert "轻松" in instruction or "随意" in instruction
-
-    def test_neutral_vector_fallback(self):
-        """A perfectly neutral vector should still produce something."""
-        vec = {"w": 50, "e": 50, "m": 50, "g": 50}
-        instruction = _generate_instruction(vec, "猫")
-        assert len(instruction) > 0
-        # Falls through all branches, should get fallback
-        assert "自然" in instruction
+    def test_compute_ssml_params_directly(self):
+        """Direct test of _compute_ssml_params function."""
+        vec = {"w": 90, "e": 20, "m": 50, "g": 30, "_humor": 80}
+        params = _compute_ssml_params("小猫", vec, age_setting=None)
+        assert params["ssml_effect"] == "lolita"
+        # warmth > 80 → +0.05, humor > 70 → rate +0.05, energy < 25 → rate -0.05
+        assert params["ssml_pitch"] == round(1.35 + 0.05, 2)  # 1.4
+        assert params["ssml_rate"] == 1.1  # +0.05 - 0.05 = net 0
 
 
 # ─── Return shape ───────────────────────────────────
@@ -364,7 +420,7 @@ class TestInstructionGeneration:
 class TestReturnShape:
     def test_all_keys_present(self):
         result = match_voice(species="猫")
-        expected_keys = {"voice_id", "instruction", "speed", "pitch_rate", "speech_rate", "reason"}
+        expected_keys = {"voice_id", "ssml_pitch", "ssml_rate", "ssml_effect", "speed", "pitch_rate", "speech_rate", "reason"}
         assert set(result.keys()) == expected_keys
 
     def test_speed_default(self):
@@ -379,6 +435,18 @@ class TestReturnShape:
         result = match_voice(species="猫")
         assert result["speech_rate"] == 0
 
+    def test_ssml_pitch_is_float(self):
+        result = match_voice(species="猫")
+        assert isinstance(result["ssml_pitch"], float)
+
+    def test_ssml_rate_is_float(self):
+        result = match_voice(species="猫")
+        assert isinstance(result["ssml_rate"], float)
+
+    def test_ssml_effect_is_string(self):
+        result = match_voice(species="猫")
+        assert isinstance(result["ssml_effect"], str)
+
     def test_reason_contains_species(self):
         result = match_voice(species="龙")
         assert "龙" in result["reason"]
@@ -388,6 +456,10 @@ class TestReturnShape:
         vid = result["voice_id"]
         label = VOICES[vid]["label"]
         assert label in result["reason"]
+
+    def test_reason_contains_ssml_info(self):
+        result = match_voice(species="龙")
+        assert "ssml=" in result["reason"]
 
 
 # ─── Character vector clamping ──────────────────────

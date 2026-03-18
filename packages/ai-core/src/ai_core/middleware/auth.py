@@ -153,7 +153,7 @@ async def _verify_api_key(key: str) -> dict | None:
 # ──────────────────────────────────────────────
 
 # Paths that skip authentication
-PUBLIC_PATHS = frozenset({"/health", "/docs", "/openapi.json", "/redoc"})
+PUBLIC_PATHS = frozenset({"/health", "/metrics", "/docs", "/openapi.json", "/redoc"})
 
 
 class AuthMiddleware(BaseHTTPMiddleware):

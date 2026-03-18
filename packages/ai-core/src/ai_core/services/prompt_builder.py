@@ -11,6 +11,8 @@ from pathlib import Path
 import asyncpg
 from jinja2 import Environment, FileSystemLoader
 
+from ai_core.services.cache import CacheService
+
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
 
 # Pattern to strip Jinja2 syntax and control characters from user fields
@@ -96,9 +98,13 @@ def _personality_to_text(traits: dict) -> str:
 
 
 class PromptBuilder:
-    def __init__(self, pool: asyncpg.Pool, rag_engine=None):
+    # Cache TTL in seconds (1 hour)
+    CACHE_TTL = 3600
+
+    def __init__(self, pool: asyncpg.Pool, rag_engine=None, cache: CacheService | None = None):
         self.pool = pool
         self.rag = rag_engine
+        self.cache = cache or CacheService()
         self.env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
         self.template = self.env.get_template("system_prompt.jinja2")
 
@@ -210,6 +216,12 @@ class PromptBuilder:
         }
 
     async def _get_character(self, character_id: str) -> dict | None:
+        # Try cache first
+        cache_key = f"char:{character_id}"
+        cached = await self.cache.get_json(cache_key)
+        if cached is not None:
+            return cached
+
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 """SELECT id, name, species, age_setting, backstory, relationship,
@@ -220,9 +232,17 @@ class PromptBuilder:
             )
             if not row:
                 return None
-            return dict(row)
+            result = dict(row)
+            await self.cache.set_json(cache_key, result, ttl=self.CACHE_TTL)
+            return result
 
     async def _get_customization(self, end_user_id: str, character_id: str) -> dict | None:
+        # Try cache first
+        cache_key = f"custom:{end_user_id}:{character_id}"
+        cached = await self.cache.get_json(cache_key)
+        if cached is not None:
+            return cached
+
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 """SELECT nickname, user_title, personality_offsets, interest_topics
@@ -233,9 +253,17 @@ class PromptBuilder:
             )
             if not row:
                 return None
-            return dict(row)
+            result = dict(row)
+            await self.cache.set_json(cache_key, result, ttl=self.CACHE_TTL)
+            return result
 
     async def _get_voice(self, voice_id: str) -> dict | None:
+        # Try cache first
+        cache_key = f"voice:{voice_id}"
+        cached = await self.cache.get_json(cache_key)
+        if cached is not None:
+            return cached
+
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT dashscope_voice_id, reference_audio FROM voice_profiles WHERE id = $1",
@@ -243,4 +271,6 @@ class PromptBuilder:
             )
             if not row:
                 return None
-            return dict(row)
+            result = dict(row)
+            await self.cache.set_json(cache_key, result, ttl=self.CACHE_TTL)
+            return result
