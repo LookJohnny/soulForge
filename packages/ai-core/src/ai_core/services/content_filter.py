@@ -190,21 +190,64 @@ _output_blocked_pattern = re.compile(
 _OUTPUT_REPLACEMENT = "这个话题不太适合聊，我们换个有趣的话题吧！"
 
 
+# ──────────────────────────────────────────────
+# Adult-mode (virtual idol): only block truly dangerous content
+# Removes: grooming patterns, some sexual keywords that are OK in adult romance context
+# Keeps: self-harm, extreme violence, terrorism, drugs, weapons
+# ──────────────────────────────────────────────
+
+_ADULT_BLOCKED = _SELF_HARM + _VIOLENCE + _DRUGS + _WEAPONS + _EXTREMISM
+_adult_sorted = sorted(_ADULT_BLOCKED, key=len, reverse=True)
+_adult_pattern = re.compile(
+    "|".join(re.escape(k) for k in _adult_sorted),
+    re.IGNORECASE,
+)
+_adult_normalized = [_normalize_text(k) for k in _ADULT_BLOCKED]
+_adult_normalized_sorted = sorted(_adult_normalized, key=len, reverse=True)
+_adult_normalized_pattern = re.compile(
+    "|".join(re.escape(k) for k in _adult_normalized_sorted),
+)
+
+# Adult output filter: only block extreme content
+_ADULT_OUTPUT_BLOCKED = [
+    "自杀", "自残", "割腕", "杀人", "杀光",
+    "毒品", "吸毒", "恐怖袭击",
+    "suicide", "kill yourself", "terrorism",
+]
+_adult_output_pattern = re.compile(
+    "|".join(re.escape(k) for k in sorted(_ADULT_OUTPUT_BLOCKED, key=len, reverse=True)),
+    re.IGNORECASE,
+)
+
+
 class ContentFilter:
+    """Content safety filter with tier support.
+
+    Tiers:
+    - "children" (default): Full filtering — all categories including grooming
+    - "adult": Relaxed filtering — keeps self-harm/violence/drugs/weapons/terrorism,
+               removes grooming and sexual content filters for romance scenarios
+    """
+
+    def __init__(self, tier: str = "children"):
+        self.tier = tier
+
     def check_input(self, text: str) -> tuple[bool, str | None]:
         """Check user input for blocked content.
 
         Returns (is_safe, reason). If is_safe is False, reason explains why.
-        Uses both direct matching and normalized anti-bypass matching.
         """
+        pattern = _blocked_pattern if self.tier == "children" else _adult_pattern
+        norm_pattern = _blocked_normalized_pattern if self.tier == "children" else _adult_normalized_pattern
+
         # Direct match (fast path)
-        match = _blocked_pattern.search(text)
+        match = pattern.search(text)
         if match:
             return False, f"包含不当内容: {match.group()}"
 
-        # Normalized match (anti-bypass: handles spaces, zero-width chars, fullwidth, etc.)
+        # Normalized match (anti-bypass)
         normalized = _normalize_text(text)
-        match = _blocked_normalized_pattern.search(normalized)
+        match = norm_pattern.search(normalized)
         if match:
             return False, "包含不当内容"
 
@@ -212,13 +255,12 @@ class ContentFilter:
 
     def filter_output(self, text: str) -> str:
         """Filter LLM output — redact PII and check for blocked content."""
-        # PII redaction
         result = text
         for pattern, replacement in PII_PATTERNS:
             result = pattern.sub(replacement, result)
 
-        # Block dangerous content in output
-        if _output_blocked_pattern.search(result):
+        out_pattern = _output_blocked_pattern if self.tier == "children" else _adult_output_pattern
+        if out_pattern.search(result):
             return _OUTPUT_REPLACEMENT
 
         return result

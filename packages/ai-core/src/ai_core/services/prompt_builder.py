@@ -106,7 +106,11 @@ class PromptBuilder:
         self.rag = rag_engine
         self.cache = cache or CacheService()
         self.env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
-        self.template = self.env.get_template("system_prompt.jinja2")
+        self._templates = {
+            "default": self.env.get_template("system_prompt.jinja2"),
+            "idol": self.env.get_template("idol_prompt.jinja2"),
+        }
+        self.template = self._templates["default"]
 
     async def build(
         self,
@@ -119,6 +123,7 @@ class PromptBuilder:
         relationship_stage: str | None = None,
         proactive_trigger: str | None = None,
         time_context: str | None = None,
+        scene: str | None = None,
     ) -> dict:
         """Build complete system prompt and voice config.
 
@@ -198,14 +203,38 @@ class PromptBuilder:
                 fmt = _MEMORY_FMT.get(m.get("type", ""), "主人说过{content}")
                 memory_context.append(fmt.format(content=m.get("content", "")))
 
-        # Relationship stage description
+        # Relationship stage description (use romance stages for idol archetype)
         relationship_description = ""
         if relationship_stage:
-            from ai_core.services.relationship import STAGE_PROMPTS
-            relationship_description = STAGE_PROMPTS.get(relationship_stage, "")
+            archetype = base.get("archetype", "ANIMAL")
+            if archetype == "HUMAN" and base.get("relationship", "") in (
+                "暗恋对象", "青梅竹马", "深爱的人", "开朗的恋人", "表面冷漠的恋人",
+                "温柔的恋人", "热血恋人", "若即若离的暧昧对象",
+            ):
+                from ai_core.services.idol_presets import ROMANCE_STAGE_PROMPTS
+                relationship_description = ROMANCE_STAGE_PROMPTS.get(relationship_stage, "")
+            else:
+                from ai_core.services.relationship import STAGE_PROMPTS
+                relationship_description = STAGE_PROMPTS.get(relationship_stage, "")
+
+        # Scene prompt for idol mode
+        scene_prompt = ""
+        if scene:
+            from ai_core.services.idol_presets import SCENE_PROMPTS
+            scene_prompt = SCENE_PROMPTS.get(scene, "")
+
+        # Select template: idol for HUMAN romance archetype, default otherwise
+        template = self._templates["default"]
+        if base.get("archetype") == "HUMAN" and scene_prompt:
+            template = self._templates["idol"]
+        elif base.get("archetype") == "HUMAN" and base.get("relationship", "") in (
+            "暗恋对象", "青梅竹马", "深爱的人", "开朗的恋人", "表面冷漠的恋人",
+            "温柔的恋人", "热血恋人", "若即若离的暧昧对象",
+        ):
+            template = self._templates["idol"]
 
         # Render template
-        system_prompt = self.template.render(
+        system_prompt = template.render(
             name=safe_nickname,
             archetype=base.get("archetype", "ANIMAL"),
             species=base.get("species") or "",
@@ -223,6 +252,7 @@ class PromptBuilder:
             interests=safe_interests,
             memory_context=memory_context,
             proactive_trigger=proactive_trigger,
+            scene_prompt=scene_prompt,
             response_length_instruction=RESPONSE_LENGTH_MAP.get(
                 base.get("response_length", "SHORT"), RESPONSE_LENGTH_MAP["SHORT"]
             ),
