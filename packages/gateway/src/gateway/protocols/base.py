@@ -19,6 +19,7 @@ class MessageType(Enum):
     CONTROL = "control"
     AUTH = "auth"
     HEARTBEAT = "heartbeat"
+    TOUCH = "touch"
 
 
 @dataclass

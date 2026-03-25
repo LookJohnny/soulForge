@@ -183,28 +183,34 @@ cp .env.example .env
 # Python (ai-core + gateway)
 uv sync
 
-# Node.js (admin-web)
-cd apps/admin-web && npm install
+# Node.js (使用 pnpm，本项目是 monorepo)
+pnpm install
 ```
 
-### 3. 数据库初始化
+### 3. 一键启动（推荐）
 
 ```bash
-cd packages/database
-npx prisma migrate dev
+./scripts/dev.sh
 ```
 
-### 4. 启动服务
+自动完成：Docker 服务检查 → 数据库迁移 → Prisma 生成 → AI Core + Gateway + Next.js 全部启动。
+
+### 4. 手动启动（可选）
+
+如需分别启动各服务：
 
 ```bash
+# 数据库迁移
+cd packages/database && pnpm prisma migrate deploy && pnpm prisma generate
+
 # Terminal 1: AI Core
-PYTHONPATH=packages/ai-core/src uv run uvicorn ai_core.main:app --port 8100
+.venv/bin/uvicorn ai_core.main:app --port 8100 --reload --app-dir packages/ai-core/src
 
 # Terminal 2: Gateway
-PYTHONPATH=packages/gateway/src uv run uvicorn gateway.main:app --port 8080
+.venv/bin/uvicorn gateway.main:app --port 8080 --reload --app-dir packages/gateway/src
 
 # Terminal 3: Admin Web
-cd apps/admin-web && npm run dev
+cd apps/admin-web && pnpm dev
 ```
 
 ### 5. 验证

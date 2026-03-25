@@ -2,13 +2,16 @@
   "name": "soulforge",
   "private": true,
   "scripts": {
+    "start": "./scripts/dev.sh",
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "db:generate": "turbo run db:generate --filter=@soulforge/database",
-    "db:migrate": "turbo run db:migrate --filter=@soulforge/database",
-    "db:seed": "turbo run db:seed --filter=@soulforge/database"
+    "db:migrate": "cd packages/database && pnpm prisma migrate dev",
+    "db:migrate:deploy": "cd packages/database && pnpm prisma migrate deploy",
+    "db:seed": "turbo run db:seed --filter=@soulforge/database",
+    "db:studio": "cd packages/database && pnpm prisma studio"
   },
   "devDependencies": {
     "turbo": "^2.4",

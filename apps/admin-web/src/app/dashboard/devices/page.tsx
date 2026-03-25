@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Cpu, Wifi, WifiOff, Wrench } from "lucide-react";
+import { requireBrandId } from "@/lib/server-auth";
 
 const statusConfig = {
   ACTIVE: {
@@ -23,7 +24,9 @@ const statusConfig = {
 };
 
 export default async function DevicesPage() {
+  const brandId = await requireBrandId();
   const devices = await prisma.device.findMany({
+    where: { character: { brandId } },
     orderBy: { updatedAt: "desc" },
     include: { character: true },
   });

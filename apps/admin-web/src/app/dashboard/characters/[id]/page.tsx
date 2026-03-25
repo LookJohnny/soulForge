@@ -5,6 +5,7 @@ import { personalityToText } from "@soulforge/shared";
 import type { PersonalityTraits } from "@soulforge/shared";
 import ChatPanel from "@/components/chat-panel";
 import { getCharacterEmoji, getCharacterGradient } from "@/lib/avatar";
+import { requireBrandId } from "@/lib/server-auth";
 
 const traitMeta: Record<string, { label: string; color: string }> = {
   extrovert: { label: "外向度", color: "from-blue-400 to-cyan-300" },
@@ -14,19 +15,15 @@ const traitMeta: Record<string, { label: string; color: string }> = {
   energy:    { label: "活力值", color: "from-amber-600 to-amber-400" },
 };
 
-const speciesEmoji: Record<string, string> = {
-  兔子: "🐰", 熊: "🐻", 猫: "🐱", 小猫: "🐱", 狗: "🐶", 小狗: "🐶",
-  狐狸: "🦊", 企鹅: "🐧", 龙: "🐉", 独角兽: "🦄", 大熊: "🐻",
-};
-
 export default async function CharacterDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const brandId = await requireBrandId();
   const { id } = await params;
-  const character = await prisma.character.findUnique({
-    where: { id },
+  const character = await prisma.character.findFirst({
+    where: { id, brandId },
     include: { voice: true },
   });
 
@@ -36,9 +33,10 @@ export default async function CharacterDetailPage({
   const personalityDesc = personalityToText(personality);
   const emoji = getCharacterEmoji(character.species);
   const gradient = getCharacterGradient(character.id);
-  const soulPower = Math.round(
-    Object.values(personality).reduce((a, b) => a + b, 0) / Object.values(personality).length
-  );
+  const values = Object.values(personality);
+  const soulPower = values.length > 0
+    ? Math.round(values.reduce((a, b) => a + b, 0) / values.length)
+    : 50;
 
   return (
     <div className="max-w-5xl mx-auto">

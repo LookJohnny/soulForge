@@ -121,6 +121,7 @@ class RelationshipEngine:
         end_user_id: str,
         character_id: str,
         memory_types: list[str] | None = None,
+        touch_bonus: int = 0,
     ) -> dict:
         """Award affinity points after a conversation turn. Returns updated state."""
         if not end_user_id:
@@ -160,6 +161,8 @@ class RelationshipEngine:
             for mt in memory_types:
                 if mt in ("PREFERENCE", "EVENT"):
                     points += 5
+        if touch_bonus > 0:
+            points += touch_bonus
 
         new_affinity = min(1000, state["affinity"] + points)
         new_stage = _affinity_to_stage(new_affinity)

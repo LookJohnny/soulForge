@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { voiceCreateSchema } from "@/lib/validations/voice";
 import { ZodError } from "zod";
 
+// Voice profiles are a global shared library — all brands can read,
+// only admin role can create. This is by design: voices are platform
+// assets, not brand-specific content.
+
 export async function GET() {
   const session = await auth();
   if (!session?.user) {
@@ -20,6 +24,11 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Only admin can create voice profiles (they're shared platform assets)
+  if (session.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Only admins can create voice profiles" }, { status: 403 });
   }
 
   let body;

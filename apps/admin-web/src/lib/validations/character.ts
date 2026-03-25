@@ -4,7 +4,6 @@ export const characterCreateSchema = z.object({
   name: z.string().min(1, "名称不能为空").max(50),
   archetype: z.enum(["ANIMAL", "HUMAN", "FANTASY", "ABSTRACT"]).optional().default("ANIMAL"),
   species: z.string().max(30).nullable().optional(),
-  contentTier: z.enum(["children", "adult"]).optional().default("children"),
   ageSetting: z.number().int().positive().nullable().optional(),
   backstory: z.string().max(2000).nullable().optional(),
   relationship: z.string().max(20).nullable().optional(),

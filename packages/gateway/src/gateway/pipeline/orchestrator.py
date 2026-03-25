@@ -96,5 +96,43 @@ class PipelineOrchestrator:
 
         return result
 
+    async def process_touch(self, session: Session, touch_data: dict) -> dict | None:
+        """Send touch event to ai-core, get optional text + audio response.
+
+        Returns:
+            {"text": str|None, "audio_data": bytes|None} or None
+        """
+        if not session.character_id:
+            return None
+
+        payload = {
+            "character_id": session.character_id,
+            "end_user_id": session.end_user_id,
+            "device_id": session.device_id,
+            "session_id": session.session_id,
+            "gesture": touch_data.get("gesture", "none"),
+            "zone": touch_data.get("zone"),
+            "pressure": touch_data.get("pressure"),
+            "duration_ms": touch_data.get("duration_ms"),
+        }
+
+        headers = {}
+        if session.brand_id:
+            headers["X-Brand-Id"] = session.brand_id
+
+        resp = await self.client.post("/pipeline/touch", json=payload, headers=headers)
+        resp.raise_for_status()
+        data = resp.json()
+
+        result = {
+            "text": data.get("text"),
+            "audio_data": None,
+        }
+
+        if data.get("audio_data"):
+            result["audio_data"] = base64.b64decode(data["audio_data"])
+
+        return result
+
     async def close(self):
         await self.client.aclose()

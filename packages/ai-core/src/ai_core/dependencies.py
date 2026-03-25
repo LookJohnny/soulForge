@@ -13,6 +13,7 @@ from ai_core.services.proactive_trigger import ProactiveTriggerService
 from ai_core.services.prompt_builder import PromptBuilder
 from ai_core.services.rag_engine import RagEngine
 from ai_core.services.relationship import RelationshipEngine
+from ai_core.services.touch import TouchEngine
 from ai_core.services.tts_client import TTSClient
 
 logger = structlog.get_logger()
@@ -29,6 +30,7 @@ _memory_service: MemoryService | None = None
 _relationship_engine: RelationshipEngine | None = None
 _personality_drift: PersonalityDriftService | None = None
 _proactive_trigger: ProactiveTriggerService | None = None
+_touch_engine: TouchEngine | None = None
 
 
 def get_cache() -> CacheService:
@@ -125,3 +127,10 @@ def get_proactive_trigger() -> ProactiveTriggerService:
     if _proactive_trigger is None:
         _proactive_trigger = ProactiveTriggerService(get_cache())
     return _proactive_trigger
+
+
+def get_touch_engine() -> TouchEngine:
+    global _touch_engine
+    if _touch_engine is None:
+        _touch_engine = TouchEngine(get_cache())
+    return _touch_engine

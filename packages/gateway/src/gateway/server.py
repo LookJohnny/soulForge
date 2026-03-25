@@ -30,7 +30,7 @@ class WebSocketServer:
         await self.orchestrator.close()
 
     async def _verify_device(self, device_id: str, device_secret: str | None) -> bool:
-        """Verify device credentials against Redis/DB.
+        """Verify device credentials against Redis/DB with fallback.
 
         If device_secret is not provided and we're in development, allow.
         In production, devices must provide valid credentials.
@@ -41,19 +41,17 @@ class WebSocketServer:
         if not device_secret:
             return False
 
-        # Check Redis for device info with secret
-        if self.session_manager.redis:
-            device_info = await self.session_manager.redis.get(f"device:{device_id}")
-            if device_info:
-                info = json.loads(device_info)
-                stored_secret = info.get("device_secret")
-                if stored_secret:
-                    hashed = hashlib.sha256(device_secret.encode()).hexdigest()
-                    return hashed == stored_secret
-                # No secret configured for this device — allow in non-production
-                return settings.environment != "production"
+        # Load device info (Redis → DB fallback)
+        info = await self.session_manager.load_device_info(device_id)
+        if not info:
+            return settings.environment != "production"
 
-        # Device not found in cache — allow in development
+        stored_secret = info.get("device_secret")
+        if stored_secret:
+            hashed = hashlib.sha256(device_secret.encode()).hexdigest()
+            return hashed == stored_secret
+
+        # No secret configured for this device — allow in non-production
         return settings.environment != "production"
 
     async def handle_connection(self, ws: WebSocket):
@@ -148,8 +146,92 @@ class WebSocketServer:
                 )
                 await ws.send_text(await adapter.encode(out))
 
+        elif msg.type == MessageType.TEXT:
+            text = msg.payload if isinstance(msg.payload, str) else str(msg.payload)
+            if text:
+                await self._process_text_and_respond(ws, adapter, session, text)
+
+        elif msg.type == MessageType.TOUCH:
+            await self._handle_touch(ws, adapter, session, msg)
+
         elif msg.type == MessageType.HEARTBEAT:
             pass
+
+    async def _process_text_and_respond(self, ws, adapter, session, text: str):
+        """Process text input through AI pipeline and send response back."""
+        try:
+            thinking = OutboundMessage(
+                type=MessageType.TEXT,
+                payload="",
+                metadata={"state": "start"},
+            )
+            await ws.send_text(await adapter.encode(thinking))
+
+            result = await self.orchestrator.process_text(session, text)
+
+            text_out = OutboundMessage(
+                type=MessageType.TEXT,
+                payload=result["text"],
+                metadata={"state": "sentence"},
+            )
+            await ws.send_text(await adapter.encode(text_out))
+
+            if result.get("audio_data"):
+                audio_out = AudioHandler.make_audio_response(result["audio_data"])
+                raw = await adapter.encode(audio_out)
+                if isinstance(raw, bytes):
+                    await ws.send_bytes(raw)
+
+            done = OutboundMessage(
+                type=MessageType.TEXT,
+                payload="",
+                metadata={"state": "stop"},
+            )
+            await ws.send_text(await adapter.encode(done))
+
+            await self.session_manager.add_to_history(
+                session.session_id, "user", text
+            )
+            await self.session_manager.add_to_history(
+                session.session_id, "assistant", result["text"]
+            )
+
+        except Exception:
+            logger.exception("gateway.text_pipeline_error")
+            error_out = OutboundMessage(
+                type=MessageType.CONTROL,
+                payload={"type": "tts", "state": "stop"},
+            )
+            await ws.send_text(await adapter.encode(error_out))
+
+    async def _handle_touch(self, ws, adapter, session, msg):
+        """Forward touch event to ai-core and optionally trigger a response."""
+        payload = msg.payload if isinstance(msg.payload, dict) else {}
+        try:
+            result = await self.orchestrator.process_touch(session, payload)
+            if result and result.get("text"):
+                # Touch triggered a verbal response
+                text_out = OutboundMessage(
+                    type=MessageType.TEXT,
+                    payload=result["text"],
+                    metadata={"state": "sentence"},
+                )
+                await ws.send_text(await adapter.encode(text_out))
+
+                if result.get("audio_data"):
+                    audio_out = AudioHandler.make_audio_response(result["audio_data"])
+                    raw = await adapter.encode(audio_out)
+                    if isinstance(raw, bytes):
+                        await ws.send_bytes(raw)
+
+                done = OutboundMessage(
+                    type=MessageType.TEXT,
+                    payload="",
+                    metadata={"state": "stop"},
+                )
+                await ws.send_text(await adapter.encode(done))
+        except Exception:
+            logger.exception("gateway.touch_error")
 
     async def _process_and_respond(self, ws, adapter, session, audio_data: bytes):
         """Process audio through AI pipeline and send response back."""

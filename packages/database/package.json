@@ -10,7 +10,8 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "build": "echo 'No build step'",
+    "postinstall": "prisma generate",
+    "build": "prisma generate",
     "lint": "echo 'No lint step'"
   },
   "dependencies": {

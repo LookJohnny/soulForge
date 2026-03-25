@@ -2,10 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import net from "node:net";
 
-const AI_CORE_HOST = "127.0.0.1";
-const AI_CORE_PORT = parseInt(process.env.AI_CORE_PORT || "8100");
+const AI_CORE_URL = new URL(process.env.AI_CORE_URL || "http://127.0.0.1:8100");
+const AI_CORE_HOST = AI_CORE_URL.hostname;
+const AI_CORE_PORT = parseInt(AI_CORE_URL.port || "8100");
+const SERVICE_TOKEN = process.env.SERVICE_TOKEN || "";
 
-function rawPost(path: string, body: object): Promise<{ status: number; data: unknown }> {
+function buildAuthHeaders(brandId: string): string[] {
+  const h: string[] = [];
+  if (SERVICE_TOKEN) h.push(`X-Service-Token: ${SERVICE_TOKEN}`);
+  if (brandId) h.push(`X-Brand-Id: ${brandId}`);
+  return h;
+}
+
+function rawPost(path: string, body: object, brandId: string): Promise<{ status: number; data: unknown }> {
   return new Promise((resolve, reject) => {
     const jsonBody = JSON.stringify(body);
     const socket = new net.Socket();
@@ -13,15 +22,15 @@ function rawPost(path: string, body: object): Promise<{ status: number; data: un
 
     socket.setTimeout(90000);
     socket.connect(AI_CORE_PORT, AI_CORE_HOST, () => {
-      const request = [
+      const headers = [
         `POST ${path} HTTP/1.0`,
         `Host: ${AI_CORE_HOST}:${AI_CORE_PORT}`,
         "Content-Type: application/json",
         `Content-Length: ${Buffer.byteLength(jsonBody)}`,
         "Connection: close",
-        "",
-        jsonBody,
-      ].join("\r\n");
+        ...buildAuthHeaders(brandId),
+      ];
+      const request = [...headers, "", jsonBody].join("\r\n");
       socket.write(request);
     });
 
@@ -41,7 +50,7 @@ function rawPost(path: string, body: object): Promise<{ status: number; data: un
 }
 
 /** Stream SSE from ai-core through to browser */
-function rawStream(path: string, body: object): ReadableStream {
+function rawStream(path: string, body: object, brandId: string): ReadableStream {
   const jsonBody = JSON.stringify(body);
 
   return new ReadableStream({
@@ -52,15 +61,15 @@ function rawStream(path: string, body: object): ReadableStream {
 
       socket.setTimeout(90000);
       socket.connect(AI_CORE_PORT, AI_CORE_HOST, () => {
-        const request = [
+        const headers = [
           `POST ${path} HTTP/1.1`,
           `Host: ${AI_CORE_HOST}:${AI_CORE_PORT}`,
           "Content-Type: application/json",
           `Content-Length: ${Buffer.byteLength(jsonBody)}`,
           "Accept: text/event-stream",
-          "",
-          jsonBody,
-        ].join("\r\n");
+          ...buildAuthHeaders(brandId),
+        ];
+        const request = [...headers, "", jsonBody].join("\r\n");
         socket.write(request);
       });
 
@@ -93,12 +102,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const brandId = session.user.brandId;
   const body = await req.json();
 
   if (body.type === "tts") {
     const payload = { text: body.text, voice: body.voice, speed: body.speed || 1.0 };
     try {
-      const result = await rawPost("/tts/preview", payload);
+      const result = await rawPost("/tts/preview", payload, brandId);
       if (result.status >= 400) return NextResponse.json({ error: "AI Core error" }, { status: result.status });
       return NextResponse.json(result.data);
     } catch (e) {
@@ -115,7 +125,7 @@ export async function POST(req: NextRequest) {
   };
 
   if (body.stream) {
-    const stream = rawStream("/chat/preview/stream", payload);
+    const stream = rawStream("/chat/preview/stream", payload, brandId);
     return new Response(stream, {
       headers: {
         "Content-Type": "text/event-stream",
@@ -126,7 +136,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await rawPost("/chat/preview", payload);
+    const result = await rawPost("/chat/preview", payload, brandId);
     if (result.status >= 400) return NextResponse.json({ error: "AI Core error" }, { status: result.status });
     return NextResponse.json(result.data);
   } catch (e) {

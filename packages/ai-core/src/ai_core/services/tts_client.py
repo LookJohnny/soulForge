@@ -1,10 +1,28 @@
 """TTS Client — thin wrapper with provider fallback (DashScope → Edge TTS)."""
 
+import re
 import structlog
 
 from ai_core.services.tts.registry import create_tts_provider
 
 logger = structlog.get_logger()
+
+# Strip action/stage-direction text before TTS synthesis.
+# LLM often outputs (微微一笑) or （轻轻戳你的脸）or *微微一笑* — these should not be read aloud.
+_ACTION_PATTERNS = [
+    re.compile(r"[（(][^）)]{1,30}[）)]"),   # （动作描写） or (action)
+    re.compile(r"\*[^*]{1,30}\*"),            # *动作描写*
+    re.compile(r"\[emotion:\s*\w+\s*\]", re.IGNORECASE),  # [emotion:xxx] tag
+]
+
+
+def _clean_for_tts(text: str) -> str:
+    """Remove action descriptions and emotion tags before TTS."""
+    for pattern in _ACTION_PATTERNS:
+        text = pattern.sub("", text)
+    # Collapse multiple spaces/newlines
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
 
 
 class TTSClient:
@@ -22,6 +40,7 @@ class TTSClient:
                          pitch_rate: int = 0, speech_rate: int = 0,
                          ssml_pitch: float = 1.0, ssml_rate: float = 1.0,
                          ssml_effect: str = "") -> bytes:
+        text = _clean_for_tts(text)
         try:
             return await self._provider.synthesize(
                 text, voice, speed, pitch_rate, speech_rate,
@@ -40,6 +59,7 @@ class TTSClient:
                                 pitch_rate: int = 0, speech_rate: int = 0,
                                 ssml_pitch: float = 1.0, ssml_rate: float = 1.0,
                                 ssml_effect: str = "") -> bytes:
+        text = _clean_for_tts(text)
         try:
             return await self._provider.synthesize_to_wav(
                 text, voice, speed, pitch_rate, speech_rate,

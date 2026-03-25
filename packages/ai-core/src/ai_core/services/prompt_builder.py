@@ -115,6 +115,7 @@ class PromptBuilder:
     async def build(
         self,
         character_id: str,
+        brand_id: str,
         end_user_id: str | None = None,
         user_input: str = "",
         emotion_state: str | None = None,
@@ -124,6 +125,7 @@ class PromptBuilder:
         proactive_trigger: str | None = None,
         time_context: str | None = None,
         scene: str | None = None,
+        touch_context: str | None = None,
     ) -> dict:
         """Build complete system prompt and voice config.
 
@@ -138,7 +140,7 @@ class PromptBuilder:
         Returns:
             {"system_prompt": str, "voice_id": str|None, "voice_speed": float, ...}
         """
-        base = await self._get_character(character_id)
+        base = await self._get_character(character_id, brand_id)
         if not base:
             raise ValueError(f"Character {character_id} not found")
 
@@ -243,6 +245,7 @@ class PromptBuilder:
             current_emotion=current_emotion,
             current_emotion_description=current_emotion_description,
             user_mood_instruction=user_mood_instruction,
+            touch_context=touch_context or "",
             time_context=time_context or "",
             catchphrases=base.get("catchphrases", []),
             suffix=base.get("suffix", ""),
@@ -302,9 +305,9 @@ class PromptBuilder:
             "ssml_effect": ssml_effect,
         }
 
-    async def _get_character(self, character_id: str) -> dict | None:
+    async def _get_character(self, character_id: str, brand_id: str) -> dict | None:
         # Try cache first
-        cache_key = f"char:{character_id}"
+        cache_key = f"char:{brand_id}:{character_id}"
         cached = await self.cache.get_json(cache_key)
         if cached is not None:
             return cached
@@ -314,12 +317,14 @@ class PromptBuilder:
                 """SELECT id, name, archetype, species, age_setting, backstory, relationship,
                           personality, catchphrases, suffix, topics, forbidden,
                           response_length, voice_id, voice_speed, emotion_config
-                   FROM characters WHERE id = $1""",
+                   FROM characters WHERE id = $1 AND brand_id = $2""",
                 character_id,
+                brand_id,
             )
             if not row:
                 return None
-            result = dict(row)
+            # Convert UUID objects to strings for JSON serialization
+            result = {k: (str(v) if hasattr(v, 'hex') else v) for k, v in dict(row).items()}
             await self.cache.set_json(cache_key, result, ttl=self.CACHE_TTL)
             return result
 
@@ -340,7 +345,7 @@ class PromptBuilder:
             )
             if not row:
                 return None
-            result = dict(row)
+            result = {k: (str(v) if hasattr(v, 'hex') else v) for k, v in dict(row).items()}
             await self.cache.set_json(cache_key, result, ttl=self.CACHE_TTL)
             return result
 
@@ -358,6 +363,6 @@ class PromptBuilder:
             )
             if not row:
                 return None
-            result = dict(row)
+            result = {k: (str(v) if hasattr(v, 'hex') else v) for k, v in dict(row).items()}
             await self.cache.set_json(cache_key, result, ttl=self.CACHE_TTL)
             return result

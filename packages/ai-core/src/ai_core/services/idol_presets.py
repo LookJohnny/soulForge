@@ -86,7 +86,7 @@ IDOL_PRESETS: dict[str, dict] = {
     },
     # ─── 高冷 (Kuudere) ─────────────────
     "kuudere": {
-        "name": "冰堂�的",
+        "name": "冰堂静",
         "archetype": "HUMAN",
         "species": "冷面少女",
         "backstory": "表面上冷冰冰的，不太爱说话，表情也很少。"
@@ -120,7 +120,7 @@ IDOL_PRESETS: dict[str, dict] = {
     },
     # ─── 少年系 (Shounen) ────────────────
     "shounen": {
-        "name": "�的月辰",
+        "name": "晓月辰",
         "archetype": "HUMAN",
         "species": "阳光少年",
         "backstory": "爱笑的男孩子，性格直率热血。"

@@ -34,31 +34,26 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-cosmic flex items-center justify-center px-4 relative overflow-hidden">
-      {/* Floating gradient orbs — Apple-style */}
-      <div className="orb w-[500px] h-[500px] bg-amber-600/30 top-[-15%] left-[20%] animate-blob" />
-      <div className="orb w-[400px] h-[400px] bg-amber-800/20 bottom-[-10%] right-[15%] animate-blob" style={{ animationDelay: "-4s" }} />
-      <div className="orb w-[300px] h-[300px] bg-orange-900/15 top-[40%] right-[5%] animate-blob" style={{ animationDelay: "-8s" }} />
-
-      <div className="w-full max-w-[380px] relative z-10">
+    <div className="min-h-screen bg-[#f5f5f7] flex items-center justify-center px-4">
+      <div className="w-full max-w-[380px]">
         {/* Logo */}
-        <div className="flex flex-col items-center mb-12 animate-fade-in">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-700 flex items-center justify-center mb-5 shadow-xl shadow-amber-900/25">
+        <div className="flex flex-col items-center mb-10 animate-fade-in">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-5 shadow-lg">
             <Flame className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-[28px] font-bold tracking-tight text-shimmer">
+          <h1 className="text-[28px] font-bold tracking-tight text-gray-900">
             SoulForge
           </h1>
-          <p className="text-[13px] text-white/25 mt-1">
+          <p className="text-[14px] text-gray-400 mt-1">
             为角色注入灵魂的设计平台
           </p>
         </div>
 
         {/* Card */}
-        <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-7 backdrop-blur-2xl animate-scale-in shadow-2xl shadow-black/20">
+        <div className="rounded-2xl bg-white border border-gray-200/60 p-7 shadow-sm animate-scale-in">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-[12px] text-white/40 mb-1.5 ml-0.5 font-medium">
+              <label className="block text-[13px] text-gray-500 mb-1.5 ml-0.5 font-medium">
                 邮箱
               </label>
               <input
@@ -72,7 +67,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-[12px] text-white/40 mb-1.5 ml-0.5 font-medium">
+              <label className="block text-[13px] text-gray-500 mb-1.5 ml-0.5 font-medium">
                 密码
               </label>
               <input
@@ -86,7 +81,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <p className="text-[13px] text-red-400/80 text-center py-1">{error}</p>
+              <p className="text-[13px] text-red-500 text-center py-1">{error}</p>
             )}
 
             <button

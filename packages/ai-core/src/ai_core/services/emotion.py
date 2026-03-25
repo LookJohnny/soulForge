@@ -3,11 +3,22 @@
 Character emotion: detected from LLM output, drives TTS + next turn prompt.
 User emotion: detected from user input, lets character "sense" user's mood.
 Both persist per session in Redis.
+
+PAD integration: internally uses continuous PAD (Pleasure-Arousal-Dominance)
+space for smooth transitions, while exposing discrete emotion labels for
+backward compatibility with prompts, TTS, and API responses.
 """
 
+import re
 import structlog
 
 from ai_core.services.cache import CacheService
+from ai_core.services.pad_model import (
+    PADEngine, PADState,
+    pad_to_emotion, emotion_to_pad,
+    pad_to_tts_offsets, pad_to_prompt_description,
+    TOUCH_PAD_IMPULSE,
+)
 
 logger = structlog.get_logger()
 
@@ -87,47 +98,101 @@ EMOTION_TTS_OFFSETS: dict[str, dict[str, float]] = {
     "calm": {"pitch_offset": 0.0, "rate_offset": 0.0},
 }
 
-# Keywords for detecting character emotion from LLM output
-_EMOTION_KEYWORDS: dict[str, list[str]] = {
+# Weighted keywords for detecting character emotion from LLM output.
+# Format: (keyword, weight). Higher weight = stronger signal.
+# Keywords are exclusive to one emotion to eliminate cross-contamination.
+_EMOTION_KEYWORDS_WEIGHTED: dict[str, list[tuple[str, float]]] = {
     "happy": [
-        "开心", "太好了", "哈哈", "真棒", "耶", "好开心", "高兴", "快乐",
-        "嘻嘻", "太棒了", "好耶", "超棒", "真好", "好极了", "万岁",
+        ("好开心", 3), ("太棒了", 3), ("好耶", 3), ("超开心", 3), ("万岁", 2),
+        ("开心", 2), ("高兴", 2), ("快乐", 2), ("真棒", 2), ("好极了", 2),
+        ("太好了", 2), ("哈哈", 1.5), ("耶", 1.5), ("超棒", 1.5), ("真好", 1),
     ],
     "sad": [
-        "难过", "伤心", "呜呜", "不开心", "好可惜", "唉", "可怜", "心疼",
-        "好难过", "失落", "沮丧", "叹气", "呜",
+        ("好难过", 3), ("好伤心", 3), ("呜呜呜", 3),
+        ("难过", 2), ("伤心", 2), ("不开心", 2), ("失落", 2), ("沮丧", 2), ("哭", 2),
+        ("好可惜", 1.5), ("叹气", 1.5), ("呜呜", 1.5), ("唉", 1.5), ("心疼", 1.5), ("呜", 1),
     ],
     "shy": [
-        "害羞", "不好意思", "嘿嘿", "人家", "讨厌啦", "哎呀", "羞",
-        "脸红", "扭扭捏捏", "捂脸",
+        ("好害羞", 3), ("脸红了", 3), ("扭扭捏捏", 3),
+        ("害羞", 2), ("不好意思", 2), ("捂脸", 2),
+        ("人家", 1.5), ("讨厌啦", 1.5), ("哎呀", 1),
     ],
     "angry": [
-        "生气", "哼", "讨厌", "不理你", "气死", "好气", "烦死了",
-        "可恶", "哼哼",
+        ("气死了", 3), ("烦死了", 3), ("可恶", 3),
+        ("生气", 2), ("不理你", 2), ("好气", 2),
+        ("哼", 1), ("讨厌", 1),
     ],
     "playful": [
-        "嘿嘿", "猜猜", "逗你", "骗你的", "才不", "哼哼", "捣蛋",
-        "嘻嘻", "偷笑", "坏笑", "调皮", "才怪",
+        ("逗你玩", 3), ("骗你的", 3), ("才怪", 3),
+        ("猜猜看", 2), ("调皮", 2), ("捣蛋", 2), ("偷笑", 2), ("坏笑", 2),
+        ("嘻嘻", 1.5), ("嘿嘿", 1.5), ("猜猜", 1.5), ("才不", 1),
     ],
     "curious": [
-        "为什么", "怎么", "真的吗", "好奇", "想知道", "是什么", "讲讲",
-        "然后呢", "后来呢", "什么意思", "详细说说",
+        ("好好奇", 3), ("想知道", 3), ("详细说说", 3),
+        ("好奇", 2), ("真的吗", 2), ("然后呢", 2), ("后来呢", 2),
+        ("是什么", 1.5), ("什么意思", 1.5), ("讲讲", 1),
     ],
     "worried": [
-        "担心", "小心", "注意", "别", "没事吧", "还好吗", "不要紧",
-        "会不会", "万一", "保重", "当心",
+        ("好担心", 3), ("没事吧", 3), ("还好吗", 3), ("别哭", 3), ("别难过", 3),
+        ("担心", 2), ("不要紧", 2), ("保重", 2), ("当心", 2),
+        ("小心", 1.5), ("注意", 1),
     ],
     "calm": [],
 }
 
+# Negation prefixes that flip the emotion of the following keyword.
+# e.g. "别难过" → the speaker is comforting, not sad → maps to "worried"
+# e.g. "不开心" is already a keyword for "sad" so it's handled directly
+_NEGATION_PREFIXES = ("别", "不要", "不用", "不必", "别再", "不会")
+
+# When a negative context is detected around a keyword, remap to this emotion
+_NEGATION_REMAP: dict[str, str] = {
+    "sad": "worried",      # "别难过" → character is comforting (worried about user)
+    "angry": "worried",    # "别生气" → character is calming
+    "scared": "worried",   # "别害怕" → character is reassuring
+}
+
+# Legacy flat keyword list (for backward compat with existing tests)
+_EMOTION_KEYWORDS: dict[str, list[str]] = {
+    emotion: [kw for kw, _ in pairs]
+    for emotion, pairs in _EMOTION_KEYWORDS_WEIGHTED.items()
+}
+
 _EMOTION_TTL = 1800  # 30 min
+
+# Regex to extract inline emotion tag from LLM output: [emotion:happy]
+_INLINE_EMOTION_RE = re.compile(r"\[emotion:\s*(happy|sad|shy|angry|playful|curious|worried|calm)\s*\]", re.IGNORECASE)
+
+
+def extract_inline_emotion(text: str) -> tuple[str, str | None]:
+    """Extract [emotion:xxx] tag from LLM output.
+
+    Returns:
+        (cleaned_text, emotion_or_none)
+        cleaned_text has the tag stripped; emotion is the detected label or None.
+    """
+    match = _INLINE_EMOTION_RE.search(text)
+    if match:
+        emotion = match.group(1).lower()
+        cleaned = text[:match.start()].rstrip() + text[match.end():]
+        return cleaned.strip(), emotion
+    return text, None
 
 
 class EmotionEngine:
-    """Track and manage both character and user emotion state."""
+    """Track and manage both character and user emotion state.
+
+    Supports two modes:
+    - Legacy: discrete emotion labels (get_emotion/set_emotion/detect_emotion)
+    - PAD:    continuous 3D space with smooth transitions (update_with_pad)
+
+    PAD mode is opt-in per call. All legacy methods remain unchanged,
+    so existing code works without modification.
+    """
 
     def __init__(self, cache: CacheService):
         self.cache = cache
+        self.pad = PADEngine(cache)
 
     # ── Character emotion (from LLM output) ──
 
@@ -144,15 +209,49 @@ class EmotionEngine:
             return
         await self.cache.set(f"emotion:{session_id}", emotion, ttl=_EMOTION_TTL)
 
-    def detect_emotion(self, text: str, previous: str = DEFAULT_EMOTION) -> str:
-        """Detect character emotion from LLM response."""
-        scores: dict[str, int] = {}
-        for emotion, keywords in _EMOTION_KEYWORDS.items():
-            score = sum(1 for kw in keywords if kw in text)
-            if score > 0:
-                scores[emotion] = score
+    def detect_emotion(
+        self,
+        text: str,
+        previous: str = DEFAULT_EMOTION,
+        user_mood: str | None = None,
+    ) -> str:
+        """Detect character emotion from LLM response.
+
+        Improvements over naive keyword matching:
+        1. Weighted keywords — strong signals (好开心) score 3x vs weak ones (耶) 1x
+        2. Negation awareness — "别难过" maps to worried (comforting), not sad
+        3. User mood empathy — if user is sad and no strong signal detected,
+           the character should lean toward worried (empathy)
+        4. No keyword overlap — each keyword belongs to exactly one emotion
+        """
+        scores: dict[str, float] = {}
+
+        for emotion, kw_pairs in _EMOTION_KEYWORDS_WEIGHTED.items():
+            for kw, weight in kw_pairs:
+                pos = text.find(kw)
+                if pos == -1:
+                    continue
+
+                # Check for negation prefix before the keyword
+                actual_emotion = emotion
+                prefix_region = text[max(0, pos - 4):pos]
+                if any(prefix_region.endswith(neg) for neg in _NEGATION_PREFIXES):
+                    actual_emotion = _NEGATION_REMAP.get(emotion, emotion)
+
+                scores[actual_emotion] = scores.get(actual_emotion, 0) + weight
+
         if not scores:
+            # No keywords matched — use user mood empathy as fallback
+            if user_mood and user_mood != "neutral":
+                empathy_map = {
+                    "happy": "happy", "excited": "happy",
+                    "sad": "worried", "lonely": "worried",
+                    "angry": "worried", "worried": "worried",
+                    "tired": "calm",
+                }
+                return empathy_map.get(user_mood, previous)
             return previous
+
         return max(scores, key=scores.get)
 
     # ── User mood (from user input) ──
@@ -183,6 +282,33 @@ class EmotionEngine:
         """Get instruction for how character should respond to user's mood."""
         return USER_MOOD_RESPONSES.get(mood, "")
 
+    # ── Touch-based emotion influence ──
+
+    def apply_touch_influence(self, current_emotion: str, touch_emotion_hint: str) -> str:
+        """Blend current emotion with touch-suggested emotion.
+
+        Touch is a strong signal — if current emotion is calm/neutral,
+        touch hint takes priority. Otherwise, certain touch emotions
+        can override (e.g., hug when character is playful → worried).
+        """
+        if not touch_emotion_hint or touch_emotion_hint not in EMOTIONS:
+            return current_emotion
+
+        # If current emotion is neutral, adopt touch hint
+        if current_emotion in ("calm",):
+            return touch_emotion_hint
+
+        # Touch "worried" (from hug/squeeze) overrides light emotions
+        if touch_emotion_hint == "worried" and current_emotion in ("playful", "curious", "happy"):
+            return "worried"
+
+        # Touch "playful" (from poke/shake) overrides calm/worried
+        if touch_emotion_hint == "playful" and current_emotion in ("calm", "worried"):
+            return "playful"
+
+        # Otherwise keep current emotion
+        return current_emotion
+
     # ── Prompt + TTS helpers ──
 
     def get_prompt_text(self, emotion: str) -> str:
@@ -198,3 +324,100 @@ class EmotionEngine:
         pitch = max(0.5, min(2.0, ssml_pitch + offsets["pitch_offset"]))
         rate = max(0.5, min(2.0, ssml_rate + offsets["rate_offset"]))
         return pitch, rate
+
+    # ── LLM-assisted emotion detection ──
+
+    async def detect_emotion_llm(
+        self,
+        ai_text: str,
+        user_text: str,
+        previous: str = DEFAULT_EMOTION,
+    ) -> str:
+        """Use LLM to classify emotion — more accurate than keyword matching.
+
+        Sends a lightweight classification prompt to the LLM.
+        Falls back to keyword detection if LLM call fails.
+        """
+        from ai_core.dependencies import get_llm_client
+
+        prompt = (
+            "你是一个情绪分析器。根据对话判断AI角色当前的情绪状态。\n"
+            "只能返回以下8个情绪之一，不要返回其他内容：\n"
+            "happy, sad, shy, angry, playful, curious, worried, calm\n\n"
+            f"用户说：{user_text}\n"
+            f"角色回复：{ai_text}\n\n"
+            "角色当前的情绪是："
+        )
+
+        try:
+            llm = await get_llm_client()
+            result = await llm.chat(
+                system_prompt="你是情绪分类器，只输出一个英文情绪词。",
+                user_input=prompt,
+            )
+            # Extract the emotion label from LLM response
+            result = result.strip().lower().rstrip("。.，, ")
+            # Handle cases like "happy。" or "角色当前的情绪是happy"
+            for emotion in EMOTIONS:
+                if emotion in result:
+                    return emotion
+            # LLM returned something unexpected, fall back
+            logger.warning("emotion_llm.unexpected", result=result[:50])
+        except Exception as e:
+            logger.warning("emotion_llm.failed", error=str(e))
+
+        # Fallback to keyword detection
+        return self.detect_emotion(ai_text, previous=previous, user_mood=None)
+
+    # ── PAD-based methods (smooth continuous transitions) ──
+
+    async def update_with_pad(
+        self,
+        session_id: str,
+        text_emotion: str | None = None,
+        touch_gesture: str | None = None,
+        user_mood: str | None = None,
+    ) -> tuple[PADState, str]:
+        """Update emotion via PAD model with multi-modal fusion.
+
+        This is the recommended method for new code. It:
+        1. Loads current PAD state from cache
+        2. Fuses text emotion + touch gesture + user mood in PAD space
+        3. Smoothly transitions (no discrete jumps)
+        4. Persists both PAD state and discrete emotion label
+
+        Args:
+            session_id: Session ID.
+            text_emotion: Discrete emotion from LLM text detection.
+            touch_gesture: Touch gesture name (e.g. "hug").
+            user_mood: Detected user mood (e.g. "sad").
+
+        Returns:
+            (pad_state, discrete_emotion_label)
+        """
+        pad_state, discrete = await self.pad.update(
+            session_id=session_id,
+            text_emotion=text_emotion,
+            touch_gesture=touch_gesture,
+            user_mood=user_mood,
+        )
+        # Keep discrete emotion cache in sync for backward compatibility
+        await self.set_emotion(session_id, discrete)
+        return pad_state, discrete
+
+    async def get_pad_state(self, session_id: str) -> PADState:
+        """Get current PAD state for a session."""
+        return await self.pad.get_pad(session_id)
+
+    def apply_tts_offsets_pad(
+        self, pad_state: PADState, ssml_pitch: float, ssml_rate: float
+    ) -> tuple[float, float]:
+        """Apply TTS offsets computed from PAD state (more nuanced than discrete)."""
+        offsets = pad_to_tts_offsets(pad_state)
+        pitch = max(0.5, min(2.0, ssml_pitch + offsets["pitch_offset"]))
+        rate = max(0.5, min(2.0, ssml_rate + offsets["rate_offset"]))
+        return pitch, rate
+
+    def get_prompt_text_pad(self, pad_state: PADState) -> str:
+        """Generate emotion description from PAD state (more nuanced than discrete)."""
+        return pad_to_prompt_description(pad_state)

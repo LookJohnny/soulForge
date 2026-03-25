@@ -3,10 +3,12 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import net from "node:net";
 
-const AI_CORE_HOST = "127.0.0.1";
-const AI_CORE_PORT = parseInt(process.env.AI_CORE_PORT || "8100");
+const AI_CORE_URL = new URL(process.env.AI_CORE_URL || "http://127.0.0.1:8100");
+const AI_CORE_HOST = AI_CORE_URL.hostname;
+const AI_CORE_PORT = parseInt(AI_CORE_URL.port || "8100");
+const SERVICE_TOKEN = process.env.SERVICE_TOKEN || "";
 
-function rawPost(path: string, body: object): Promise<{ status: number; data: unknown }> {
+function rawPost(path: string, body: object, brandId: string): Promise<{ status: number; data: unknown }> {
   return new Promise((resolve, reject) => {
     const jsonBody = JSON.stringify(body);
     const socket = new net.Socket();
@@ -14,15 +16,16 @@ function rawPost(path: string, body: object): Promise<{ status: number; data: un
 
     socket.setTimeout(90000);
     socket.connect(AI_CORE_PORT, AI_CORE_HOST, () => {
-      const request = [
+      const headers = [
         `POST ${path} HTTP/1.0`,
         `Host: ${AI_CORE_HOST}:${AI_CORE_PORT}`,
         "Content-Type: application/json",
         `Content-Length: ${Buffer.byteLength(jsonBody)}`,
         "Connection: close",
-        "",
-        jsonBody,
-      ].join("\r\n");
+      ];
+      if (SERVICE_TOKEN) headers.push(`X-Service-Token: ${SERVICE_TOKEN}`);
+      if (brandId) headers.push(`X-Brand-Id: ${brandId}`);
+      const request = [...headers, "", jsonBody].join("\r\n");
       socket.write(request);
     });
 
@@ -60,6 +63,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const brandId = session.user.brandId;
   const body = await req.json();
   const action = body.action;
 
@@ -67,8 +71,7 @@ export async function POST(req: NextRequest) {
     try {
       const result = await rawPost("/soul-packs/export", {
         character_id: body.characterId,
-        brand_id: session.user.brandId,
-      });
+      }, brandId);
       if (result.status >= 400) {
         return NextResponse.json({ error: "Export failed" }, { status: result.status });
       }
@@ -82,9 +85,8 @@ export async function POST(req: NextRequest) {
   if (action === "import") {
     try {
       const result = await rawPost("/soul-packs/import", {
-        brand_id: session.user.brandId,
         soulpack_b64: body.soulpackB64,
-      });
+      }, brandId);
       if (result.status >= 400) {
         return NextResponse.json({ error: "Import failed" }, { status: result.status });
       }

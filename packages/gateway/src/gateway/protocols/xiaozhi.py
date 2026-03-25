@@ -96,6 +96,18 @@ class XiaozhiAdapter(ProtocolAdapter):
                 device_id="",
                 payload={"action": "iot", "data": msg.get("descriptors", {})},
             )
+        elif msg_type == "touch":
+            return InboundMessage(
+                type=MessageType.TOUCH,
+                device_id="",
+                payload={
+                    "gesture": msg.get("gesture", "none"),
+                    "zone": msg.get("zone"),
+                    "pressure": msg.get("pressure"),
+                    "duration_ms": msg.get("duration_ms"),
+                },
+                metadata=msg,
+            )
         else:
             return InboundMessage(
                 type=MessageType.TEXT,

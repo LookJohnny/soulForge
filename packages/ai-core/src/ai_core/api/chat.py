@@ -23,6 +23,13 @@ logger = structlog.get_logger()
 content_filter = ContentFilter()
 
 
+def _get_brand_id(request: Request) -> str:
+    auth = getattr(request.state, "auth", None)
+    if not auth or not auth.brand_id:
+        raise HTTPException(status_code=403, detail="No brand context in auth token")
+    return auth.brand_id
+
+
 class ChatPreviewRequest(BaseModel):
     character_id: str
     text: str = Field(max_length=2000)
@@ -45,6 +52,7 @@ class ChatPreviewResponse(BaseModel):
 async def chat_preview(req: ChatPreviewRequest, request: Request):
     """Chat with a character (supports multi-turn history + emotion tracking)."""
     start = time.monotonic()
+    brand_id = _get_brand_id(request)
 
     # Content safety check on input
     is_safe, reason = content_filter.check_input(req.text)
@@ -52,8 +60,11 @@ async def chat_preview(req: ChatPreviewRequest, request: Request):
         logger.warning("content_filter.blocked_input", reason=reason, endpoint="chat_preview")
         raise HTTPException(status_code=400, detail=f"输入内容被拦截: {reason}")
 
-    # Retrieve emotion state if session_id provided
+    # Detect user mood from input text
     emotion_engine = get_emotion_engine()
+    user_mood = emotion_engine.detect_user_mood(req.text)
+
+    # Retrieve emotion state if session_id provided
     emotion_state = None
     if req.session_id:
         emotion_state = await emotion_engine.get_emotion(req.session_id)
@@ -62,8 +73,10 @@ async def chat_preview(req: ChatPreviewRequest, request: Request):
     try:
         prompt_result = await builder.build(
             character_id=req.character_id,
+            brand_id=brand_id,
             user_input=req.text,
             emotion_state=emotion_state,
+            user_mood=user_mood,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -78,14 +91,24 @@ async def chat_preview(req: ChatPreviewRequest, request: Request):
         history=history,
     )
 
+    # Extract inline emotion tag from LLM output (zero extra latency)
+    from ai_core.services.emotion import extract_inline_emotion
+    ai_text, inline_emotion = extract_inline_emotion(ai_text)
+
     # Content safety filter on output (PII + blocked content)
     ai_text = content_filter.filter_output(ai_text)
 
-    # Detect and store emotion
+    # Determine emotion: inline tag > keyword detection > user mood empathy
     new_emotion = None
+    text_emotion = inline_emotion or emotion_engine.detect_emotion(ai_text, previous=emotion_state or "calm", user_mood=user_mood)
     if req.session_id:
-        new_emotion = emotion_engine.detect_emotion(ai_text, previous=emotion_state or "calm")
-        await emotion_engine.set_emotion(req.session_id, new_emotion)
+        pad_state, new_emotion = await emotion_engine.update_with_pad(
+            session_id=req.session_id,
+            text_emotion=text_emotion,
+            user_mood=user_mood,
+        )
+    else:
+        new_emotion = text_emotion
 
     # TTS with emotion-adjusted parameters
     audio_b64 = None
@@ -126,6 +149,7 @@ async def chat_preview(req: ChatPreviewRequest, request: Request):
 @limiter.limit("30/minute")
 async def chat_preview_stream(req: ChatPreviewRequest, request: Request):
     """Streaming chat — returns SSE events with text chunks, sentence-level audio, and emotion."""
+    brand_id = _get_brand_id(request)
 
     # Content safety check on input
     is_safe, reason = content_filter.check_input(req.text)
@@ -133,8 +157,9 @@ async def chat_preview_stream(req: ChatPreviewRequest, request: Request):
         logger.warning("content_filter.blocked_input", reason=reason, endpoint="chat_preview_stream")
         raise HTTPException(status_code=400, detail=f"输入内容被拦截: {reason}")
 
-    # Retrieve emotion state
+    # Detect user mood and retrieve emotion state
     emotion_engine = get_emotion_engine()
+    user_mood = emotion_engine.detect_user_mood(req.text)
     emotion_state = None
     if req.session_id:
         emotion_state = await emotion_engine.get_emotion(req.session_id)
@@ -143,8 +168,10 @@ async def chat_preview_stream(req: ChatPreviewRequest, request: Request):
     try:
         prompt_result = await builder.build(
             character_id=req.character_id,
+            brand_id=brand_id,
             user_input=req.text,
             emotion_state=emotion_state,
+            user_mood=user_mood,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -170,12 +197,21 @@ async def chat_preview_stream(req: ChatPreviewRequest, request: Request):
             yield f"data: {json.dumps({'type': 'text_replace', 'text': filtered_text}, ensure_ascii=False)}\n\n"
             full_text = filtered_text
 
-        # Detect emotion and send as event
+        # Extract inline emotion tag + fallback to keyword detection
+        from ai_core.services.emotion import extract_inline_emotion
+        full_text, inline_emotion = extract_inline_emotion(full_text)
+
         new_emotion = None
+        text_emotion = inline_emotion or emotion_engine.detect_emotion(full_text, previous=emotion_state or "calm", user_mood=user_mood)
         if req.session_id:
-            new_emotion = emotion_engine.detect_emotion(full_text, previous=emotion_state or "calm")
-            await emotion_engine.set_emotion(req.session_id, new_emotion)
-            yield f"data: {json.dumps({'type': 'emotion', 'emotion': new_emotion}, ensure_ascii=False)}\n\n"
+            _, new_emotion = await emotion_engine.update_with_pad(
+                session_id=req.session_id,
+                text_emotion=text_emotion,
+                user_mood=user_mood,
+            )
+        else:
+            new_emotion = text_emotion
+        yield f"data: {json.dumps({'type': 'emotion', 'emotion': new_emotion}, ensure_ascii=False)}\n\n"
 
         # TTS: split into sentences and synthesize each for progressive audio
         if req.with_audio and full_text:

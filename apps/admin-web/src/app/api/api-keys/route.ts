@@ -4,8 +4,8 @@ import { prisma } from "@/lib/prisma";
 import crypto from "node:crypto";
 
 function generateApiKey(): { raw: string; prefix: string; hash: string } {
-  const raw = `sf_live_${crypto.randomBytes(32).toString("hex").slice(0, 32)}`;
-  const prefix = raw.slice(0, 12);
+  const raw = `sk-${crypto.randomBytes(32).toString("hex").slice(0, 37)}`;
+  const prefix = raw.slice(0, 10);
   const hash = crypto.createHash("sha256").update(raw).digest("hex");
   return { raw, prefix, hash };
 }

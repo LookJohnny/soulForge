@@ -54,9 +54,21 @@ export async function PATCH(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  const { voiceId, ...rest } = body;
+  // Strip undefined values, convert null to Prisma's set-null format
+  const data: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(rest)) {
+    if (value !== undefined) {
+      data[key] = value;
+    }
+  }
+  if (voiceId !== undefined) {
+    data.voice = voiceId ? { connect: { id: voiceId } } : { disconnect: true };
+  }
   const character = await prisma.character.update({
     where: { id },
-    data: body,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: data as any,
   });
 
   return NextResponse.json(character);

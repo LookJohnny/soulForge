@@ -53,7 +53,7 @@ class GenericWSAdapter(ProtocolAdapter):
 
     async def decode(self, raw_data: str | bytes) -> InboundMessage:
         if isinstance(raw_data, bytes):
-            return InboundMessage(type=MessageType.AUDIO, payload=raw_data)
+            return InboundMessage(type=MessageType.AUDIO, device_id="", payload=raw_data)
 
         msg = json.loads(raw_data)
         action = msg.get("action", "")
@@ -61,22 +61,36 @@ class GenericWSAdapter(ProtocolAdapter):
         if action == "chat":
             return InboundMessage(
                 type=MessageType.TEXT,
+                device_id="",
                 payload=msg.get("text", ""),
             )
         elif action == "listen":
             return InboundMessage(
                 type=MessageType.CONTROL,
+                device_id="",
                 payload={"action": "listen", "state": msg.get("state", "")},
             )
         elif action == "abort":
             return InboundMessage(
                 type=MessageType.CONTROL,
+                device_id="",
                 payload={"action": "abort"},
             )
+        elif action == "touch":
+            return InboundMessage(
+                type=MessageType.TOUCH,
+                device_id="",
+                payload={
+                    "gesture": msg.get("gesture", "none"),
+                    "zone": msg.get("zone"),
+                    "pressure": msg.get("pressure"),
+                    "duration_ms": msg.get("duration_ms"),
+                },
+            )
         elif action == "ping":
-            return InboundMessage(type=MessageType.HEARTBEAT, payload=None)
+            return InboundMessage(type=MessageType.HEARTBEAT, device_id="", payload=None)
         else:
-            return InboundMessage(type=MessageType.TEXT, payload=str(raw_data))
+            return InboundMessage(type=MessageType.TEXT, device_id="", payload=str(raw_data))
 
     async def encode(self, message: OutboundMessage) -> str | bytes:
         if message.type == MessageType.AUDIO:

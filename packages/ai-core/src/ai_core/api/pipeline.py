@@ -16,9 +16,10 @@ from ai_core.dependencies import (
     get_asr_client, get_llm_client, get_prompt_builder, get_tts_client,
     get_emotion_engine, get_memory_service, get_cache,
     get_relationship_engine, get_personality_drift, get_proactive_trigger,
+    get_touch_engine,
 )
 from ai_core.middleware.rate_limit import limiter
-from ai_core.models.schemas import ChatRequest, ChatResponse
+from ai_core.models.schemas import ChatRequest, ChatResponse, PADStateSchema, TouchEventRequest, TouchEventResponse
 from ai_core.services.content_filter import ContentFilter
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
@@ -28,10 +29,18 @@ content_filter = ContentFilter()
 MAX_AUDIO_BYTES = 10 * 1024 * 1024
 
 
+def _get_brand_id(request: Request) -> str:
+    auth = getattr(request.state, "auth", None)
+    if not auth or not auth.brand_id:
+        raise HTTPException(status_code=403, detail="No brand context in auth token")
+    return auth.brand_id
+
+
 @router.post("/chat", response_model=ChatResponse)
 @limiter.limit("30/minute")
 async def chat(req: ChatRequest, request: Request):
     start = time.monotonic()
+    brand_id = _get_brand_id(request)
 
     # 1. Determine user text input
     user_text = req.text_input
@@ -51,11 +60,31 @@ async def chat(req: ChatRequest, request: Request):
         logger.warning("content_filter.blocked_input", reason=reason)
         raise HTTPException(status_code=400, detail=f"输入内容被拦截: {reason}")
 
-    # 3. Retrieve emotion state + detect user mood
+    # 3. Detect user mood from text
     emotion_engine = get_emotion_engine()
-    emotion_state = await emotion_engine.get_emotion(req.session_id)
     user_mood = emotion_engine.detect_user_mood(user_text)
     await emotion_engine.set_user_mood(req.session_id, user_mood)
+
+    # 3b. Check for recent touch context
+    touch_engine = get_touch_engine()
+    touch_ctx = await touch_engine.get_touch_context(req.session_id)
+    touch_prompt = ""
+    touch_gesture = None
+    touch_affinity_bonus = 0
+    if touch_ctx:
+        touch_prompt = touch_ctx.get("prompt", "")
+        touch_gesture = touch_ctx.get("gesture")
+        touch_affinity_bonus = touch_ctx.get("affinity_bonus", 0)
+        # Touch influences user mood detection
+        touch_mood = touch_ctx.get("mood_hint")
+        if touch_mood and touch_mood != "neutral" and user_mood == "neutral":
+            user_mood = touch_mood
+            await emotion_engine.set_user_mood(req.session_id, user_mood)
+        # Clear touch context after consumption
+        await touch_engine.clear_touch_context(req.session_id)
+
+    # 3c. Get current emotion state (discrete, for prompt builder compatibility)
+    emotion_state = await emotion_engine.get_emotion(req.session_id)
 
     # 4. Retrieve memories
     memory_service = await get_memory_service()
@@ -93,6 +122,7 @@ async def chat(req: ChatRequest, request: Request):
     try:
         prompt_result = await builder.build(
             character_id=req.character_id,
+            brand_id=brand_id,
             end_user_id=req.end_user_id,
             user_input=user_text,
             emotion_state=emotion_state,
@@ -101,6 +131,7 @@ async def chat(req: ChatRequest, request: Request):
             relationship_stage=rel_state["stage"],
             proactive_trigger=proactive_line,
             time_context=time_context,
+            touch_context=touch_prompt,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -112,19 +143,26 @@ async def chat(req: ChatRequest, request: Request):
         user_input=user_text,
     )
 
-    # 9. Content safety filter on output
+    # 9. Extract inline emotion tag + content safety filter
+    from ai_core.services.emotion import extract_inline_emotion
+    ai_text, inline_emotion = extract_inline_emotion(ai_text)
     ai_text = content_filter.filter_output(ai_text)
 
-    # 10. Detect emotion and store
-    new_emotion = emotion_engine.detect_emotion(ai_text, previous=emotion_state)
-    await emotion_engine.set_emotion(req.session_id, new_emotion)
+    # 10. Determine emotion: inline tag > keyword+empathy, then fuse via PAD
+    text_emotion = inline_emotion or emotion_engine.detect_emotion(ai_text, previous=emotion_state, user_mood=user_mood)
+    pad_state, new_emotion = await emotion_engine.update_with_pad(
+        session_id=req.session_id,
+        text_emotion=text_emotion,
+        touch_gesture=touch_gesture,
+        user_mood=user_mood,
+    )
 
-    # 11. TTS with emotion-adjusted parameters
+    # 11. TTS with PAD-computed parameters (more nuanced than discrete lookup)
     audio_b64 = None
     if prompt_result.get("voice_id"):
         ssml_pitch = prompt_result.get("ssml_pitch", 1.0)
         ssml_rate = prompt_result.get("ssml_rate", 1.0)
-        ssml_pitch, ssml_rate = emotion_engine.apply_tts_offsets(new_emotion, ssml_pitch, ssml_rate)
+        ssml_pitch, ssml_rate = emotion_engine.apply_tts_offsets_pad(pad_state, ssml_pitch, ssml_rate)
 
         tts = await get_tts_client()
         audio_bytes = await tts.synthesize(
@@ -156,6 +194,7 @@ async def chat(req: ChatRequest, request: Request):
                 character_id=req.character_id,
                 session_id=req.session_id,
                 new_emotion=new_emotion,
+                touch_bonus=touch_affinity_bonus,
             )
         )
 
@@ -172,6 +211,7 @@ async def chat(req: ChatRequest, request: Request):
         text=ai_text,
         audio_data=audio_b64,
         emotion=new_emotion,
+        pad=PADStateSchema(**pad_state.to_dict()),
         relationship_stage=rel_state["stage"],
         affinity=rel_state.get("affinity", 0),
         latency_ms=latency,
@@ -183,6 +223,7 @@ async def _post_turn_processing(
     character_id: str,
     session_id: str,
     new_emotion: str,
+    touch_bonus: int = 0,
 ) -> None:
     """Async post-turn: relationship scoring + personality drift."""
     try:
@@ -196,6 +237,7 @@ async def _post_turn_processing(
             end_user_id=end_user_id,
             character_id=character_id,
             memory_types=recent_types,
+            touch_bonus=touch_bonus,
         )
 
         # Personality drift
@@ -215,3 +257,95 @@ async def _post_turn_processing(
         )
     except Exception:
         logger.exception("post_turn_processing.error")
+
+
+@router.post("/touch", response_model=TouchEventResponse)
+@limiter.limit("60/minute")
+async def touch_event(req: TouchEventRequest, request: Request):
+    """Process a touch sensor event. Stores touch context for next chat turn,
+    and optionally returns an immediate short verbal reaction."""
+    brand_id = _get_brand_id(request)
+    touch_engine = get_touch_engine()
+    touch_result = await touch_engine.process_touch(
+        session_id=req.session_id,
+        gesture=req.gesture,
+        zone=req.zone,
+        pressure=req.pressure,
+        duration_ms=req.duration_ms,
+    )
+
+    # NOTE: Touch affinity bonus is NOT awarded here to avoid double-counting.
+    # It is stored in the touch context cache and awarded once when the next
+    # /pipeline/chat turn consumes it via _post_turn_processing(touch_bonus=...).
+
+    # Update character emotion via PAD model (smooth transition)
+    emotion_engine = get_emotion_engine()
+    pad_state, new_emotion = await emotion_engine.update_with_pad(
+        session_id=req.session_id,
+        touch_gesture=req.gesture,
+    )
+
+    # For strong touch gestures (hug, squeeze), generate an immediate short response
+    text_response = None
+    audio_b64 = None
+    immediate_gestures = ("hug", "squeeze", "shake")
+
+    if req.gesture in immediate_gestures:
+        try:
+            builder = await get_prompt_builder()
+            prompt_result = await builder.build(
+                character_id=req.character_id,
+                brand_id=brand_id,
+                end_user_id=req.end_user_id,
+                user_input="（触摸互动）",
+                emotion_state=new_emotion,
+                touch_context=touch_result["prompt"],
+            )
+
+            llm = await get_llm_client()
+            text_response = await llm.chat(
+                system_prompt=prompt_result["system_prompt"],
+                user_input="（主人没有说话，只是通过触摸和你互动。用一句简短的话或声音回应。）",
+            )
+
+            text_response = content_filter.filter_output(text_response)
+
+            # TTS for immediate response (using PAD-based offsets)
+            voice_id = prompt_result.get("voice_id")
+            if voice_id and text_response:
+                ssml_pitch = prompt_result.get("ssml_pitch", 1.0)
+                ssml_rate = prompt_result.get("ssml_rate", 1.0)
+                ssml_pitch, ssml_rate = emotion_engine.apply_tts_offsets_pad(
+                    pad_state, ssml_pitch, ssml_rate
+                )
+                tts = await get_tts_client()
+                audio_bytes = await tts.synthesize(
+                    text=text_response,
+                    voice=voice_id,
+                    speed=prompt_result.get("voice_speed", 1.0),
+                    pitch_rate=prompt_result.get("pitch_rate", 0),
+                    speech_rate=prompt_result.get("speech_rate", 0),
+                    ssml_pitch=ssml_pitch,
+                    ssml_rate=ssml_rate,
+                    ssml_effect=prompt_result.get("ssml_effect", ""),
+                )
+                audio_b64 = base64.b64encode(audio_bytes).decode()
+        except Exception:
+            logger.exception("touch.immediate_response_error")
+
+    logger.info(
+        "pipeline.touch",
+        gesture=req.gesture,
+        zone=req.zone,
+        emotion=new_emotion,
+        has_response=text_response is not None,
+    )
+
+    return TouchEventResponse(
+        text=text_response,
+        audio_data=audio_b64,
+        gesture=touch_result["gesture"],
+        intent=touch_result["intent"],
+        emotion_hint=new_emotion,
+        affinity_bonus=touch_result["affinity_bonus"],
+    )

@@ -63,7 +63,7 @@ export default function ChatPanel({
     }
 
     const isMP3 = (bytes[0] === 0x49 && bytes[1] === 0x44) || (bytes[0] === 0xFF && (bytes[1] & 0xE0) === 0xE0);
-    const blob = new Blob([bytes], { type: isMP3 ? "audio/mpeg" : "audio/wav" });
+    const blob = new Blob([bytes as unknown as BlobPart], { type: isMP3 ? "audio/mpeg" : "audio/wav" });
     const url = URL.createObjectURL(blob);
 
     const audio = new Audio(url);
@@ -109,7 +109,7 @@ export default function ChatPanel({
 
       const decoder = new TextDecoder();
       let fullText = "";
-      let audioBase64: string | undefined;
+      const audioSegments: { index: number; base64: string; format: string }[] = [];
       let buffer = "";
 
       while (true) {
@@ -139,7 +139,12 @@ export default function ChatPanel({
             } else if (event.type === "emotion") {
               setCurrentEmotion(event.emotion);
             } else if (event.type === "audio") {
-              audioBase64 = event.audio_base64;
+              // Collect ALL audio segments (TTS sends one per sentence)
+              audioSegments.push({
+                index: event.index ?? audioSegments.length,
+                base64: event.audio_base64,
+                format: event.audio_format || "mp3",
+              });
             } else if (event.type === "done") {
               // Stream complete
             }
@@ -149,18 +154,48 @@ export default function ChatPanel({
         }
       }
 
+      // Merge all audio segments into one continuous blob
+      let mergedAudioBase64: string | undefined;
+      if (audioSegments.length > 0) {
+        // Sort by index to ensure correct order
+        audioSegments.sort((a, b) => a.index - b.index);
+
+        // Decode all segments to binary, concatenate, then re-encode
+        const chunks: Uint8Array[] = [];
+        for (const seg of audioSegments) {
+          const raw = atob(seg.base64);
+          const bytes = new Uint8Array(raw.length);
+          for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+          chunks.push(bytes);
+        }
+
+        // Calculate total size and merge
+        const totalLen = chunks.reduce((acc, c) => acc + c.length, 0);
+        const merged = new Uint8Array(totalLen);
+        let offset = 0;
+        for (const chunk of chunks) {
+          merged.set(chunk, offset);
+          offset += chunk.length;
+        }
+
+        // Re-encode to base64
+        let binary = "";
+        for (let i = 0; i < merged.length; i++) binary += String.fromCharCode(merged[i]);
+        mergedAudioBase64 = btoa(binary);
+      }
+
       // Finalize: add complete message
       const aiMsg: Message = {
         id: aiMsgId,
         role: "assistant",
         text: fullText || "...",
-        audioBase64,
+        audioBase64: mergedAudioBase64,
         emotion: currentEmotion || undefined,
       };
       setStreamingText("");
       setMessages((prev) => [...prev, aiMsg]);
 
-      if (audioBase64) playAudio(audioBase64, aiMsgId);
+      if (mergedAudioBase64) playAudio(mergedAudioBase64, aiMsgId);
     } catch {
       setStreamingText("");
       setMessages((prev) => [

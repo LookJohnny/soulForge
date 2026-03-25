@@ -74,7 +74,9 @@ services:
       DATABASE_URL: postgresql://soulforge:${DB_PASSWORD:-soulforge_prod}@postgres:5432/soulforge
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
-      AI_CORE_PORT: "8100"
+      AUTH_SECRET: ${NEXTAUTH_SECRET}
+      AI_CORE_URL: http://ai-core:8100
+      SERVICE_TOKEN: ${SERVICE_TOKEN}
     depends_on:
       postgres:
         condition: service_healthy
@@ -100,6 +102,9 @@ services:
       TTS_PROVIDER: ${TTS_PROVIDER:-dashscope}
       ASR_PROVIDER: ${ASR_PROVIDER:-dashscope}
       MASTER_SECRET: ${MASTER_SECRET}
+      SERVICE_TOKEN: ${SERVICE_TOKEN}
+      AUTH_SECRET: ${NEXTAUTH_SECRET}
+      ENVIRONMENT: production
     depends_on:
       postgres:
         condition: service_healthy
@@ -117,6 +122,8 @@ services:
       DATABASE_URL: postgresql://soulforge:${DB_PASSWORD:-soulforge_prod}@postgres:5432/soulforge
       REDIS_URL: redis://:${REDIS_PASSWORD:-soulforge_redis}@redis:6379/0
       AI_CORE_URL: http://ai-core:8100
+      SERVICE_TOKEN: ${SERVICE_TOKEN}
+      ENVIRONMENT: production
     depends_on:
       ai-core:
         condition: service_started

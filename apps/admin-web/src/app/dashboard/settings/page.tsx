@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Key, Copy, Trash2, Plus, Shield, BarChart3 } from "lucide-react";
 
 interface ApiKeyInfo { id: string; name: string; prefix: string; lastUsedAt: string | null; expiresAt: string | null; revoked: boolean; createdAt: string; }
@@ -11,8 +11,13 @@ export default function SettingsPage() {
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const didFetch = useRef(false);
+  useEffect(() => {
+    if (didFetch.current) return;
+    didFetch.current = true;
+    fetch("/api/api-keys").then(r => r.ok ? r.json() : []).then(setKeys);
+  }, []);
   async function fetchKeys() { const res = await fetch("/api/api-keys"); if (res.ok) setKeys(await res.json()); }
-  useEffect(() => { fetchKeys(); }, []);
   async function createKey() { setLoading(true); const res = await fetch("/api/api-keys", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newKeyName || "New Key" }) }); if (res.ok) { const d = await res.json(); setNewKeyValue(d.key); setNewKeyName(""); fetchKeys(); } setLoading(false); }
   async function revokeKey(id: string) { await fetch("/api/api-keys", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); fetchKeys(); }
 

@@ -6,6 +6,7 @@ __pycache__/
 
 # Build
 .next/
+.next_trash*/
 dist/
 *.egg-info/
 
@@ -32,6 +33,9 @@ packages/database/prisma/migrations/migration_lock.toml
 
 # Turbo
 .turbo/
+
+# Dev logs
+logs/
 
 # uv
 uv.lock

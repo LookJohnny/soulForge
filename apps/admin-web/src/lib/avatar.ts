@@ -40,7 +40,8 @@ function hashStr(s: string): number {
   return Math.abs(hash);
 }
 
-export function getCharacterEmoji(species: string): string {
+export function getCharacterEmoji(species: string | null | undefined): string {
+  if (!species) return "✨";
   if (SPECIES_EMOJI[species]) return SPECIES_EMOJI[species];
   for (const [key, emoji] of Object.entries(SPECIES_EMOJI)) {
     if (species.includes(key) || key.includes(species)) return emoji;

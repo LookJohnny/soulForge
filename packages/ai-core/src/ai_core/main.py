@@ -68,11 +68,11 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Service-Token", "X-Brand-Id", "X-Request-ID"],
 )
 
-# 5. Auth — JWT / API Key / Service Token verification
-app.add_middleware(AuthMiddleware)
-
-# 6. License check — quota enforcement (runs after auth, has brand_id from auth)
-app.add_middleware(LicenseCheckMiddleware)
+# 5-6. Auth + License — Starlette wraps middleware in reverse order,
+# so the LAST added middleware runs FIRST. We want Auth to run before
+# LicenseCheck, so LicenseCheck must be added BEFORE Auth.
+app.add_middleware(LicenseCheckMiddleware)  # runs second (needs auth context)
+app.add_middleware(AuthMiddleware)          # runs first (sets request.state.auth)
 
 app.include_router(api_router)
 app.include_router(metrics_router)

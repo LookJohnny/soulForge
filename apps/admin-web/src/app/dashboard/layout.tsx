@@ -22,23 +22,23 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen flex relative z-10">
-      {/* Sidebar */}
-      <aside className="w-[220px] fixed top-0 left-0 h-full z-40 flex flex-col border-r border-white/[0.04] bg-black/40 backdrop-blur-2xl">
+      {/* Sidebar — Apple Finder style */}
+      <aside className="w-[230px] fixed top-0 left-0 h-full z-40 flex flex-col border-r border-black/[0.06] bg-white/70 backdrop-blur-2xl">
         {/* Logo */}
         <Link
           href="/"
-          className="flex items-center gap-2.5 px-5 h-[60px] border-b border-white/[0.04]"
+          className="flex items-center gap-2.5 px-5 h-[52px] border-b border-black/[0.06]"
         >
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-400 to-amber-700 flex items-center justify-center shadow-lg shadow-amber-900/20">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
             <Flame className="w-3.5 h-3.5 text-white" />
           </div>
-          <span className="text-[15px] font-semibold tracking-tight text-gold">
+          <span className="text-[15px] font-semibold tracking-tight text-gray-900">
             SoulForge
           </span>
         </Link>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-5 space-y-0.5">
+        <nav className="flex-1 px-3 py-4 space-y-0.5">
           {navItems.map((item) => {
             const isActive =
               pathname === item.href || pathname.startsWith(item.href + "/");
@@ -46,30 +46,32 @@ export default function DashboardLayout({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-2.5 px-3 py-[9px] rounded-[10px] text-[13px] transition-all duration-300 ${
+                className={`flex items-center gap-2.5 px-3 py-[7px] rounded-lg text-[13px] transition-all duration-200 ${
                   isActive
-                    ? "bg-white/[0.07] text-amber-200 shadow-sm shadow-black/10"
-                    : "text-white/35 hover:text-white/60 hover:bg-white/[0.03]"
+                    ? "bg-blue-500/10 text-blue-600 font-medium"
+                    : "text-gray-500 hover:text-gray-800 hover:bg-black/[0.04]"
                 }`}
               >
                 <item.icon
-                  className={`w-[16px] h-[16px] ${isActive ? "text-amber-400" : ""}`}
-                  strokeWidth={isActive ? 2.2 : 1.8}
+                  className={`w-[16px] h-[16px] ${isActive ? "text-blue-500" : "text-gray-400"}`}
+                  strokeWidth={isActive ? 2 : 1.6}
                 />
-                <span className="font-medium">{item.label}</span>
+                <span>{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-white/[0.04]">
-          <div className="text-[11px] text-white/15">SoulForge v0.1</div>
+        <div className="px-5 py-3 border-t border-black/[0.06]">
+          <div className="text-[11px] text-gray-400">SoulForge v0.1</div>
         </div>
       </aside>
 
-      {/* Main content area */}
-      <main className="flex-1 ml-[220px] p-8 relative z-10">{children}</main>
+      {/* Main content area — scrollable */}
+      <main className="flex-1 ml-[230px] min-h-screen overflow-y-auto">
+        <div className="max-w-6xl mx-auto px-8 py-8">{children}</div>
+      </main>
     </div>
   );
 }

@@ -44,6 +44,31 @@ class HistoryMessage(BaseModel):
     content: str = Field(max_length=5000)
 
 
+class TouchEventRequest(BaseModel):
+    character_id: str
+    end_user_id: str | None = None
+    device_id: str
+    session_id: str
+    gesture: str = "none"
+    zone: str | None = None
+    pressure: float | None = Field(default=None, ge=0.0, le=1.0)
+    duration_ms: int | None = Field(default=None, ge=0)
+
+    @field_validator("character_id")
+    @classmethod
+    def validate_character_id(cls, v: str) -> str:
+        return _validate_uuid_format(v)
+
+
+class TouchEventResponse(BaseModel):
+    text: str | None = None
+    audio_data: str | None = None
+    gesture: str
+    intent: str
+    emotion_hint: str
+    affinity_bonus: int
+
+
 class ChatRequest(BaseModel):
     character_id: str
     end_user_id: str | None = None
@@ -68,10 +93,17 @@ class ChatRequest(BaseModel):
         return v
 
 
+class PADStateSchema(BaseModel):
+    p: float = 0.0  # Pleasure: -1 (unhappy) → +1 (happy)
+    a: float = 0.0  # Arousal: -1 (calm) → +1 (excited)
+    d: float = 0.0  # Dominance: -1 (submissive) → +1 (dominant)
+
+
 class ChatResponse(BaseModel):
     text: str
     audio_data: str | None = None  # base64 audio
     emotion: str | None = None  # character's detected emotion state
+    pad: PADStateSchema | None = None  # continuous PAD emotional state
     relationship_stage: str | None = None  # STRANGER → BESTFRIEND
     affinity: int | None = None  # 0-1000
     latency_ms: int
