@@ -5,7 +5,7 @@ import net from "node:net";
 /**
  * Public chat API — no auth required.
  * Used by the mobile chat page (/chat/[id]).
- * Proxies to AI Core's chat/preview/stream endpoint.
+ * Proxies to AI Core + persists messages.
  */
 
 const AI_CORE_URL = new URL(process.env.AI_CORE_URL || "http://127.0.0.1:8100");
@@ -23,20 +23,17 @@ const ARCHETYPE_HINTS: Record<string, string[]> = {
 };
 
 const ARCHETYPE_GREETINGS: Record<string, (name: string, species: string) => string> = {
-  ANIMAL: (name, species) => `${name}正在等你呢～`,
+  ANIMAL: (name) => `${name}正在等你呢～`,
   HUMAN: (name, species) => species ? `${species} · ${name}` : name,
-  FANTASY: (name, species) => `${name}出现在你面前`,
+  FANTASY: (name) => `${name}出现在你面前`,
   ABSTRACT: (name) => `${name}已就绪`,
 };
 
 function generateHints(char: { archetype: string; catchphrases: string[] | null }): string[] {
   const base = ARCHETYPE_HINTS[char.archetype] || ARCHETYPE_HINTS.ANIMAL;
-  // Mix in a catchphrase as a hint if available
   if (char.catchphrases?.length) {
     const phrase = char.catchphrases[Math.floor(Math.random() * char.catchphrases.length)];
-    if (phrase.length <= 15) {
-      return [base[0], phrase, base[2], base[3]];
-    }
+    if (phrase.length <= 15) return [base[0], phrase, base[2], base[3]];
   }
   return base;
 }
@@ -46,12 +43,15 @@ function generateGreeting(char: { name: string; species: string | null; archetyp
   return fn(char.name, char.species || "");
 }
 
-// GET — return character info (public)
+// ── GET: character info + history ──
+
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const visitorId = req.nextUrl.searchParams.get("visitor");
+
   const character = await prisma.character.findUnique({
     where: { id },
     select: { id: true, name: true, species: true, archetype: true, backstory: true, brandId: true, catchphrases: true, personality: true },
@@ -61,22 +61,42 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Generate personalized hints based on character personality
   const hints = generateHints(character);
   const greeting = generateGreeting(character);
 
-  return NextResponse.json({ ...character, hints, greeting });
+  // Load chat history if visitorId provided
+  let history: object[] = [];
+  if (visitorId) {
+    const messages = await prisma.chatMessage.findMany({
+      where: { characterId: id, visitorId },
+      orderBy: { createdAt: "asc" },
+      take: 100,
+      select: {
+        id: true,
+        role: true,
+        content: true,
+        action: true,
+        thought: true,
+        emotion: true,
+        createdAt: true,
+      },
+    });
+    history = messages;
+  }
+
+  return NextResponse.json({ ...character, hints, greeting, history });
 }
 
-// POST — proxy chat to AI Core (stream)
+// ── POST: proxy chat + save messages ──
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: characterId } = await params;
   const body = await req.json();
+  const visitorId = body.visitorId || "anonymous";
 
-  // Look up brand_id for this character
   const character = await prisma.character.findUnique({
     where: { id: characterId },
     select: { brandId: true },
@@ -88,6 +108,18 @@ export async function POST(
 
   const brandId = character.brandId;
 
+  // Save user message immediately
+  if (visitorId !== "anonymous") {
+    await prisma.chatMessage.create({
+      data: {
+        characterId,
+        visitorId,
+        role: "user",
+        content: body.text || "",
+      },
+    });
+  }
+
   const payload = {
     character_id: characterId,
     text: body.text || "你好",
@@ -95,13 +127,19 @@ export async function POST(
     with_audio: body.withAudio !== false,
   };
 
-  // Stream SSE from ai-core
+  // Collect AI response data as we proxy the stream
+  let aiDialogue = "";
+  let aiAction = "";
+  let aiThought = "";
+  let aiEmotion = "";
+
   const jsonBody = JSON.stringify(payload);
   const stream = new ReadableStream({
     start(controller) {
       const socket = new net.Socket();
       let headerParsed = false;
       let buffer = "";
+      let sseBuffer = "";
 
       socket.setTimeout(90000);
       socket.connect(AI_CORE_PORT, AI_CORE_HOST, () => {
@@ -127,12 +165,43 @@ export async function POST(
           headerParsed = true;
         }
         if (buffer) {
+          // Parse SSE events to capture AI response for persistence
+          sseBuffer += buffer;
+          const lines = sseBuffer.split("\n");
+          sseBuffer = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const ev = JSON.parse(line.slice(6).trim());
+              if (ev.type === "text_replace") aiDialogue = ev.text || "";
+              else if (ev.type === "action") aiAction = ev.text || "";
+              else if (ev.type === "thought") aiThought = ev.text || "";
+              else if (ev.type === "emotion") aiEmotion = ev.emotion || "";
+            } catch {}
+          }
+
           controller.enqueue(new TextEncoder().encode(buffer));
           buffer = "";
         }
       });
 
-      socket.on("end", () => controller.close());
+      socket.on("end", () => {
+        // Save AI message after stream completes
+        if (visitorId !== "anonymous" && aiDialogue) {
+          prisma.chatMessage.create({
+            data: {
+              characterId,
+              visitorId,
+              role: "assistant",
+              content: aiDialogue,
+              action: aiAction || null,
+              thought: aiThought || null,
+              emotion: aiEmotion || null,
+            },
+          }).catch(() => {}); // fire-and-forget
+        }
+        controller.close();
+      });
       socket.on("timeout", () => { socket.destroy(); controller.close(); });
       socket.on("error", () => controller.close());
     },

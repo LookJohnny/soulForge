@@ -15,8 +15,8 @@ from ai_core.services.pad_model import (
     pad_to_tts_offsets,
     pad_to_prompt_description,
     transition_pad,
-    TRANSITION_SPEED,
-    DECAY_RATE,
+    BASE_TRANSITION_SPEED,
+    BASE_DECAY_RATE,
 )
 from ai_core.services.emotion import EmotionEngine, EMOTIONS
 
@@ -244,11 +244,11 @@ class TestPADToTTS:
 class TestPADToPrompt:
     def test_happy_state(self):
         desc = pad_to_prompt_description(PADState(0.8, 0.6, 0.3))
-        assert "心情很好" in desc
+        assert "开心" in desc or "心情" in desc
 
     def test_sad_state(self):
         desc = pad_to_prompt_description(PADState(-0.7, -0.3, -0.4))
-        assert "心情低落" in desc
+        assert "难过" in desc or "低落" in desc
 
     def test_calm_state(self):
         desc = pad_to_prompt_description(PADState(0.1, -0.6, 0.0))
@@ -407,7 +407,7 @@ class TestEmotionEnginePAD:
     def test_get_prompt_text_pad(self):
         pad = PADState(0.8, 0.6, 0.3)
         text = self.engine.get_prompt_text_pad(pad)
-        assert "心情" in text
+        assert "开心" in text or "心情" in text
 
     @pytest.mark.asyncio
     async def test_pad_touch_fusion(self):

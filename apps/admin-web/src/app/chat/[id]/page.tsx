@@ -267,6 +267,17 @@ const S = {
 /* ════════════════════════════════════════════════
    Component
    ════════════════════════════════════════════════ */
+/* ── Visitor ID (persisted in localStorage) ──── */
+function getVisitorId(): string {
+  if (typeof window === "undefined") return "ssr";
+  let id = localStorage.getItem("sf_visitor");
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem("sf_visitor", id);
+  }
+  return id;
+}
+
 export default function MobileChatPage() {
   const { id: characterId } = useParams<{ id: string }>();
   const router = useRouter();
@@ -280,15 +291,20 @@ export default function MobileChatPage() {
   const [charSpecies, setCharSpecies] = useState("");
   const [charGreeting, setCharGreeting] = useState("");
   const [charHints, setCharHints] = useState<string[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const composingRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+  const visitorIdRef = useRef("anonymous");
 
-  /* ── Load character info ───────────────────── */
+  /* ── Load character info + chat history ─────── */
   useEffect(() => {
-    safeFetch(`/api/chat/${characterId}`)
+    const vid = getVisitorId();
+    visitorIdRef.current = vid;
+
+    safeFetch(`/api/chat/${characterId}?visitor=${vid}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((c) => {
         if (c) {
@@ -296,9 +312,24 @@ export default function MobileChatPage() {
           setCharSpecies(c.species || "");
           if (c.greeting) setCharGreeting(c.greeting);
           if (c.hints?.length) setCharHints(c.hints);
+
+          // Restore chat history
+          if (c.history?.length) {
+            const restored: Message[] = c.history.map((m: any) => ({
+              id: m.id,
+              role: m.role,
+              text: m.content,
+              action: m.action || "",
+              thought: m.thought || "",
+              emotion: m.emotion || "",
+              ts: new Date(m.createdAt).getTime(),
+            }));
+            setMessages(restored);
+          }
+          setHistoryLoaded(true);
         }
       })
-      .catch(() => {});
+      .catch(() => { setHistoryLoaded(true); });
   }, [characterId]);
 
   /* ── Scroll ────────────────────────────────── */
@@ -375,6 +406,7 @@ export default function MobileChatPage() {
           text,
           history: buildHistory(updated.slice(0, -1)),
           withAudio: true,
+          visitorId: visitorIdRef.current,
         }),
         signal: controller.signal,
       });
