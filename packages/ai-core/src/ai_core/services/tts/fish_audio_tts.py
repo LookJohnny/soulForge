@@ -67,6 +67,10 @@ FISH_VOICES = {
         "w": 65, "e": 35, "m": 35, "g": 20,
         "gender": "female", "label": "温柔女声 (温婉姐姐)",
     },
+    "a6b29d0ef2404ca1aa8d1fdd8d7a2a90": {
+        "w": 40, "e": 80, "m": 22, "g": 8,
+        "gender": "female", "label": "青春活泼女 (元气少女)",
+    },
 }
 
 
