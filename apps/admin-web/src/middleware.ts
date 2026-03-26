@@ -21,5 +21,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/api/characters/:path*", "/api/voices/:path*", "/api/preview/:path*", "/api/api-keys/:path*", "/api/soul-packs/:path*"],
+  matcher: ["/dashboard/:path*", "/api/characters/:path*", "/api/voices/:path*", "/api/preview/:path*", "/api/api-keys/:path*", "/api/soul-packs/:path*", "/api/chat-logs/:path*"],
 };
