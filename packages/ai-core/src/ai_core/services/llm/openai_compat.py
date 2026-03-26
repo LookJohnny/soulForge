@@ -59,15 +59,19 @@ class OpenAICompatProvider(LLMProvider):
         temperature: float = 0.8,
         top_p: float = 0.9,
         max_tokens: int = 256,
+        json_mode: bool = False,
     ) -> str:
         messages = self._build_messages(system_prompt, user_input, history)
-        resp = await self.client.chat.completions.create(
+        kwargs: dict = dict(
             model=self.model,
             messages=messages,
             temperature=temperature,
             top_p=top_p,
             max_tokens=max_tokens,
         )
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        resp = await self.client.chat.completions.create(**kwargs)
         return resp.choices[0].message.content or ""
 
     @retry(
@@ -85,9 +89,10 @@ class OpenAICompatProvider(LLMProvider):
         temperature: float = 0.8,
         top_p: float = 0.9,
         max_tokens: int = 256,
+        json_mode: bool = False,
     ) -> AsyncIterator[str]:
         messages = self._build_messages(system_prompt, user_input, history)
-        stream = await self.client.chat.completions.create(
+        kwargs: dict = dict(
             model=self.model,
             messages=messages,
             temperature=temperature,
@@ -95,6 +100,9 @@ class OpenAICompatProvider(LLMProvider):
             max_tokens=max_tokens,
             stream=True,
         )
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        stream = await self.client.chat.completions.create(**kwargs)
         async for chunk in stream:
             delta = chunk.choices[0].delta
             if delta.content:

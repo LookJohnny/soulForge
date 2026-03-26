@@ -16,7 +16,11 @@ def create_tts_provider(provider: str | None = None) -> TTSProvider:
     """
     name = provider or settings.tts_provider
 
-    if name == "edge":
+    if name == "fish":
+        from ai_core.services.tts.fish_audio_tts import FishAudioTTSProvider
+        logger.info("tts.create_provider", provider="fish")
+        return FishAudioTTSProvider()
+    elif name == "edge":
         from ai_core.services.tts.edge_tts_provider import EdgeTTSProvider
         logger.info("tts.create_provider", provider="edge")
         return EdgeTTSProvider()

@@ -15,6 +15,7 @@ class LLMClient:
         system_prompt: str,
         user_input: str,
         history: list[dict] | None = None,
+        json_mode: bool = False,
     ) -> str:
         """Non-streaming chat completion."""
         return await self._provider.generate(
@@ -24,6 +25,7 @@ class LLMClient:
             temperature=settings.llm_temperature,
             top_p=settings.llm_top_p,
             max_tokens=settings.llm_max_tokens,
+            json_mode=json_mode,
         )
 
     async def chat_stream(
@@ -31,6 +33,7 @@ class LLMClient:
         system_prompt: str,
         user_input: str,
         history: list[dict] | None = None,
+        json_mode: bool = False,
     ) -> AsyncIterator[str]:
         """Streaming chat completion, yields text chunks."""
         async for chunk in self._provider.generate_stream(
@@ -40,5 +43,6 @@ class LLMClient:
             temperature=settings.llm_temperature,
             top_p=settings.llm_top_p,
             max_tokens=settings.llm_max_tokens,
+            json_mode=json_mode,
         ):
             yield chunk

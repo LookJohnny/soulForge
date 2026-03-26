@@ -29,13 +29,17 @@ class Settings(BaseSettings):
     llm_model: str = "qwen2.5-7b-instruct"
     llm_temperature: float = 0.8
     llm_top_p: float = 0.9
-    llm_max_tokens: int = 256
+    llm_max_tokens: int = 512
     llm_timeout: int = 30  # seconds
 
     # ─── TTS Provider ───────────────────────────
-    tts_provider: str = "dashscope"
+    tts_provider: str = "dashscope"   # dashscope | fish | edge
     tts_model: str = "cosyvoice-v3-flash"
     tts_timeout: int = 15  # seconds
+
+    # ─── Fish Audio ────────────────────────────
+    fish_audio_api_key: str = ""
+    fish_audio_model: str = "s1"  # s1 | s2-pro
 
     # ─── ASR Provider ───────────────────────────
     asr_provider: str = "dashscope"

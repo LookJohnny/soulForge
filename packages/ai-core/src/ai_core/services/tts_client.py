@@ -17,9 +17,32 @@ _ACTION_PATTERNS = [
 
 
 def _clean_for_tts(text: str) -> str:
-    """Remove action descriptions and emotion tags before TTS."""
+    """Clean text for natural TTS synthesis.
+
+    Handles:
+    - Action descriptions: （微微一笑）*动作*
+    - Emotion tags: [emotion:xxx]
+    - Wave dash / tilde: ～ ~ (causes unnatural pronunciation)
+    - Repeated punctuation: ！！！ → ！
+    - Trailing particle clusters: 哦~呀 → 哦 (overlapping particles sound unnatural)
+    """
     for pattern in _ACTION_PATTERNS:
         text = pattern.sub("", text)
+
+    # Strip wave dash / tilde between particles (哦~呀 → 哦呀), elsewhere → pause
+    text = re.sub(r"(?<=[哦噢呢嘛啦呀吧哈嘿])[~～]+(?=[呀啊哦噢哇嘛呢])", "", text)
+    text = re.sub(r"[~～]+", "，", text)
+
+    # Fix unnatural trailing particle clusters:
+    # "哦呀" "呢呀" "嘛呀" "啦呀" etc → keep first particle only
+    text = re.sub(r"([哦噢呢嘛啦呀吧哈嘿])[呀啊哦噢哇嘛]+", r"\1", text)
+
+    # Collapse repeated punctuation: ！！！ → ！, ？？？ → ？
+    text = re.sub(r"([！!？?。，,])\1+", r"\1", text)
+
+    # Remove leading/trailing commas
+    text = re.sub(r"^[，,]+|[，,]+$", "", text)
+
     # Collapse multiple spaces/newlines
     text = re.sub(r"\s+", " ", text).strip()
     return text

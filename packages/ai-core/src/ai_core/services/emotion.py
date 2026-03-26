@@ -41,7 +41,7 @@ EMOTION_DESCRIPTIONS: dict[str, str] = {
     "calm": "你现在很平静，语气沉稳温和",
 }
 
-# How character should respond to user's detected mood
+# Legacy mood responses (kept for backward compat; prefer PersonaContext.mood_response())
 USER_MOOD_RESPONSES: dict[str, str] = {
     "happy": "主人现在心情很好，你可以跟着一起开心，分享快乐",
     "sad": "主人似乎有点难过，要温柔地关心主人，安慰但不追问原因",
@@ -377,20 +377,18 @@ class EmotionEngine:
         text_emotion: str | None = None,
         touch_gesture: str | None = None,
         user_mood: str | None = None,
+        personality: dict | None = None,
+        relationship_stage: str | None = None,
     ) -> tuple[PADState, str]:
-        """Update emotion via PAD model with multi-modal fusion.
-
-        This is the recommended method for new code. It:
-        1. Loads current PAD state from cache
-        2. Fuses text emotion + touch gesture + user mood in PAD space
-        3. Smoothly transitions (no discrete jumps)
-        4. Persists both PAD state and discrete emotion label
+        """Update emotion via PAD model with personality-aware multi-modal fusion.
 
         Args:
             session_id: Session ID.
             text_emotion: Discrete emotion from LLM text detection.
             touch_gesture: Touch gesture name (e.g. "hug").
             user_mood: Detected user mood (e.g. "sad").
+            personality: Character's 5-trait dict (for baseline computation).
+            relationship_stage: STRANGER→BESTFRIEND (scales touch/empathy weights).
 
         Returns:
             (pad_state, discrete_emotion_label)
@@ -400,6 +398,8 @@ class EmotionEngine:
             text_emotion=text_emotion,
             touch_gesture=touch_gesture,
             user_mood=user_mood,
+            personality=personality,
+            relationship_stage=relationship_stage,
         )
         # Keep discrete emotion cache in sync for backward compatibility
         await self.set_emotion(session_id, discrete)

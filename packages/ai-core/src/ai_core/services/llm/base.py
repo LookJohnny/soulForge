@@ -19,6 +19,7 @@ class LLMProvider(ABC):
         temperature: float = 0.8,
         top_p: float = 0.9,
         max_tokens: int = 256,
+        json_mode: bool = False,
     ) -> str:
         """Non-streaming text generation."""
         ...
@@ -33,6 +34,7 @@ class LLMProvider(ABC):
         temperature: float = 0.8,
         top_p: float = 0.9,
         max_tokens: int = 256,
+        json_mode: bool = False,
     ) -> AsyncIterator[str]:
         """Streaming text generation, yields text chunks."""
         ...

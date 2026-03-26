@@ -155,6 +155,8 @@ async def chat(req: ChatRequest, request: Request):
         text_emotion=text_emotion,
         touch_gesture=touch_gesture,
         user_mood=user_mood,
+        personality=prompt_result.get("personality"),
+        relationship_stage=rel_state.get("stage"),
     )
 
     # 11. TTS with PAD-computed parameters (more nuanced than discrete lookup)
@@ -289,10 +291,15 @@ async def touch_event(req: TouchEventRequest, request: Request):
     text_response = None
     audio_b64 = None
     immediate_gestures = ("hug", "squeeze", "shake")
+    pctx = None
 
     if req.gesture in immediate_gestures:
         try:
             builder = await get_prompt_builder()
+            # Get archetype for PersonaContext
+            from ai_core.services.persona_context import PersonaContext
+            _char = await builder._get_character(req.character_id, brand_id)
+            pctx = PersonaContext.from_archetype(_char.get("archetype", "ANIMAL")) if _char else None
             prompt_result = await builder.build(
                 character_id=req.character_id,
                 brand_id=brand_id,
@@ -305,7 +312,7 @@ async def touch_event(req: TouchEventRequest, request: Request):
             llm = await get_llm_client()
             text_response = await llm.chat(
                 system_prompt=prompt_result["system_prompt"],
-                user_input="（主人没有说话，只是通过触摸和你互动。用一句简短的话或声音回应。）",
+                user_input=pctx.touch_silent_input() if pctx else "（对方没有说话，只是通过触摸和你互动。用一句简短的话或声音回应。）",
             )
 
             text_response = content_filter.filter_output(text_response)

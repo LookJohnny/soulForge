@@ -175,9 +175,14 @@ class PromptBuilder:
             if results:
                 rag_context = "\n".join(results)
 
+        # ── PersonaContext: archetype-driven adaptive language ──
+        from ai_core.services.persona_context import PersonaContext
+        archetype = base.get("archetype", "ANIMAL")
+        pctx = PersonaContext.from_archetype(archetype)
+
         # Sanitize user-controlled fields to prevent prompt injection
         raw_nickname = custom.get("nickname") or base["name"] if custom else base["name"]
-        raw_user_title = custom.get("user_title", "主人") if custom else "主人"
+        raw_user_title = custom.get("user_title", pctx.user_title) if custom else pctx.user_title
         raw_interests = custom.get("interest_topics", []) if custom else base.get("topics", [])
 
         safe_nickname = _sanitize_user_field(str(raw_nickname), max_length=50)
@@ -191,18 +196,18 @@ class PromptBuilder:
             from ai_core.services.emotion import EMOTION_DESCRIPTIONS
             current_emotion_description = EMOTION_DESCRIPTIONS.get(emotion_state, "")
 
-        # Format user mood for template
+        # Format user mood for template (using PersonaContext for adaptive language)
         user_mood_instruction = ""
         if user_mood and user_mood != "neutral":
-            from ai_core.services.emotion import USER_MOOD_RESPONSES
-            user_mood_instruction = USER_MOOD_RESPONSES.get(user_mood, "")
+            user_mood_instruction = pctx.mood_response(user_mood)
 
         # Format memories for template
         memory_context = []
         if memories:
-            _MEMORY_FMT = {"TOPIC": "上次聊了{content}", "PREFERENCE": "主人{content}", "EVENT": "主人说过{content}"}
+            _ref = pctx.user_ref
+            _MEMORY_FMT = {"TOPIC": "上次聊了{content}", "PREFERENCE": f"{_ref}{{content}}", "EVENT": f"{_ref}说过{{content}}"}
             for m in memories:
-                fmt = _MEMORY_FMT.get(m.get("type", ""), "主人说过{content}")
+                fmt = _MEMORY_FMT.get(m.get("type", ""), f"{_ref}说过{{content}}")
                 memory_context.append(fmt.format(content=m.get("content", "")))
 
         # Relationship stage description (use romance stages for idol archetype)
@@ -220,10 +225,14 @@ class PromptBuilder:
                 relationship_description = STAGE_PROMPTS.get(relationship_stage, "")
 
         # Scene prompt for idol mode
+        # Scene prompt (archetype-adaptive via PersonaContext)
         scene_prompt = ""
         if scene:
-            from ai_core.services.idol_presets import SCENE_PROMPTS
-            scene_prompt = SCENE_PROMPTS.get(scene, "")
+            scene_prompt = pctx.scene_prompt(scene)
+            if not scene_prompt:
+                # Fallback to legacy static prompts
+                from ai_core.services.idol_presets import SCENE_PROMPTS
+                scene_prompt = SCENE_PROMPTS.get(scene, "")
 
         # Select template: idol for HUMAN romance archetype, default otherwise
         template = self._templates["default"]
@@ -235,10 +244,10 @@ class PromptBuilder:
         ):
             template = self._templates["idol"]
 
-        # Render template
+        # Render template with PersonaContext-driven variables
         system_prompt = template.render(
             name=safe_nickname,
-            archetype=base.get("archetype", "ANIMAL"),
+            archetype=archetype,
             species=base.get("species") or "",
             backstory=base.get("backstory", ""),
             personality_description=personality_desc,
@@ -249,9 +258,11 @@ class PromptBuilder:
             time_context=time_context or "",
             catchphrases=base.get("catchphrases", []),
             suffix=base.get("suffix", ""),
-            relationship=base.get("relationship", "朋友"),
+            relationship=base.get("relationship", pctx.rel_default),
             relationship_description=relationship_description,
             user_title=safe_user_title,
+            user_ref=pctx.user_ref,
+            section_title=pctx.section_title,
             interests=safe_interests,
             memory_context=memory_context,
             proactive_trigger=proactive_trigger,
@@ -303,6 +314,8 @@ class PromptBuilder:
             "ssml_pitch": ssml_pitch,
             "ssml_rate": ssml_rate,
             "ssml_effect": ssml_effect,
+            "personality": personality,
+            "_species": base.get("species", ""),  # for Fish Audio voice resolution
         }
 
     async def _get_character(self, character_id: str, brand_id: str) -> dict | None:

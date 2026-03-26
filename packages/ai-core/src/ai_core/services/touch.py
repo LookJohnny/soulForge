@@ -113,6 +113,7 @@ class TouchEngine:
         zone: str | None = None,
         pressure: float | None = None,
         duration_ms: int | None = None,
+        archetype: str = "ANIMAL",
     ) -> dict:
         """Process a touch event and return emotional signals.
 
@@ -148,12 +149,22 @@ class TouchEngine:
             elif pressure > 0.7:
                 intensity = "firm"
 
-        # Build touch prompt with zone modifier
+        # Build touch prompt with zone modifier (archetype-adaptive)
+        from ai_core.services.persona_context import PersonaContext
+        pctx = PersonaContext.from_archetype(archetype)
+
         prompt_parts = []
-        if touch_info["prompt"]:
-            prompt_parts.append(touch_info["prompt"])
-        if zone and zone in ZONE_MODIFIERS:
-            prompt_parts.append(ZONE_MODIFIERS[zone])
+        adaptive_prompt = pctx.touch_prompt(gesture)
+        if adaptive_prompt:
+            prompt_parts.append(adaptive_prompt)
+        elif touch_info["prompt"]:
+            prompt_parts.append(touch_info["prompt"])  # fallback to static
+        if zone:
+            zone_prompt = pctx.touch_zone(zone)
+            if zone_prompt:
+                prompt_parts.append(zone_prompt)
+            elif zone in ZONE_MODIFIERS:
+                prompt_parts.append(ZONE_MODIFIERS[zone])
         if intensity == "gentle":
             prompt_parts.append("力度很轻柔")
         elif intensity == "firm":
