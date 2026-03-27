@@ -1,0 +1,41 @@
+{
+  "device_id": "sf-full-001",
+  "form_factor": {
+    "type": "plush",
+    "height_cm": 35,
+    "weight_g": 800,
+    "has_costume": true,
+    "costume_friction_factor": 0.4
+  },
+  "actuators": [
+    {"id": "neck_yaw", "type": "servo", "body_part": "neck", "dof": 1, "range_min": -60, "range_max": 60, "unit": "degrees", "max_speed": 300, "thermal_limit_celsius": 70, "noise_db_at_max_speed": 35, "stall_torque_nm": 0.8, "backlash_degrees": 1.5},
+    {"id": "neck_pitch", "type": "servo", "body_part": "neck", "dof": 1, "range_min": -30, "range_max": 30, "unit": "degrees", "max_speed": 250, "thermal_limit_celsius": 70, "noise_db_at_max_speed": 33, "stall_torque_nm": 0.6, "backlash_degrees": 1.5},
+    {"id": "left_arm", "type": "servo", "body_part": "left_arm", "dof": 1, "range_min": 0, "range_max": 90, "unit": "degrees", "max_speed": 200, "thermal_limit_celsius": 65, "noise_db_at_max_speed": 30, "stall_torque_nm": 0.4, "backlash_degrees": 2.0},
+    {"id": "right_arm", "type": "servo", "body_part": "right_arm", "dof": 1, "range_min": 0, "range_max": 90, "unit": "degrees", "max_speed": 200, "thermal_limit_celsius": 65, "noise_db_at_max_speed": 30, "stall_torque_nm": 0.4, "backlash_degrees": 2.0},
+    {"id": "eyes_led", "type": "led_matrix", "body_part": "eyes", "dof": 2, "range_min": 0, "range_max": 255, "unit": "brightness", "max_speed": 1000},
+    {"id": "speaker", "type": "speaker", "body_part": "body", "dof": 1, "range_min": 0, "range_max": 100, "unit": "brightness", "max_speed": 44100},
+    {"id": "body_vibration", "type": "vibration", "body_part": "body", "dof": 1, "range_min": 0, "range_max": 255, "unit": "brightness", "max_speed": 200}
+  ],
+  "sensors": [
+    {"id": "touch_head", "type": "touch_pressure", "body_part": "head", "sample_rate_hz": 20, "range_min": 0, "range_max": 1023},
+    {"id": "touch_belly", "type": "touch_pressure", "body_part": "body", "sample_rate_hz": 20, "range_min": 0, "range_max": 1023},
+    {"id": "touch_hand", "type": "touch_binary", "body_part": "left_arm", "sample_rate_hz": 10, "range_min": 0, "range_max": 1},
+    {"id": "proximity_front", "type": "proximity_ir", "body_part": "body", "sample_rate_hz": 10, "range_min": 0.02, "range_max": 1.5},
+    {"id": "imu", "type": "imu_6dof", "body_part": "body", "sample_rate_hz": 100, "range_min": -16, "range_max": 16},
+    {"id": "mic", "type": "microphone", "body_part": "head", "sample_rate_hz": 16000, "range_min": -32768, "range_max": 32767}
+  ],
+  "power": {
+    "battery_capacity_mah": 2500,
+    "voltage_nominal": 3.7,
+    "voltage_cutoff": 3.3,
+    "max_continuous_draw_ma": 1500,
+    "charging_method": "usb_c"
+  },
+  "believability_profile": {
+    "max_emotion_channels": 5,
+    "gesture_fluidity_score": 0.85,
+    "audio_visual_sync_capable": true,
+    "idle_animation_capable": true,
+    "touch_responsive": true
+  }
+}

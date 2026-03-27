@@ -1,0 +1,33 @@
+{
+  "device_id": "sf-basic-001",
+  "form_factor": {
+    "type": "plush",
+    "height_cm": 20,
+    "weight_g": 200,
+    "has_costume": false,
+    "costume_friction_factor": 0
+  },
+  "actuators": [
+    {"id": "eye_left", "type": "led_single", "body_part": "eyes", "dof": 1, "range_min": 0, "range_max": 255, "unit": "brightness", "max_speed": 1000},
+    {"id": "eye_right", "type": "led_single", "body_part": "eyes", "dof": 1, "range_min": 0, "range_max": 255, "unit": "brightness", "max_speed": 1000},
+    {"id": "speaker", "type": "speaker", "body_part": "body", "dof": 1, "range_min": 0, "range_max": 100, "unit": "brightness", "max_speed": 16000},
+    {"id": "vibration", "type": "vibration", "body_part": "body", "dof": 1, "range_min": 0, "range_max": 255, "unit": "brightness", "max_speed": 200}
+  ],
+  "sensors": [
+    {"id": "button_belly", "type": "button", "body_part": "body", "sample_rate_hz": 10, "range_min": 0, "range_max": 1}
+  ],
+  "power": {
+    "battery_capacity_mah": 600,
+    "voltage_nominal": 3.0,
+    "voltage_cutoff": 2.4,
+    "max_continuous_draw_ma": 300,
+    "charging_method": "replaceable_battery"
+  },
+  "believability_profile": {
+    "max_emotion_channels": 2,
+    "gesture_fluidity_score": 0.1,
+    "audio_visual_sync_capable": false,
+    "idle_animation_capable": false,
+    "touch_responsive": true
+  }
+}

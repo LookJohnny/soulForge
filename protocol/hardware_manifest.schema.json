@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SoulForge Hardware Manifest",
+  "description": "Describes a toy's physical capabilities for the Performance Primitive Protocol.",
+  "type": "object",
+  "required": ["device_id", "form_factor", "actuators", "sensors", "power", "believability_profile"],
+  "properties": {
+    "device_id": { "type": "string" },
+    "form_factor": {
+      "type": "object",
+      "required": ["type", "height_cm", "weight_g"],
+      "properties": {
+        "type": { "enum": ["plush", "rigid", "hybrid"] },
+        "height_cm": { "type": "number", "minimum": 1 },
+        "weight_g": { "type": "number", "minimum": 1 },
+        "has_costume": { "type": "boolean" },
+        "costume_friction_factor": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "actuators": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "body_part"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "enum": ["servo", "motor", "led_single", "led_rgb", "led_matrix", "speaker", "vibration", "linear_actuator"] },
+          "body_part": { "enum": ["head", "neck", "left_arm", "right_arm", "body", "left_leg", "right_leg", "eyes", "mouth", "tail", "ears"] },
+          "dof": { "type": "integer", "minimum": 1 },
+          "range_min": { "type": "number" },
+          "range_max": { "type": "number" },
+          "unit": { "enum": ["degrees", "mm", "brightness", "hz", "rpm"] },
+          "max_speed": { "type": "number" },
+          "thermal_limit_celsius": { "type": "number" },
+          "noise_db_at_max_speed": { "type": "number" },
+          "stall_torque_nm": { "type": "number" },
+          "backlash_degrees": { "type": "number" }
+        }
+      }
+    },
+    "sensors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "body_part"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "enum": ["touch_binary", "touch_pressure", "proximity_ir", "proximity_ultrasonic", "microphone", "camera", "imu_6dof", "imu_9dof", "temperature", "light_ambient", "button"] },
+          "body_part": { "type": "string" },
+          "sample_rate_hz": { "type": "number" },
+          "range_min": { "type": "number" },
+          "range_max": { "type": "number" }
+        }
+      }
+    },
+    "power": {
+      "type": "object",
+      "required": ["battery_capacity_mah", "voltage_nominal"],
+      "properties": {
+        "battery_capacity_mah": { "type": "number", "minimum": 0 },
+        "voltage_nominal": { "type": "number" },
+        "voltage_cutoff": { "type": "number" },
+        "max_continuous_draw_ma": { "type": "number" },
+        "charging_method": { "enum": ["usb_c", "micro_usb", "wireless_qi", "replaceable_battery"] }
+      }
+    },
+    "believability_profile": {
+      "type": "object",
+      "description": "Declares this hardware's upper bound on believability dimensions.",
+      "required": ["max_emotion_channels", "gesture_fluidity_score"],
+      "properties": {
+        "max_emotion_channels": { "type": "integer", "minimum": 1, "description": "Independent channels that can express emotion simultaneously" },
+        "gesture_fluidity_score": { "type": "number", "minimum": 0, "maximum": 1, "description": "0=on/off only, 1=fully continuous" },
+        "audio_visual_sync_capable": { "type": "boolean" },
+        "idle_animation_capable": { "type": "boolean" },
+        "touch_responsive": { "type": "boolean" }
+      }
+    }
+  }
+}

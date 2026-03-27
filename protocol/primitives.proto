@@ -1,0 +1,130 @@
+// SoulForge Performance Primitive Protocol
+// Inspired by Disney Research "Olaf" (arXiv:2512.16705)
+// Defines standardized messages for character expression on physical toys.
+
+syntax = "proto3";
+package soulforge;
+
+// ── Emotion Primitive ────────────────────────────
+
+enum EmotionType {
+  NEUTRAL = 0;
+  JOY = 1;
+  SADNESS = 2;
+  SURPRISE = 3;
+  ANGER = 4;
+  FEAR = 5;
+  DISGUST = 6;
+  CURIOSITY = 7;
+  AFFECTION = 8;
+  SLEEPY = 9;
+  EXCITED = 10;
+}
+
+message EmotionPrimitive {
+  EmotionType type = 1;
+  float intensity = 2;            // 0.0-1.0
+  uint32 duration_ms = 3;
+  float transition_speed = 4;     // 0.0(gradual)-1.0(instant)
+  EmotionType blend_with = 5;     // secondary emotion for blending
+  float blend_ratio = 6;          // 0.0=primary only, 1.0=secondary only
+}
+
+// ── Attention Primitive ──────────────────────────
+
+enum AttentionMode {
+  IDLE_SCAN = 0;
+  DIRECT_GAZE = 1;
+  AVERTED = 2;
+  TRACKING = 3;
+  DISTRACTED = 4;
+  SEARCHING = 5;
+}
+
+message AttentionPrimitive {
+  AttentionMode mode = 1;
+  float yaw = 2;                  // horizontal angle -180~180
+  float pitch = 3;                // vertical angle -90~90
+  float tracking_speed = 4;       // tracking responsiveness
+  uint32 hold_duration_ms = 5;    // gaze hold time
+  float saccade_frequency = 6;    // micro-saccade rate (Hz)
+}
+
+// ── Gesture Primitive ────────────────────────────
+
+enum GestureType {
+  GESTURE_NONE = 0;
+  WAVE = 1;
+  NOD = 2;
+  SHAKE_HEAD = 3;
+  TILT_HEAD = 4;
+  SHRUG = 5;
+  BOUNCE = 6;
+  WIGGLE = 7;
+  LEAN_FORWARD = 8;
+  LEAN_BACK = 9;
+  HUG_READY = 10;
+  CLAP = 11;
+  POINT = 12;
+}
+
+message GesturePrimitive {
+  GestureType type = 1;
+  float amplitude = 2;            // motion magnitude 0.0-1.0
+  float speed = 3;                // motion speed 0.0-1.0
+  uint32 repeat_count = 4;        // 0 = single execution
+  float expressiveness = 5;       // exaggeration factor 0.0-1.0
+}
+
+// ── Vocalization Primitive ───────────────────────
+
+message PhonemeTiming {
+  string phoneme = 1;
+  uint32 start_ms = 2;
+  uint32 end_ms = 3;
+}
+
+message VocalizationPrimitive {
+  string speech_text = 1;
+  EmotionType emotion_overlay = 2;
+  float volume = 3;               // 0.0-1.0
+  float pitch_shift = 4;          // -1.0(low) ~ 1.0(high)
+  float speed_ratio = 5;          // 0.5-2.0
+  bool sync_gestures = 6;         // auto-sync body with speech
+  repeated PhonemeTiming phonemes = 7;
+}
+
+// ── Rhythm Primitive ─────────────────────────────
+
+message RhythmPrimitive {
+  float bpm = 1;
+  float body_sway_amplitude = 2;
+  float head_bob_intensity = 3;
+  float phase_offset = 4;         // 0-2*pi
+  bool sync_to_audio = 5;
+}
+
+// ── Idle Primitive ───────────────────────────────
+
+message IdlePrimitive {
+  float breathing_rate = 1;           // breaths/min, default 12-20
+  float micro_movement_intensity = 2; // 0.0-1.0
+  float eye_saccade_frequency = 3;    // Hz
+  float fidget_probability = 4;       // probability/second
+  string personality_preset = 5;      // "calm", "restless", "playful"
+}
+
+// ── Composite Primitive (multi-channel) ──────────
+
+message CompositePrimitive {
+  EmotionPrimitive emotion = 1;
+  AttentionPrimitive attention = 2;
+  GesturePrimitive gesture = 3;
+  VocalizationPrimitive vocalization = 4;
+  RhythmPrimitive rhythm = 5;
+  IdlePrimitive idle = 6;
+
+  uint64 timestamp_ms = 10;
+  uint32 priority = 11;
+  string source = 12;               // "llm", "sensor", "ambient"
+}
