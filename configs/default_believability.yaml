@@ -1,0 +1,28 @@
+# SoulForge Believability Metric Weights
+# Ref: Olaf Tab. III weight design
+
+weights:
+  emotion_action_coherence: 4.0   # Most important: emotion-action alignment
+  speech_expression_sync: 3.0     # Mouth moves when speaking
+  attention_continuity: 2.0       # Eyes don't jump randomly
+  motion_smoothness: 3.0          # No jerkiness
+  rhythm_variation: 1.5           # Not too mechanical
+  idle_liveliness: 2.5            # Looks alive when idle
+  reaction_latency: 2.0           # Response speed is natural
+  context_appropriateness: 3.0    # Response makes sense
+  jitter_penalty: 5.0             # Heavy penalty for oscillation
+  impact_noise: 2.5               # Noise from mechanical impacts
+
+# Training config (for RL)
+training:
+  algorithm: PPO
+  learning_rate: 3e-4
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  n_steps: 512
+  batch_size: 64
+  n_epochs: 10
+  net_arch: [256, 256, 256]
+  n_envs: 4
+  total_timesteps: 1000000

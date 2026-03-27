@@ -1,0 +1,15 @@
+# Calm Rabbit — gentle, quiet, soft movements
+personality:
+  extrovert: 30
+  humor: 40
+  warmth: 80
+  curiosity: 60
+  energy: 25
+
+ambient_overrides:
+  breathing_rate_bpm: 12
+  micro_expression_prob: 0.08
+
+emotion_bias:
+  default_emotion: 0   # NEUTRAL
+  default_intensity: 0.2

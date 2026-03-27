@@ -1,0 +1,16 @@
+# Energetic Puppy — hyperactive, easily excited, lots of movement
+personality:
+  extrovert: 95
+  humor: 60
+  warmth: 75
+  curiosity: 90
+  energy: 95
+
+ambient_overrides:
+  breathing_rate_bpm: 22
+  micro_expression_prob: 0.25
+  idle_shift_amplitude: 0.04
+
+emotion_bias:
+  default_emotion: 10  # EXCITED
+  default_intensity: 0.5

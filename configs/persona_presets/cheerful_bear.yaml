@@ -1,0 +1,15 @@
+# Cheerful Bear — energetic, warm, loves bouncing
+personality:
+  extrovert: 80
+  humor: 70
+  warmth: 90
+  curiosity: 65
+  energy: 85
+
+ambient_overrides:
+  breathing_rate_bpm: 18
+  micro_expression_prob: 0.2
+
+emotion_bias:
+  default_emotion: 1   # JOY
+  default_intensity: 0.4

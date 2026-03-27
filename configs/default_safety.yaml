@@ -1,0 +1,22 @@
+# SoulForge Safety Configuration
+# Ref: Olaf Tab. I (Limits), formula (5a-5c)
+
+# CBF gamma values (stiffness — higher = harder constraint)
+joint_gamma: 20.0        # fast variable (ref: Olaf γ_q = 20)
+velocity_gamma: 5.0
+thermal_gamma: 0.3       # slow variable
+battery_gamma: 0.5
+volume_gamma: 1.0
+
+# Safety margins
+joint_margin: 2.0        # degrees inside physical limit (ref: Olaf q_m = 0.1 rad ≈ 5.7°)
+thermal_margin: 5.0      # °C below max
+
+# Thermal model (ref: Olaf Tab. II)
+thermal_alpha: 0.025     # heat dissipation (Olaf: 0.038, plush toy: lower)
+thermal_beta: 0.5        # torque-to-heat (Olaf: 0.377)
+thermal_ambient: 35.0    # °C inside plush (Olaf: 43.94°C)
+
+# Limits
+max_volume_db: 65
+max_temperature_celsius: 70
