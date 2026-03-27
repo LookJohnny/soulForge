@@ -1,19 +1,32 @@
 # SoulForge Believability Metric Weights
-# Ref: Olaf Tab. III weight design
+# Optimized for: Expressive Toy (round display eyes + voice, no limbs)
 
+# Product form: "expressive_toy" or "full_body"
+product_form: expressive_toy
+
+# === EXPRESSIVE TOY weights (round display eyes + voice + dialogue) ===
+# 80% weight on eyes + voice, 15% on general naturalness, 5% on physical
 weights:
-  emotion_action_coherence: 4.0   # Most important: emotion-action alignment
-  speech_expression_sync: 3.0     # Mouth moves when speaking
-  attention_continuity: 2.0       # Eyes don't jump randomly
-  motion_smoothness: 3.0          # No jerkiness
-  rhythm_variation: 1.5           # Not too mechanical
-  idle_liveliness: 2.5            # Looks alive when idle
-  reaction_latency: 2.0           # Response speed is natural
-  context_appropriateness: 3.0    # Response makes sense
-  jitter_penalty: 5.0             # Heavy penalty for oscillation
-  impact_noise: 2.5               # Noise from mechanical impacts
+  # PRIMARY: Eyes + Voice + Dialogue
+  eye_emotion_coherence: 6.0       # Do the eyes match the emotion?
+  eye_expression_richness: 4.0     # Are the eyes alive (not frozen)?
+  voice_emotion_match: 5.0         # Does voice tone/speed/pitch match mood?
+  dialogue_timing: 4.0             # Is response timing natural?
+  emotion_action_coherence: 3.0    # Overall expression-emotion alignment
 
-# Training config (for RL)
+  # SECONDARY: General naturalness
+  attention_continuity: 2.0        # Eye gaze isn't erratic
+  idle_liveliness: 3.0             # Looks alive when idle (blinks, pupil drift)
+  context_appropriateness: 2.0     # Response fits the trigger
+  reaction_latency: 1.5            # Reaction speed is natural
+
+  # MINOR: Physical (reduced — no limbs)
+  motion_smoothness: 0.5           # Display transition smoothness
+  jitter_penalty: 1.0              # Penalize display flicker
+  rhythm_variation: 0.5
+  impact_noise: 0.0                # No mechanical noise
+
+# Training config
 training:
   algorithm: PPO
   learning_rate: 3e-4
@@ -26,3 +39,20 @@ training:
   net_arch: [256, 256, 256]
   n_envs: 4
   total_timesteps: 1000000
+
+# Eye display parameters
+eye_display:
+  # Channel definitions for round display
+  shape_range: [-1.0, 1.0]     # -1=sad arc, 0=neutral, +1=happy arc
+  size_range: [-1.0, 1.0]      # -1=squint, 0=normal, +1=wide open
+  pupil_range: [-1.0, 1.0]     # -1=constricted, 0=normal, +1=dilated
+  eyelid_range: [-1.0, 1.0]    # -1=closed, 0=half, +1=fully open
+  color_warmth: [-1.0, 1.0]    # -1=cool blue, 0=white, +1=warm amber
+  blink_interval_s: [2.0, 8.0] # random blink interval range
+  blink_duration_ms: 150        # single blink duration
+
+# Voice expression parameters
+voice:
+  speed_range: [0.7, 1.3]      # speech rate multiplier
+  pitch_range: [-0.15, 0.15]   # pitch shift
+  volume_range: [0.3, 1.0]     # volume level

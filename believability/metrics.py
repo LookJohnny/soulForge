@@ -19,19 +19,34 @@ import math
 from dataclasses import dataclass
 
 
-# ── Emotion-action expected directions ────────────
+# ── Emotion-expression expected directions ────────
 # Maps EmotionType int → expected channel directions
-# Positive = channel should increase, negative = decrease
+# Focus on EYE DISPLAY + VOICE parameters (no limb movement)
+# Channels: eye_shape, eye_size, eye_color_warmth, eyelid, pupil_size,
+#           voice_speed, voice_pitch, voice_volume, led_brightness
 _EMOTION_EXPECTED: dict[int, dict[str, float]] = {
-    1:  {"head_pitch": 1, "body_pitch": 0.3, "led_brightness": 1},        # JOY
-    2:  {"head_pitch": -1, "body_pitch": -0.3, "led_brightness": -0.5},   # SADNESS
-    3:  {"head_pitch": 1, "eyelid": 1, "body_pitch": -0.5},              # SURPRISE
-    4:  {"head_pitch": -0.5, "body_pitch": 0.3, "led_brightness": 0.3},  # ANGER
-    5:  {"head_pitch": -0.3, "body_pitch": -0.5},                         # FEAR
-    7:  {"head_pitch": 0.5, "eye_yaw": 0.3},                             # CURIOSITY
-    8:  {"head_pitch": 0.3, "led_brightness": 0.3},                       # AFFECTION
-    9:  {"head_pitch": -0.5, "eyelid": -0.5, "led_brightness": -0.5},    # SLEEPY
-    10: {"head_pitch": 0.8, "body_pitch": 0.5, "led_brightness": 1},     # EXCITED
+    1:  {"eye_shape": 0.8, "eye_size": 0.6, "eye_color_warmth": 1.0, "eyelid": 0.7,
+         "pupil_size": 0.3, "voice_speed": 0.3, "voice_pitch": 0.4, "voice_volume": 0.3,
+         "led_brightness": 0.8},                                                         # JOY
+    2:  {"eye_shape": -0.6, "eye_size": -0.3, "eye_color_warmth": -0.8, "eyelid": -0.4,
+         "pupil_size": -0.2, "voice_speed": -0.5, "voice_pitch": -0.3, "voice_volume": -0.4,
+         "led_brightness": -0.5},                                                        # SADNESS
+    3:  {"eye_shape": 0.2, "eye_size": 1.0, "eyelid": 1.0, "pupil_size": 0.8,
+         "voice_speed": 0.2, "voice_pitch": 0.6, "voice_volume": 0.3},                  # SURPRISE
+    4:  {"eye_shape": -0.8, "eye_size": 0.3, "eye_color_warmth": -0.5, "eyelid": -0.3,
+         "pupil_size": -0.4, "voice_speed": 0.2, "voice_pitch": -0.2, "voice_volume": 0.5},  # ANGER
+    5:  {"eye_shape": -0.3, "eye_size": 0.5, "eyelid": 0.6, "pupil_size": 0.6,
+         "voice_speed": 0.4, "voice_pitch": 0.3, "voice_volume": -0.3},                 # FEAR
+    7:  {"eye_shape": 0.3, "eye_size": 0.5, "pupil_size": 0.5, "eye_color_warmth": 0.3,
+         "voice_speed": 0.1, "voice_pitch": 0.2},                                       # CURIOSITY
+    8:  {"eye_shape": 0.9, "eye_size": 0.3, "eye_color_warmth": 0.8, "eyelid": 0.5,
+         "voice_speed": -0.3, "voice_pitch": 0.1, "voice_volume": -0.2},                # AFFECTION
+    9:  {"eye_shape": 0.1, "eye_size": -0.5, "eyelid": -0.8, "pupil_size": -0.3,
+         "voice_speed": -0.6, "voice_pitch": -0.4, "voice_volume": -0.5,
+         "led_brightness": -0.6},                                                        # SLEEPY
+    10: {"eye_shape": 0.7, "eye_size": 0.8, "eye_color_warmth": 0.9, "pupil_size": 0.6,
+         "voice_speed": 0.5, "voice_pitch": 0.5, "voice_volume": 0.5,
+         "led_brightness": 1.0},                                                         # EXCITED
 }
 
 # ── Reaction latency expected ranges (ms) ─────────
@@ -336,9 +351,176 @@ class BelievabilityMetrics:
         normalized = total_impact / (len(velocity_history) * dv_max_sq)
         return max(0.0, 1.0 - normalized * 5)
 
+    # ── Dimension 6: Expression Quality (eyes + voice) ──
+
+    @staticmethod
+    def eye_expression_richness(
+        eye_channels: dict[str, list[float]],
+        window_seconds: float = 5.0,
+        dt: float = 0.02,
+    ) -> float:
+        """Eye display expression richness.
+
+        Rewards: dynamic eye shape/size/pupil changes that correlate with emotion.
+        Penalizes: frozen eyes, or chaotic random changes.
+
+        Channels: eye_shape, eye_size, pupil_size, eyelid, eye_color_warmth
+
+        Returns: 0.0-1.0
+        """
+        if not eye_channels:
+            return 0.3
+
+        n = int(window_seconds / dt)
+        active = 0
+        total = len(eye_channels)
+
+        for ch, hist in eye_channels.items():
+            recent = hist[-n:] if len(hist) > n else hist
+            if len(recent) < 5:
+                continue
+            # Movement range
+            val_range = max(recent) - min(recent)
+            if val_range > 0.05:
+                active += 1
+
+        if total == 0:
+            return 0.3
+
+        activity = active / total
+
+        # Sweet spot: 40-80% of eye channels should be moving
+        if activity < 0.2:
+            return 0.2  # too frozen
+        elif activity > 0.9:
+            return 0.6  # too chaotic
+        else:
+            return min(1.0, 0.4 + activity * 0.7)
+
+    @staticmethod
+    def voice_emotion_match(
+        emotion_type: int,
+        voice_speed: float,
+        voice_pitch: float,
+        voice_volume: float,
+    ) -> float:
+        """Voice parameter-emotion consistency.
+
+        Checks if voice speed/pitch/volume match the expected direction
+        for the current emotion.
+
+        Returns: 0.0-1.0
+        """
+        expected = _EMOTION_EXPECTED.get(emotion_type, {})
+        if not expected:
+            return 0.5
+
+        matches = 0
+        total = 0
+
+        for param, actual in [("voice_speed", voice_speed), ("voice_pitch", voice_pitch), ("voice_volume", voice_volume)]:
+            exp = expected.get(param, 0)
+            if abs(exp) < 0.05:
+                continue
+            total += 1
+            # Same direction = match
+            if exp * actual > 0:
+                matches += 1
+            elif abs(actual) < 0.1:
+                matches += 0.5  # neutral is half credit
+
+        if total == 0:
+            return 0.6
+        return min(1.0, matches / total)
+
+    @staticmethod
+    def dialogue_timing(
+        response_length_chars: int,
+        thinking_time_ms: float,
+        emotion_intensity: float,
+    ) -> float:
+        """Dialogue response timing naturalness.
+
+        Natural patterns:
+        - Short responses (1-10 chars) → fast (200-800ms)
+        - Long responses (30+ chars) → longer thinking (500-2000ms)
+        - High emotion → faster response
+        - Low emotion → can be slower
+
+        Returns: 0.0-1.0
+        """
+        # Expected thinking time based on response length
+        expected_ms = 300 + response_length_chars * 30
+        # Emotion modifier: high emotion = faster
+        expected_ms *= max(0.5, 1.0 - emotion_intensity * 0.4)
+
+        # Gaussian around expected
+        sigma = expected_ms * 0.4
+        diff = abs(thinking_time_ms - expected_ms)
+        score = math.exp(-0.5 * (diff / max(sigma, 1)) ** 2)
+        return max(0.0, min(1.0, score))
+
+    @staticmethod
+    def eye_emotion_coherence(
+        emotion_type: int,
+        emotion_intensity: float,
+        eye_channels: dict[str, float],
+    ) -> float:
+        """Eye expression-emotion alignment.
+
+        More specific than generic emotion_action_coherence:
+        checks eye_shape, eye_size, pupil_size against emotion expectations.
+
+        Returns: 0.0-1.0
+        """
+        expected = _EMOTION_EXPECTED.get(emotion_type, {})
+        eye_keys = {"eye_shape", "eye_size", "pupil_size", "eyelid", "eye_color_warmth"}
+        relevant = {k: v for k, v in expected.items() if k in eye_keys}
+
+        if not relevant or not eye_channels:
+            return 0.5
+
+        dot = 0.0
+        mag_exp = 0.0
+        mag_act = 0.0
+
+        for ch, exp_dir in relevant.items():
+            act_val = eye_channels.get(ch, 0.0)
+            weighted_exp = exp_dir * emotion_intensity
+            dot += weighted_exp * act_val
+            mag_exp += weighted_exp ** 2
+            mag_act += act_val ** 2
+
+        if mag_exp < 1e-6 or mag_act < 1e-6:
+            return 0.5
+
+        cosine = dot / (math.sqrt(mag_exp) * math.sqrt(mag_act))
+        return max(0.0, min(1.0, (cosine + 1.0) / 2.0))
+
     # ── Composite score ───────────────────────────
 
-    DEFAULT_WEIGHTS: dict[str, float] = {
+    # Weight presets for different product forms
+    WEIGHTS_EXPRESSIVE_TOY = {
+        # === PRIMARY: Eyes + Voice + Dialogue (80% of total weight) ===
+        "eye_emotion_coherence": 6.0,       # eyes match emotion
+        "eye_expression_richness": 4.0,     # eyes are alive, not frozen
+        "voice_emotion_match": 5.0,         # voice tone matches mood
+        "dialogue_timing": 4.0,             # response timing feels natural
+        "emotion_action_coherence": 3.0,    # overall emotion-expression match
+        # === SECONDARY: General naturalness (15%) ===
+        "attention_continuity": 2.0,        # gaze isn't erratic
+        "idle_liveliness": 3.0,             # looks alive when idle (eye blinks, pupil drift)
+        "context_appropriateness": 2.0,     # response fits the trigger
+        "reaction_latency": 1.5,            # reaction speed is natural
+        # === MINOR: Physical (5%, reduced from original) ===
+        "motion_smoothness": 0.5,           # barely matters without limbs
+        "jitter_penalty": 1.0,              # still penalize display flicker
+        "rhythm_variation": 0.5,
+        "impact_noise": 0.0,                # no mechanical noise
+    }
+
+    # Original weights kept for robots with limbs
+    WEIGHTS_FULL_BODY = {
         "emotion_action_coherence": 4.0,
         "attention_continuity": 2.0,
         "motion_smoothness": 3.0,
@@ -349,6 +531,9 @@ class BelievabilityMetrics:
         "jitter_penalty": 5.0,
         "impact_noise": 2.5,
     }
+
+    # Default: expressive toy (round display eyes + voice)
+    DEFAULT_WEIGHTS = WEIGHTS_EXPRESSIVE_TOY
 
     def compute_total_score(self, state: dict,
                              weights: dict[str, float] | None = None) -> tuple[float, dict[str, float]]:

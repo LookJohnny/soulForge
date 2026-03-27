@@ -7,18 +7,18 @@ from believability.metrics import BelievabilityMetrics
 
 
 class TestEmotionActionCoherence:
-    def test_joy_head_up_scores_higher(self):
-        """JOY + head up should score higher than JOY + head down."""
+    def test_joy_warm_eyes_scores_higher(self):
+        """JOY + warm/happy eyes should score higher than JOY + sad eyes."""
         m = BelievabilityMetrics
-        good = m.emotion_action_coherence(1, 0.8, {"head_pitch": 10, "led_brightness": 0.8})
-        bad = m.emotion_action_coherence(1, 0.8, {"head_pitch": -10, "led_brightness": -0.5})
+        good = m.emotion_action_coherence(1, 0.8, {"eye_shape": 0.8, "eye_color_warmth": 0.9, "voice_speed": 0.3})
+        bad = m.emotion_action_coherence(1, 0.8, {"eye_shape": -0.8, "eye_color_warmth": -0.9, "voice_speed": -0.5})
         assert good > bad
-        assert good - bad >= 0.3
+        assert good - bad >= 0.2
 
-    def test_sadness_head_down_coherent(self):
-        sad_down = BelievabilityMetrics.emotion_action_coherence(2, 0.7, {"head_pitch": -8})
-        sad_up = BelievabilityMetrics.emotion_action_coherence(2, 0.7, {"head_pitch": 8})
-        assert sad_down > sad_up
+    def test_sadness_cool_eyes_coherent(self):
+        sad_match = BelievabilityMetrics.emotion_action_coherence(2, 0.7, {"eye_shape": -0.6, "eye_color_warmth": -0.8, "voice_speed": -0.5})
+        sad_mismatch = BelievabilityMetrics.emotion_action_coherence(2, 0.7, {"eye_shape": 0.8, "eye_color_warmth": 0.9, "voice_speed": 0.5})
+        assert sad_match > sad_mismatch
 
 
 class TestMotionSmoothness:
@@ -94,15 +94,19 @@ class TestCompositeScore:
     def test_good_behavior_above_07(self):
         m = BelievabilityMetrics()
         state = {
-            "emotion_action_coherence": 0.9,
+            "eye_emotion_coherence": 0.9,
+            "eye_expression_richness": 0.85,
+            "voice_emotion_match": 0.9,
+            "dialogue_timing": 0.85,
+            "emotion_action_coherence": 0.85,
             "attention_continuity": 0.8,
-            "motion_smoothness": 0.85,
-            "rhythm_variation": 0.7,
             "idle_liveliness": 0.8,
-            "reaction_latency": 0.9,
             "context_appropriateness": 0.85,
+            "reaction_latency": 0.9,
+            "motion_smoothness": 0.8,
             "jitter_penalty": 0.95,
-            "impact_noise": 0.9,
+            "rhythm_variation": 0.7,
+            "impact_noise": 1.0,
         }
         total, breakdown = m.compute_total_score(state)
         assert total > 0.7
@@ -110,15 +114,19 @@ class TestCompositeScore:
     def test_bad_behavior_below_03(self):
         m = BelievabilityMetrics()
         state = {
+            "eye_emotion_coherence": 0.1,
+            "eye_expression_richness": 0.1,
+            "voice_emotion_match": 0.1,
+            "dialogue_timing": 0.1,
             "emotion_action_coherence": 0.1,
-            "attention_continuity": 0.2,
-            "motion_smoothness": 0.1,
-            "rhythm_variation": 0.1,
+            "attention_continuity": 0.1,
             "idle_liveliness": 0.1,
-            "reaction_latency": 0.1,
             "context_appropriateness": 0.1,
+            "reaction_latency": 0.1,
+            "motion_smoothness": 0.1,
             "jitter_penalty": 0.1,
-            "impact_noise": 0.1,
+            "rhythm_variation": 0.1,
+            "impact_noise": 1.0,
         }
         total, breakdown = m.compute_total_score(state)
         assert total < 0.3

@@ -178,31 +178,37 @@ class BelievabilityEnv(gym.Env if HAS_GYM else object):
         }
 
     def _decode_action(self, action: np.ndarray) -> np.ndarray:
-        """Decode 24-dim action vector into channel outputs."""
+        """Decode 24-dim action vector into channel outputs.
+
+        Channel layout optimized for expressive toy (round display eyes + voice):
+        [0-4]  Eye display: shape, size, pupil_size, eyelid, color_warmth
+        [5-7]  Voice: speed, pitch, volume
+        [8-9]  Eye gaze: yaw, pitch
+        [10]   LED brightness
+        [11]   Mouth shape (for display)
+        [12-19] Reserved (body/limbs, unused for expressive toy)
+        """
         output = np.zeros(N_CHANNELS, dtype=np.float32)
 
-        # Action dims: [0-10] emotion one-hot → not directly a channel
-        # [11] emotion intensity
-        # [12-14] head_yaw, head_pitch, head_roll
-        # [15-16] body_pitch, body_roll
-        # [17-18] left_arm, right_arm
-        # [19-20] eye_yaw, eye_pitch
-        # [21] eyelid
-        # [22] led_brightness
-        # [23] mouth
+        # Eye display channels (primary)
+        output[0] = (action[0] - 0.5) * 2   # eye_shape (-1=sad, +1=happy arc)
+        output[1] = (action[1] - 0.5) * 2   # eye_size (-1=squint, +1=wide)
+        output[2] = (action[2] - 0.5) * 2   # pupil_size (-1=small, +1=dilated)
+        output[3] = (action[3] - 0.5) * 2   # eyelid (-1=closed, +1=open wide)
+        output[4] = (action[4] - 0.5) * 2   # eye_color_warmth (-1=cool blue, +1=warm amber)
 
-        output[0] = (action[12] - 0.5) * 2  # head_yaw [-1, 1]
-        output[1] = (action[13] - 0.5) * 2  # head_pitch
-        output[2] = (action[14] - 0.5) * 2  # head_roll
-        output[3] = (action[15] - 0.5) * 2  # body_pitch
-        output[4] = (action[16] - 0.5) * 2  # body_roll
-        output[5] = action[17] * 2 - 1      # left_arm
-        output[6] = action[18] * 2 - 1      # right_arm
-        output[7] = action[22]               # led_brightness
-        output[8] = (action[19] - 0.5) * 2  # eye_yaw
-        output[9] = (action[20] - 0.5) * 2  # eye_pitch
-        output[10] = action[21]              # eyelid
-        output[11] = (action[23] - 0.5) * 2 # mouth
+        # Voice channels
+        output[5] = (action[5] - 0.5) * 2   # voice_speed (-1=slow, +1=fast)
+        output[6] = (action[6] - 0.5) * 2   # voice_pitch (-1=low, +1=high)
+        output[7] = (action[7] - 0.5) * 2   # voice_volume (-1=whisper, +1=loud)
+
+        # Eye gaze (for tracking/attention)
+        output[8] = (action[8] - 0.5) * 2   # eye_yaw
+        output[9] = (action[9] - 0.5) * 2   # eye_pitch
+
+        # Display
+        output[10] = action[10]              # led_brightness (0-1)
+        output[11] = (action[11] - 0.5) * 2 # mouth_shape
 
         return output
 
@@ -225,52 +231,83 @@ class BelievabilityEnv(gym.Env if HAS_GYM else object):
                 self._sensor_state[:] = 0
 
     def _compute_reward(self, action: np.ndarray, channels: np.ndarray) -> tuple[float, dict]:
-        """Compute believability reward."""
-        ch_dict = {f"ch_{i}": float(channels[i]) for i in range(N_CHANNELS)}
+        """Compute believability reward — focused on eyes + voice + dialogue."""
 
-        # Sub-metrics
+        # Eye display channels
+        eye_channels = {
+            "eye_shape": float(channels[0]),
+            "eye_size": float(channels[1]),
+            "pupil_size": float(channels[2]),
+            "eyelid": float(channels[3]),
+            "eye_color_warmth": float(channels[4]),
+        }
+
+        # Voice channels
+        voice_speed = float(channels[5])
+        voice_pitch = float(channels[6])
+        voice_volume = float(channels[7])
+
+        # === PRIMARY: Eye + Voice metrics ===
+
+        # Eye-emotion coherence (are the eyes expressing the right emotion?)
+        eye_coherence = self.metrics.eye_emotion_coherence(
+            self._current_emotion, self._emotion_intensity, eye_channels,
+        )
+
+        # Eye expression richness (are the eyes alive, not frozen?)
+        eye_history = {
+            f"ch_{i}": self._channel_history[:, i].tolist()
+            for i in range(5)  # eye channels 0-4
+        }
+        eye_richness = self.metrics.eye_expression_richness(eye_history, dt=self._dt)
+
+        # Voice-emotion match
+        voice_match = self.metrics.voice_emotion_match(
+            self._current_emotion, voice_speed, voice_pitch, voice_volume,
+        )
+
+        # Overall emotion-expression coherence (generic)
         coherence = self.metrics.emotion_action_coherence(
             self._current_emotion, self._emotion_intensity,
-            {"head_pitch": float(channels[1]), "led_brightness": float(channels[7]),
-             "body_pitch": float(channels[3])},
+            {**eye_channels, "voice_speed": voice_speed, "voice_pitch": voice_pitch,
+             "led_brightness": float(channels[10])},
         )
 
-        # Motion smoothness (from history)
-        history = self._channel_history[:, 1].tolist()  # head_pitch channel
-        smoothness = self.metrics.motion_smoothness(history, self._dt)
+        # === SECONDARY: General naturalness ===
 
-        # Jitter
-        jitter = self.metrics.jitter_penalty(history, self._dt)
-
-        # Attention continuity
         attention = self.metrics.attention_continuity(self._gaze_history)
 
-        # Idle liveliness (all channels)
-        idle = self.metrics.idle_liveliness(
-            {f"ch_{i}": self._channel_history[:, i].tolist() for i in range(min(5, N_CHANNELS))},
-            dt=self._dt,
-        )
+        eye_all_history = {
+            f"ch_{i}": self._channel_history[:, i].tolist()
+            for i in range(8)  # eye + voice channels
+        }
+        idle = self.metrics.idle_liveliness(eye_all_history, dt=self._dt)
+
+        # Eye smoothness (no display flicker)
+        eye_shape_hist = self._channel_history[:, 0].tolist()
+        smoothness = self.metrics.motion_smoothness(eye_shape_hist, self._dt)
+        jitter = self.metrics.jitter_penalty(eye_shape_hist, self._dt)
 
         state = {
+            "eye_emotion_coherence": eye_coherence,
+            "eye_expression_richness": eye_richness,
+            "voice_emotion_match": voice_match,
+            "dialogue_timing": 0.7,  # computed at dialogue events, default good
             "emotion_action_coherence": coherence,
             "attention_continuity": attention,
-            "motion_smoothness": smoothness,
-            "rhythm_variation": 0.5,  # hard to compute per-step
             "idle_liveliness": idle,
-            "reaction_latency": 0.7,  # would need event tracking
             "context_appropriateness": 0.6,
+            "reaction_latency": 0.7,
+            "motion_smoothness": smoothness,
             "jitter_penalty": jitter,
-            "impact_noise": 0.8,
+            "rhythm_variation": 0.5,
+            "impact_noise": 1.0,  # no mechanical parts
         }
 
         total, breakdown = self.metrics.compute_total_score(state)
 
-        # Safety bonus: battery and temperature OK
-        safety_bonus = 0.1 if self._hw_state[0] > 0.2 and self._hw_state[1] < 0.8 else -0.1
-
-        # Survival reward (ref Olaf Tab. I: survival = 1.0)
+        safety_bonus = 0.1 if self._hw_state[0] > 0.2 else -0.1
         survival = 0.05
-
         reward = float(total) + safety_bonus + survival
 
         info = {"believability_score": total, "sub_metrics": breakdown,
