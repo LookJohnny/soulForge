@@ -299,7 +299,7 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
     from ai_core.services.time_awareness import build_time_prompt
     time_context = build_time_prompt(rel_state.get("last_interaction_date"))
 
-    # 7. Build prompt
+    # 7. Build prompt (plain text mode for device/TTS pipelines)
     builder = await get_prompt_builder()
     try:
         prompt_result = await builder.build(
@@ -314,6 +314,7 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
             proactive_trigger=proactive_line,
             time_context=time_context,
             touch_context=touch_prompt,
+            structured_output=False,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e

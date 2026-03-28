@@ -126,6 +126,7 @@ class PromptBuilder:
         time_context: str | None = None,
         scene: str | None = None,
         touch_context: str | None = None,
+        structured_output: bool = True,
     ) -> dict:
         """Build complete system prompt and voice config.
 
@@ -136,6 +137,8 @@ class PromptBuilder:
             relationship_stage: Dynamic stage (STRANGER→BESTFRIEND) for tone control.
             proactive_trigger: Optional opening line for the character to say.
             time_context: Time-of-day + absence duration context.
+            structured_output: If True, prompt asks for JSON output. If False,
+                plain text dialogue only (for device/TTS pipelines).
 
         Returns:
             {"system_prompt": str, "voice_id": str|None, "voice_speed": float, ...}
@@ -271,6 +274,7 @@ class PromptBuilder:
                 base.get("response_length", "SHORT"), RESPONSE_LENGTH_MAP["SHORT"]
             ),
             forbidden=base.get("forbidden", []),
+            structured_output=structured_output,
             rag_context=rag_context,
         )
 
