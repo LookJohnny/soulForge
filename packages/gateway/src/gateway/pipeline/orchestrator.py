@@ -1,7 +1,14 @@
-"""Pipeline orchestrator - calls ai-core service for the full ASR->LLM->TTS chain."""
+"""Pipeline orchestrator - calls ai-core service for the full ASR->LLM->TTS chain.
+
+Supports both blocking (/pipeline/chat) and streaming (/pipeline/chat/stream) modes.
+Streaming mode yields per-sentence text+audio for low-latency playback.
+"""
 
 import base64
+import json
 import logging
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
 
 import httpx
 
@@ -9,6 +16,19 @@ from gateway.config import settings
 from gateway.session import Session
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class StreamChunk:
+    """A single sentence chunk from the streaming pipeline."""
+    text: str
+    audio_data: bytes | None
+    index: int
+    is_done: bool = False
+    # Only populated on the final 'done' chunk
+    full_text: str = ""
+    emotion: str = ""
+    latency_ms: int = 0
 
 
 class PipelineOrchestrator:
@@ -24,6 +44,13 @@ class PipelineOrchestrator:
             base_url=settings.ai_core_url,
             timeout=30.0,
             transport=transport,
+            headers=headers,
+        )
+        # Separate client for streaming with longer timeout
+        self.stream_client = httpx.AsyncClient(
+            base_url=settings.ai_core_url,
+            timeout=httpx.Timeout(60.0, connect=10.0),
+            transport=httpx.AsyncHTTPTransport(),
             headers=headers,
         )
 
@@ -134,5 +161,102 @@ class PipelineOrchestrator:
 
         return result
 
+    async def process_audio_stream(
+        self, session: Session, audio_data: bytes
+    ) -> AsyncIterator[StreamChunk]:
+        """Stream audio through AI pipeline, yielding per-sentence chunks."""
+        if not session.character_id:
+            raise ValueError(f"No character assigned to device {session.device_id}")
+
+        payload = {
+            "character_id": session.character_id,
+            "end_user_id": session.end_user_id,
+            "device_id": session.device_id,
+            "session_id": session.session_id,
+            "audio_data": base64.b64encode(audio_data).decode(),
+        }
+
+        headers = {}
+        if session.brand_id:
+            headers["X-Brand-Id"] = session.brand_id
+
+        async with self.stream_client.stream(
+            "POST", "/pipeline/chat/stream", json=payload, headers=headers,
+        ) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data = json.loads(line[6:])
+
+                if data["type"] == "sentence":
+                    audio = None
+                    if data.get("audio_data"):
+                        audio = base64.b64decode(data["audio_data"])
+                    yield StreamChunk(
+                        text=data["text"],
+                        audio_data=audio,
+                        index=data["index"],
+                    )
+                elif data["type"] == "done":
+                    yield StreamChunk(
+                        text="",
+                        audio_data=None,
+                        index=-1,
+                        is_done=True,
+                        full_text=data.get("full_text", ""),
+                        emotion=data.get("emotion", ""),
+                        latency_ms=data.get("latency_ms", 0),
+                    )
+
+    async def process_text_stream(
+        self, session: Session, text: str
+    ) -> AsyncIterator[StreamChunk]:
+        """Stream text through AI pipeline, yielding per-sentence chunks."""
+        if not session.character_id:
+            raise ValueError(f"No character assigned to device {session.device_id}")
+
+        payload = {
+            "character_id": session.character_id,
+            "end_user_id": session.end_user_id,
+            "device_id": session.device_id,
+            "session_id": session.session_id,
+            "text_input": text,
+        }
+
+        headers = {}
+        if session.brand_id:
+            headers["X-Brand-Id"] = session.brand_id
+
+        async with self.stream_client.stream(
+            "POST", "/pipeline/chat/stream", json=payload, headers=headers,
+        ) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data = json.loads(line[6:])
+
+                if data["type"] == "sentence":
+                    audio = None
+                    if data.get("audio_data"):
+                        audio = base64.b64decode(data["audio_data"])
+                    yield StreamChunk(
+                        text=data["text"],
+                        audio_data=audio,
+                        index=data["index"],
+                    )
+                elif data["type"] == "done":
+                    yield StreamChunk(
+                        text="",
+                        audio_data=None,
+                        index=-1,
+                        is_done=True,
+                        full_text=data.get("full_text", ""),
+                        emotion=data.get("emotion", ""),
+                        latency_ms=data.get("latency_ms", 0),
+                    )
+
     async def close(self):
         await self.client.aclose()
+        await self.stream_client.aclose()

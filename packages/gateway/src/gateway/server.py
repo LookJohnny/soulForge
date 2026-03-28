@@ -158,8 +158,9 @@ class WebSocketServer:
             pass
 
     async def _process_text_and_respond(self, ws, adapter, session, text: str):
-        """Process text input through AI pipeline and send response back."""
+        """Process text input through AI pipeline with streaming response."""
         try:
+            # Send thinking indicator
             thinking = OutboundMessage(
                 type=MessageType.TEXT,
                 payload="",
@@ -167,21 +168,29 @@ class WebSocketServer:
             )
             await ws.send_text(await adapter.encode(thinking))
 
-            result = await self.orchestrator.process_text(session, text)
+            full_text = ""
+            async for chunk in self.orchestrator.process_text_stream(session, text):
+                if chunk.is_done:
+                    full_text = chunk.full_text or full_text
+                    break
 
-            text_out = OutboundMessage(
-                type=MessageType.TEXT,
-                payload=result["text"],
-                metadata={"state": "sentence"},
-            )
-            await ws.send_text(await adapter.encode(text_out))
+                # Send each sentence immediately
+                text_out = OutboundMessage(
+                    type=MessageType.TEXT,
+                    payload=chunk.text,
+                    metadata={"state": "sentence"},
+                )
+                await ws.send_text(await adapter.encode(text_out))
+                full_text += chunk.text
 
-            if result.get("audio_data"):
-                audio_out = AudioHandler.make_audio_response(result["audio_data"])
-                raw = await adapter.encode(audio_out)
-                if isinstance(raw, bytes):
-                    await ws.send_bytes(raw)
+                # Send audio for this sentence
+                if chunk.audio_data:
+                    audio_out = AudioHandler.make_audio_response(chunk.audio_data)
+                    raw = await adapter.encode(audio_out)
+                    if isinstance(raw, bytes):
+                        await ws.send_bytes(raw)
 
+            # Send stop signal
             done = OutboundMessage(
                 type=MessageType.TEXT,
                 payload="",
@@ -193,7 +202,7 @@ class WebSocketServer:
                 session.session_id, "user", text
             )
             await self.session_manager.add_to_history(
-                session.session_id, "assistant", result["text"]
+                session.session_id, "assistant", full_text
             )
 
         except Exception:
@@ -234,8 +243,9 @@ class WebSocketServer:
             logger.exception("gateway.touch_error")
 
     async def _process_and_respond(self, ws, adapter, session, audio_data: bytes):
-        """Process audio through AI pipeline and send response back."""
+        """Process audio through AI pipeline with streaming response."""
         try:
+            # Send thinking indicator immediately
             thinking = OutboundMessage(
                 type=MessageType.TEXT,
                 payload="",
@@ -243,21 +253,28 @@ class WebSocketServer:
             )
             await ws.send_text(await adapter.encode(thinking))
 
-            result = await self.orchestrator.process_audio(session, audio_data)
+            full_text = ""
+            async for chunk in self.orchestrator.process_audio_stream(session, audio_data):
+                if chunk.is_done:
+                    full_text = chunk.full_text or full_text
+                    break
 
-            text_out = OutboundMessage(
-                type=MessageType.TEXT,
-                payload=result["text"],
-                metadata={"state": "sentence"},
-            )
-            await ws.send_text(await adapter.encode(text_out))
+                # Send each sentence text + audio immediately as it's ready
+                text_out = OutboundMessage(
+                    type=MessageType.TEXT,
+                    payload=chunk.text,
+                    metadata={"state": "sentence"},
+                )
+                await ws.send_text(await adapter.encode(text_out))
+                full_text += chunk.text
 
-            if result.get("audio_data"):
-                audio_out = AudioHandler.make_audio_response(result["audio_data"])
-                raw = await adapter.encode(audio_out)
-                if isinstance(raw, bytes):
-                    await ws.send_bytes(raw)
+                if chunk.audio_data:
+                    audio_out = AudioHandler.make_audio_response(chunk.audio_data)
+                    raw = await adapter.encode(audio_out)
+                    if isinstance(raw, bytes):
+                        await ws.send_bytes(raw)
 
+            # Send stop signal
             done = OutboundMessage(
                 type=MessageType.TEXT,
                 payload="",
@@ -266,7 +283,7 @@ class WebSocketServer:
             await ws.send_text(await adapter.encode(done))
 
             await self.session_manager.add_to_history(
-                session.session_id, "assistant", result["text"]
+                session.session_id, "assistant", full_text
             )
 
         except Exception:

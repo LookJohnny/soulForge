@@ -21,10 +21,15 @@ class ProtocolRegistry:
         return None
 
     async def detect(self, ws: WebSocket, initial_data: bytes | str) -> ProtocolAdapter | None:
-        """Auto-detect protocol from initial frame."""
+        """Auto-detect protocol from initial frame.
+
+        Returns a fresh adapter instance so per-connection state (e.g. audio
+        format negotiated during handshake) is not shared across devices.
+        """
         for adapter in self._adapters:
             if await adapter.detect(ws, initial_data):
-                return adapter
+                # Create a fresh instance of the same adapter class
+                return adapter.__class__()
         return None
 
     @property

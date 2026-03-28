@@ -76,8 +76,67 @@ class SessionManager:
             logger.warning("session.db_lookup_failed: %s", e)
             return None
 
+    async def _auto_register_device(self, device_id: str) -> dict | None:
+        """Auto-register an unknown device with a default character.
+
+        Picks the first PUBLISHED character in the DB as default.
+        Only runs in non-production environments.
+        """
+        if settings.environment == "production":
+            return None
+        if not self._db_pool:
+            return None
+        try:
+            # Find a default character (first published one)
+            char_row = await self._db_pool.fetchrow(
+                """SELECT c.id AS character_id, c.brand_id
+                   FROM characters c
+                   WHERE c.status = 'PUBLISHED'
+                   ORDER BY c.created_at DESC
+                   LIMIT 1""",
+            )
+            if not char_row:
+                logger.warning("session.auto_register: no published characters found")
+                return None
+
+            character_id = str(char_row["character_id"])
+            brand_id = str(char_row["brand_id"])
+
+            # Insert device record
+            await self._db_pool.execute(
+                """INSERT INTO devices (id, device_type, character_id, status, created_at, updated_at)
+                   VALUES ($1, 'toy', $2, 'ACTIVE', now(), now())
+                   ON CONFLICT (id) DO NOTHING""",
+                device_id,
+                char_row["character_id"],
+            )
+
+            info = {
+                "character_id": character_id,
+                "end_user_id": None,
+                "brand_id": brand_id,
+                "device_secret": None,
+            }
+
+            # Cache in Redis
+            if self.redis:
+                await self.redis.setex(
+                    f"device:{device_id}",
+                    settings.session_ttl_seconds,
+                    json.dumps(info),
+                )
+
+            logger.info(
+                "session.auto_registered device=%s character=%s",
+                device_id, character_id,
+            )
+            return info
+        except Exception as e:
+            logger.warning("session.auto_register_failed: %s", e)
+            return None
+
     async def load_device_info(self, device_id: str) -> dict | None:
-        """Load device info from Redis, falling back to DB.
+        """Load device info from Redis → DB → auto-register if unknown.
 
         Used by both session creation and device authentication.
         """
@@ -88,7 +147,12 @@ class SessionManager:
                 return json.loads(raw)
 
         # Fallback to DB
-        return await self._load_device_from_db(device_id)
+        info = await self._load_device_from_db(device_id)
+        if info:
+            return info
+
+        # Auto-register unknown device with default character
+        return await self._auto_register_device(device_id)
 
     async def create_session(self, device_id: str, protocol: str) -> Session:
         """Create a new session for a device connection."""

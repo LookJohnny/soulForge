@@ -2,6 +2,11 @@
 
 Implements the WebSocket protocol used by xiaozhi-esp32 firmware.
 Reference: github.com/78/xiaozhi-esp32
+
+Audio format: Xiaozhi sends/receives Opus audio (OGG container, 16kHz mono).
+This adapter transparently converts:
+  - Incoming: Opus → PCM 16kHz 16-bit mono (for ASR)
+  - Outgoing: MP3 (from TTS) → Opus (for device playback)
 """
 
 import json
@@ -9,6 +14,7 @@ import logging
 
 from fastapi import WebSocket
 
+from gateway.handlers.audio_codec import is_opus, is_mp3, opus_to_pcm, mp3_to_opus
 from gateway.protocols.base import (
     InboundMessage,
     MessageType,
@@ -24,9 +30,12 @@ class XiaozhiAdapter(ProtocolAdapter):
 
     Xiaozhi protocol overview:
     - Text frames: JSON messages for control/auth
-    - Binary frames: Raw audio data (16kHz 16bit PCM)
+    - Binary frames: Opus audio data (16kHz mono, OGG container)
     - Auth: device sends {"type":"hello","device_id":"...",...} on connect
     """
+
+    def __init__(self):
+        self._device_audio_format: str = "opus"  # xiaozhi default
 
     @property
     def name(self) -> str:
@@ -50,6 +59,10 @@ class XiaozhiAdapter(ProtocolAdapter):
         if not device_id:
             raise ValueError("Missing device_id in hello message")
 
+        # Read device's audio format preference from hello message
+        audio_params = msg.get("audio_params", {})
+        self._device_audio_format = audio_params.get("format", "opus")
+
         # Send hello response
         response = {
             "type": "hello",
@@ -58,17 +71,23 @@ class XiaozhiAdapter(ProtocolAdapter):
         }
         await ws.send_text(json.dumps(response))
 
-        logger.info(f"Xiaozhi device connected: {device_id}")
+        logger.info(
+            "Xiaozhi device connected: %s (audio: %s)",
+            device_id, self._device_audio_format,
+        )
         return device_id
 
     async def decode(self, raw_data: bytes | str) -> InboundMessage:
-        """Decode xiaozhi frame."""
+        """Decode xiaozhi frame. Opus audio is decoded to PCM for ASR."""
         if isinstance(raw_data, bytes):
-            # Binary frame = audio data
+            audio = raw_data
+            # Decode Opus to PCM if needed (ASR expects 16kHz 16-bit PCM)
+            if is_opus(audio):
+                audio = await opus_to_pcm(audio)
             return InboundMessage(
                 type=MessageType.AUDIO,
                 device_id="",  # set by session context
-                payload=raw_data,
+                payload=audio,
             )
 
         # Text frame = JSON control message
@@ -76,7 +95,6 @@ class XiaozhiAdapter(ProtocolAdapter):
         msg_type = msg.get("type", "")
 
         if msg_type == "listen":
-            # Device is sending audio (start/stop listening)
             state = msg.get("state", "")
             return InboundMessage(
                 type=MessageType.CONTROL,
@@ -116,11 +134,14 @@ class XiaozhiAdapter(ProtocolAdapter):
             )
 
     async def encode(self, message: OutboundMessage) -> bytes | str:
-        """Encode message for xiaozhi device."""
+        """Encode message for xiaozhi device. MP3 audio is re-encoded to Opus."""
         if message.type == MessageType.AUDIO:
-            # Send raw audio bytes
             if isinstance(message.payload, bytes):
-                return message.payload
+                audio = message.payload
+                # Convert MP3 (from TTS) to Opus for xiaozhi device
+                if self._device_audio_format == "opus" and is_mp3(audio):
+                    audio = await mp3_to_opus(audio)
+                return audio
             raise ValueError("Audio payload must be bytes")
 
         # Control/text messages as JSON
