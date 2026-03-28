@@ -80,6 +80,57 @@ async def health():
     return {"status": "ok", "service": "gateway", "protocols": protocols}
 
 
+# ─── Xiaozhi OTA compatibility endpoint ────────────────
+# Xiaozhi firmware calls /ota/ on boot to get server config.
+# We return the SoulForge gateway's WebSocket URL so the device connects here.
+@app.post("/ota/")
+@app.get("/ota/")
+async def xiaozhi_ota(request: Request):
+    """Xiaozhi OTA compatibility — return SoulForge WebSocket config."""
+    import time as _time
+    body = await request.body()
+    logger.info(
+        "ota.request",
+        method=request.method,
+        device_id=request.headers.get("device-id", ""),
+        body_len=len(body),
+    )
+    host = request.headers.get("host", "192.168.1.172:8080")
+    response = {
+        "websocket": {
+            "url": f"ws://{host}/ws",
+        },
+        "firmware": {
+            "version": "0.0.0",
+        },
+        "server_time": {
+            "timestamp": int(_time.time()),
+            "timezone_offset": 480,
+        },
+    }
+    logger.info("ota.response", ws_url=response["websocket"]["url"])
+    return response
+
+
+@app.post("/ota/{path:path}")
+@app.get("/ota/{path:path}")
+async def xiaozhi_ota_subpath(path: str, request: Request):
+    """Catch all OTA sub-paths (e.g. /ota/activate)."""
+    import time as _time
+    body = await request.body()
+    logger.info("ota.subpath", path=path, body_len=len(body))
+    return {
+        "server_time": {
+            "timestamp": int(_time.time()),
+            "timezone_offset": 480,
+        },
+        "activation": {
+            "code": "",
+            "message": "already activated",
+        },
+    }
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await ws_server.handle_connection(ws)

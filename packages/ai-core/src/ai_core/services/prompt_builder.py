@@ -288,10 +288,11 @@ class PromptBuilder:
         ssml_effect = ""
 
         if base.get("voice_id"):
-            # Designer explicitly assigned a voice
+            # Designer explicitly assigned a voice profile
             voice = await self._get_voice(base["voice_id"])
             if voice:
-                voice_id = voice.get("dashscope_voice_id")
+                # Prefer Fish Audio cloned voice, fallback to DashScope preset
+                voice_id = voice.get("fish_audio_id") or voice.get("dashscope_voice_id")
         else:
             # No voice assigned — auto-match based on character traits
             from ai_core.services.voice_matcher import match_voice
@@ -375,7 +376,7 @@ class PromptBuilder:
 
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT dashscope_voice_id, reference_audio FROM voice_profiles WHERE id = $1",
+                "SELECT dashscope_voice_id, fish_audio_id, reference_audio FROM voice_profiles WHERE id = $1",
                 voice_id,
             )
             if not row:

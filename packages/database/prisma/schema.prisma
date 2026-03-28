@@ -168,6 +168,7 @@ model VoiceProfile {
   description      String?  @db.Text
   tags             String[] @default([])
   dashscopeVoiceId String?  @map("dashscope_voice_id") @db.VarChar(100)
+  fishAudioId      String?  @map("fish_audio_id") @db.VarChar(64)  /// Fish Audio cloned voice reference ID
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 

@@ -8,6 +8,7 @@ from ai_core.api.prompt import router as prompt_router
 from ai_core.api.rag import router as rag_router
 from ai_core.api.soul_packs import router as soul_packs_router
 from ai_core.api.tts import router as tts_router
+from ai_core.api.voice_clone import router as voice_clone_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -18,3 +19,4 @@ api_router.include_router(tts_router)
 api_router.include_router(chat_router)
 api_router.include_router(soul_packs_router)
 api_router.include_router(idol_router)
+api_router.include_router(voice_clone_router)

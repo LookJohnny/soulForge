@@ -52,12 +52,31 @@ class XiaozhiAdapter(ProtocolAdapter):
         return False
 
     async def handshake(self, ws: WebSocket, initial_data: bytes | str) -> str:
-        """Handle xiaozhi handshake, return device_id."""
+        """Handle xiaozhi handshake, return device_id.
+
+        Xiaozhi v2 firmware sends device_id via WebSocket HTTP headers
+        (Device-Id / Client-Id), not in the hello JSON body.
+        """
         msg = json.loads(initial_data)
+        logger.info("xiaozhi.hello: %s", json.dumps(msg, ensure_ascii=False)[:500])
+
+        # Device ID from hello body (older firmware) or WebSocket headers (v2+)
         device_id = msg.get("device_id", "")
+        if not device_id:
+            # v2 firmware: device_id in WebSocket upgrade headers
+            headers = dict(ws.headers) if hasattr(ws, "headers") else {}
+            device_id = (
+                headers.get("device-id")
+                or headers.get("client-id")
+                or headers.get("mac-address")
+                or ""
+            )
+            logger.info("xiaozhi.headers: %s", {k: v for k, v in headers.items() if k in (
+                "device-id", "client-id", "authorization", "protocol-version", "user-agent"
+            )})
 
         if not device_id:
-            raise ValueError("Missing device_id in hello message")
+            raise ValueError(f"Missing device_id in hello/headers: keys={list(msg.keys())}")
 
         # Read device's audio format preference from hello message
         audio_params = msg.get("audio_params", {})
