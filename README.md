@@ -4,7 +4,7 @@
 
 SoulForge 是一个通用 AI 人格引擎平台。为毛绒玩具、耳机、手机 App、桌面应用、智能音箱等任何设备注入有灵魂的 AI 角色——不只是问答，而是有情感、有记忆、有关系进化的真实陪伴。
 
-**支持的设备类型**: 毛绒玩具 / 蓝牙耳机 / 手机 App / 桌面客户端 / 智能音箱 / 网页
+**支持的设备类型**: 小智 ESP32-S3 / 毛绒玩具 / 蓝牙耳机 / 手机 App / 桌面客户端 / 智能音箱 / 网页
 **支持的角色类型**: 动物角色 / 人类角色(学长/朋友) / 幻想角色(精灵/机器人) / 抽象助手
 
 ## 架构
@@ -157,6 +157,28 @@ PAD 情绪值直接驱动物理硬件：
 
 8 大人设预设 (暮影司/铃奈/陆辰逸等)，恋爱关系 5 阶段，场景互动 (早安/晚安/吃醋/表白)。
 
+### 小智 ESP32-S3 设备接入
+
+**开箱即用的硬件接入——小智设备连上就能说话**：
+
+- **Opus 音频编解码** — 自动适配小智的 Opus 协议（OGG 16kHz mono），入站 Opus→PCM 给 ASR，出站 MP3→Opus 给设备播放
+- **流式语音响应** — LLM 流式输出 → 逐句断句 → 每句即时 TTS + 推送，首句音频延迟从 3-8 秒降至 1-2 秒
+- **设备自动注册** — 新设备首次连接自动创建记录并绑定默认角色，零配置
+- **协议自动识别** — Gateway 通过 hello 消息自动检测小智协议，协商音频格式
+- **完整 SoulForge 能力** — 情绪引擎、记忆、关系进化、性格漂移全部生效
+
+```
+小智 ESP32-S3  ──(WebSocket/Opus)──►  Gateway (:8080)
+                                         │ XiaozhiAdapter 自动识别
+                                         │ Opus↔PCM 透明转码
+                                         ▼
+                                     AI Core (:8100)
+                                         │ 流式 SSE: 逐句 text+audio
+                                         │ ASR → 情绪 → 记忆 → LLM → TTS
+                                         ▼
+                                     设备播放 Opus 音频
+```
+
 ### 儿童安全
 
 - **200+ 关键词过滤** — 覆盖自伤、涉黄、暴力、毒品
@@ -199,6 +221,18 @@ soulForge/
 │   │       │   └── ...                   # memory/content-filter/cache/rag
 │   │       └── templates/      # Jinja2 系统 Prompt 模板
 │   ├── gateway/                # WebSocket 网关 (设备连接)
+│   │   └── src/gateway/
+│   │       ├── protocols/
+│   │       │   ├── xiaozhi.py          # 小智ESP32协议 (Opus编解码)
+│   │       │   ├── web_audio.py        # Web音频流协议
+│   │       │   └── generic_ws.py       # 通用WebSocket协议
+│   │       ├── handlers/
+│   │       │   ├── audio.py            # 音频帧缓冲
+│   │       │   └── audio_codec.py      # Opus/PCM/MP3转码 (ffmpeg)
+│   │       ├── pipeline/
+│   │       │   └── orchestrator.py     # AI Core调用 (阻塞+流式)
+│   │       ├── session.py              # 会话管理 + 设备自动注册
+│   │       └── server.py               # WebSocket服务 (流式推送)
 │   ├── database/               # Prisma Schema + 迁移
 │   └── shared/                 # 共享类型
 ├── hardware/                   # 硬件接入测试
@@ -259,7 +293,25 @@ uv run pytest packages/ai-core/tests/  # 测试
 
 ## SSE 流式事件
 
-`POST /chat/preview/stream` 返回的 Server-Sent Events：
+### 设备管道 `POST /pipeline/chat/stream`
+
+为硬件设备优化的流式端点——逐句生成文本+音频，最小化首句延迟：
+
+| 事件类型 | 时机 | 内容 |
+|---------|------|------|
+| `sentence` | 每句完成 | `{text, audio_data (base64), index}` |
+| `done` | 全部完成 | `{full_text, emotion, pad, relationship_stage, latency_ms}` |
+
+示例响应流：
+```
+data: {"type":"sentence","text":"嘿嘿，太棒啦！","audio_data":"//uQxA...","index":0}
+data: {"type":"sentence","text":"我是快乐小鼠呀！","audio_data":"SUQzBA...","index":1}
+data: {"type":"done","full_text":"嘿嘿，太棒啦！我是快乐小鼠呀！","emotion":"curious","latency_ms":4051}
+```
+
+### Web 预览 `POST /chat/preview/stream`
+
+为前端 UI 优化的流式端点——实时流文本 + 完成后追加元数据：
 
 | 事件类型 | 时机 | 内容 |
 |---------|------|------|
@@ -301,7 +353,8 @@ uv run pytest packages/ai-core/tests/  # 测试
 **后端**: Python 3.12+ / FastAPI / asyncpg / Redis / Milvus
 **前端**: Next.js 16 / NextAuth v5 / Prisma / React 19
 **AI**: DashScope (LLM+ASR) / Fish Audio (TTS)
-**基建**: PostgreSQL / Redis / Milvus / MinIO / Docker
+**硬件**: 小智 ESP32-S3 (Opus 16kHz / WebSocket)
+**基建**: PostgreSQL / Redis / Milvus / MinIO / Docker / ffmpeg
 
 ## License
 
