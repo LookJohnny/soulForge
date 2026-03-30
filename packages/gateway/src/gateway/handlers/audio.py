@@ -1,25 +1,32 @@
 """Audio frame handler - manages audio streaming between device and AI pipeline.
 
-Supports Opus packet decoding and server-side VAD (Voice Activity Detection).
-Only triggers processing when real speech is detected, ignoring ambient noise.
+Supports Opus packet decoding and Silero VAD (neural network voice activity detection).
+Only triggers processing when real speech is detected, robust against ambient noise.
 """
 
 import logging
 import struct
 
 import opuslib
+import torch
+from silero_vad import load_silero_vad
 
 from gateway.protocols.base import MessageType, OutboundMessage
 from gateway.session import Session
 
 logger = logging.getLogger(__name__)
 
-# Energy-based VAD configuration (no external dependency)
-VAD_FRAME_MS = 20            # analysis window
-VAD_FRAME_BYTES = 16000 * 2 * VAD_FRAME_MS // 1000  # 640 bytes per 20ms frame
-SPEECH_ENERGY_THRESHOLD = 800   # RMS energy threshold for speech detection
+# Silero VAD configuration
+# Silero needs 512 samples (32ms) at 16kHz per chunk
+SILERO_CHUNK_SAMPLES = 512
+SILERO_CHUNK_BYTES = SILERO_CHUNK_SAMPLES * 2  # 1024 bytes per chunk
+SPEECH_PROB_THRESHOLD = 0.5  # Silero probability threshold for speech
 SPEECH_START_FRAMES = 3      # consecutive voiced frames to confirm speech start
-SILENCE_END_FRAMES = 20      # consecutive silent frames to confirm speech end (~400ms)
+SILENCE_END_FRAMES = 20      # consecutive silent frames to confirm speech end (~640ms)
+
+# Load model once at module level (shared across all sessions)
+_silero_model = load_silero_vad()
+logger.info("Silero VAD model loaded")
 
 
 class AudioHandler:
@@ -41,8 +48,10 @@ class AudioHandler:
         """Start collecting audio for a session."""
         self._buffers[session.session_id] = bytearray()
         self._decoders[session.session_id] = opuslib.Decoder(16000, 1)
+        # Reset Silero model state for new session
+        _silero_model.reset_states()
         self._vad_states[session.session_id] = {
-            "pcm_pending": bytearray(),   # accumulates PCM until we have a full VAD frame
+            "pcm_pending": bytearray(),   # accumulates PCM until we have a full Silero chunk
             "speech_started": False,
             "voiced_count": 0,            # consecutive voiced frames
             "silent_count": 0,            # consecutive silent frames after speech
@@ -69,18 +78,21 @@ class AudioHandler:
         else:
             pcm = audio_data
 
-        # Accumulate PCM for VAD frame processing
+        # Accumulate PCM for Silero VAD processing
         state["pcm_pending"].extend(pcm)
 
-        # Process complete VAD frames (20ms = 640 bytes each)
-        while len(state["pcm_pending"]) >= VAD_FRAME_BYTES:
-            frame = bytes(state["pcm_pending"][:VAD_FRAME_BYTES])
-            del state["pcm_pending"][:VAD_FRAME_BYTES]
+        # Process complete Silero chunks (512 samples = 1024 bytes each)
+        while len(state["pcm_pending"]) >= SILERO_CHUNK_BYTES:
+            frame = bytes(state["pcm_pending"][:SILERO_CHUNK_BYTES])
+            del state["pcm_pending"][:SILERO_CHUNK_BYTES]
 
-            # Energy-based VAD: compute RMS of the frame
-            samples = struct.unpack(f"<{len(frame)//2}h", frame)
-            rms = (sum(s * s for s in samples) / len(samples)) ** 0.5
-            is_speech = rms > SPEECH_ENERGY_THRESHOLD
+            # Convert to float32 tensor for Silero [-1, 1]
+            samples = struct.unpack(f"<{SILERO_CHUNK_SAMPLES}h", frame)
+            audio_tensor = torch.FloatTensor(samples) / 32768.0
+
+            # Run Silero VAD inference
+            speech_prob = _silero_model(audio_tensor, 16000).item()
+            is_speech = speech_prob > SPEECH_PROB_THRESHOLD
 
             if is_speech:
                 state["voiced_count"] += 1
@@ -105,10 +117,10 @@ class AudioHandler:
                         state["speech_complete"] = True
                         logger.info("vad.speech_end session=%s bytes=%d", sid, len(buf))
                 else:
-                    # Keep a rolling pre-speech buffer (~200ms)
+                    # Keep a rolling pre-speech buffer (~300ms)
                     state["pre_speech_buf"].extend(frame)
-                    if len(state["pre_speech_buf"]) > VAD_FRAME_BYTES * 10:
-                        del state["pre_speech_buf"][:VAD_FRAME_BYTES * 5]
+                    if len(state["pre_speech_buf"]) > SILERO_CHUNK_BYTES * 10:
+                        del state["pre_speech_buf"][:SILERO_CHUNK_BYTES * 5]
 
     def is_speech_complete(self, session: Session) -> bool:
         """Check if VAD detected end of speech."""
@@ -125,7 +137,7 @@ class AudioHandler:
         buf = self._buffers.pop(session.session_id, None)
         self._decoders.pop(session.session_id, None)
         self._vad_states.pop(session.session_id, None)
-        if buf and len(buf) > VAD_FRAME_BYTES * 5:  # at least ~100ms of audio
+        if buf and len(buf) > SILERO_CHUNK_BYTES * 5:  # at least ~160ms of audio
             logger.info("vad.collected bytes=%d duration=%.1fs", len(buf), len(buf) / 32000)
             return bytes(buf)
         return None

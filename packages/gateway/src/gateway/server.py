@@ -132,11 +132,14 @@ class WebSocketServer:
     async def _handle_message(self, ws, adapter, session, msg):
         """Route message to appropriate handler."""
         if msg.type == MessageType.AUDIO:
+            # Skip audio while we're playing TTS (avoid echo feedback loop)
+            if getattr(session, "_playing", False):
+                return
+
             self.audio_handler.add_audio(session, msg.payload)
-            # Track last audio time for silence detection
             session._last_audio_time = time.monotonic()
 
-            # Start silence detector if not running
+            # Start VAD monitor if not running
             if not getattr(session, "_silence_task", None):
                 session._silence_task = asyncio.create_task(
                     self._vad_monitor(ws, adapter, session)
@@ -314,9 +317,14 @@ class WebSocketServer:
             logger.exception("gateway.touch_error")
 
     async def _process_and_respond(self, ws, adapter, session, audio_data: bytes):
-        """Process audio through AI pipeline with streaming response."""
+        """Process audio through AI pipeline with streaming response.
+
+        Sets session._playing = True during TTS playback to suppress echo
+        from the device's microphone picking up the speaker output.
+        After all audio is sent, waits for estimated playback duration
+        before resuming listening.
+        """
         try:
-            # Send thinking indicator immediately
             logger.info("gateway.responding start")
             thinking = OutboundMessage(
                 type=MessageType.TEXT,
@@ -325,13 +333,18 @@ class WebSocketServer:
             )
             await ws.send_text(await adapter.encode(thinking))
 
+            # Enter playing state — suppress incoming audio during TTS
+            session._playing = True
+            total_opus_frames = 0
             full_text = ""
+            user_text = ""
+
             async for chunk in self.orchestrator.process_audio_stream(session, audio_data):
                 if chunk.is_done:
                     full_text = chunk.full_text or full_text
+                    user_text = chunk.user_text
                     break
 
-                # Send each sentence text + audio immediately as it's ready
                 logger.info("gateway.sending sentence=%s audio=%d",
                             chunk.text[:30], len(chunk.audio_data) if chunk.audio_data else 0)
                 text_out = OutboundMessage(
@@ -345,13 +358,16 @@ class WebSocketServer:
                 if chunk.audio_data:
                     audio_out = AudioHandler.make_audio_response(chunk.audio_data)
                     raw = await adapter.encode(audio_out)
-                    # raw may be a list of Opus frames or a single bytes object
                     if isinstance(raw, list):
                         logger.info("gateway.sending %d opus frames", len(raw))
-                        for frame in raw:
+                        total_opus_frames += len(raw)
+                        # Send frames in small batches — fast enough to keep
+                        # device buffer full, with tiny yields to stay async
+                        for i, frame in enumerate(raw):
                             await ws.send_bytes(frame)
+                            if i % 10 == 9:  # yield every 10 frames
+                                await asyncio.sleep(0)
                     elif isinstance(raw, bytes):
-                        logger.info("gateway.sending audio=%d bytes", len(raw))
                         await ws.send_bytes(raw)
 
             # Send stop signal
@@ -361,13 +377,26 @@ class WebSocketServer:
                 metadata={"state": "stop"},
             )
             await ws.send_text(await adapter.encode(done))
-            logger.info("gateway.responding done text=%s", full_text[:50])
 
+            # Wait for device to finish playing all buffered audio
+            playback_secs = total_opus_frames * 0.06 + 0.5
+            logger.info("gateway.responding done text=%s frames=%d wait=%.1fs",
+                        full_text[:50], total_opus_frames, playback_secs)
+            await asyncio.sleep(playback_secs)
+
+            # Resume listening
+            session._playing = False
+
+            if user_text:
+                await self.session_manager.add_to_history(
+                    session.session_id, "user", user_text
+                )
             await self.session_manager.add_to_history(
                 session.session_id, "assistant", full_text
             )
 
         except Exception:
+            session._playing = False
             logger.exception("gateway.pipeline_error")
             error_out = OutboundMessage(
                 type=MessageType.CONTROL,

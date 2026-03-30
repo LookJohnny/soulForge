@@ -239,6 +239,7 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
             raise HTTPException(status_code=422, detail="Audio data exceeds 10MB limit")
         asr = await get_asr_client()
         user_text = await asr.recognize(audio_bytes, audio_format=req.audio_format)
+        logger.info("pipeline.asr_result text=%s bytes=%d", user_text[:50] if user_text else "(empty)", len(audio_bytes))
 
     if not user_text:
         raise HTTPException(status_code=400, detail="No input provided (text or audio)")
@@ -355,9 +356,11 @@ async def chat_stream(req: ChatRequest, request: Request):
 
         # Stream LLM tokens, split into sentences, TTS each immediately
         llm = await get_llm_client()
+        history = [{"role": m.role, "content": m.content} for m in req.history] if req.history else None
         async for chunk in llm.chat_stream(
             system_prompt=prompt_result["system_prompt"],
             user_input=user_text,
+            history=history,
         ):
             buffer += chunk
             full_text += chunk
@@ -456,6 +459,7 @@ async def chat_stream(req: ChatRequest, request: Request):
         done_event = {
             "type": "done",
             "full_text": ai_text,
+            "user_text": user_text,
             "emotion": new_emotion,
             "pad": pad_state.to_dict(),
             "relationship_stage": rel_state["stage"],

@@ -27,6 +27,7 @@ class StreamChunk:
     is_done: bool = False
     # Only populated on the final 'done' chunk
     full_text: str = ""
+    user_text: str = ""
     emotion: str = ""
     latency_ms: int = 0
 
@@ -175,6 +176,7 @@ class PipelineOrchestrator:
             "session_id": session.session_id,
             "audio_data": base64.b64encode(audio_data).decode(),
             "audio_format": audio_format,
+            "history": session.history[-10:] if session.history else [],  # last 10 turns
         }
 
         headers = {}
@@ -206,6 +208,7 @@ class PipelineOrchestrator:
                         index=-1,
                         is_done=True,
                         full_text=data.get("full_text", ""),
+                        user_text=data.get("user_text", ""),
                         emotion=data.get("emotion", ""),
                         latency_ms=data.get("latency_ms", 0),
                     )

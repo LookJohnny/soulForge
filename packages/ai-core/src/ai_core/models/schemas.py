@@ -77,6 +77,7 @@ class ChatRequest(BaseModel):
     audio_data: str | None = None  # base64 audio
     audio_format: str = "pcm"      # pcm or opus
     text_input: str | None = Field(default=None, max_length=2000)
+    history: list[HistoryMessage] | None = None  # conversation history for multi-turn
 
     @field_validator("character_id")
     @classmethod
