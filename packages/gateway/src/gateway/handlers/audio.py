@@ -11,6 +11,7 @@ import opuslib
 import torch
 from silero_vad import load_silero_vad
 
+from gateway.handlers.streaming_asr import StreamingASR
 from gateway.protocols.base import MessageType, OutboundMessage
 from gateway.session import Session
 
@@ -39,15 +40,24 @@ class AudioHandler:
     4. Signals speech_complete when silence follows speech
     """
 
-    def __init__(self):
+    def __init__(self, dashscope_api_key: str = "", asr_model: str = "paraformer-realtime-v2"):
         self._buffers: dict[str, bytearray] = {}
         self._decoders: dict[str, opuslib.Decoder] = {}
         self._vad_states: dict[str, dict] = {}
+        self._asr_sessions: dict[str, StreamingASR] = {}
+        self._dashscope_api_key = dashscope_api_key
+        self._asr_model = asr_model
 
     def start_listening(self, session: Session):
         """Start collecting audio for a session."""
         self._buffers[session.session_id] = bytearray()
         self._decoders[session.session_id] = opuslib.Decoder(16000, 1)
+        # Start streaming ASR session
+        if self._dashscope_api_key:
+            asr = StreamingASR(api_key=self._dashscope_api_key, model=self._asr_model)
+            asr.start()
+            self._asr_sessions[session.session_id] = asr
+
         # Reset Silero model state for new session
         _silero_model.reset_states()
         self._vad_states[session.session_id] = {
@@ -77,6 +87,11 @@ class AudioHandler:
                 pcm = audio_data
         else:
             pcm = audio_data
+
+        # Feed PCM to streaming ASR (runs in parallel with VAD)
+        asr = self._asr_sessions.get(sid)
+        if asr:
+            asr.feed(pcm)
 
         # Accumulate PCM for Silero VAD processing
         state["pcm_pending"].extend(pcm)
@@ -142,11 +157,25 @@ class AudioHandler:
             return bytes(buf)
         return None
 
+    async def get_streaming_asr_result(self, session: Session) -> str:
+        """Finalize and return the streaming ASR result.
+
+        Called after VAD detects end-of-speech. The ASR has been processing
+        audio in parallel, so this typically returns almost immediately.
+        """
+        asr = self._asr_sessions.pop(session.session_id, None)
+        if asr:
+            return await asr.finish()
+        return ""
+
     def abort(self, session: Session):
         """Discard buffered audio."""
         self._buffers.pop(session.session_id, None)
         self._decoders.pop(session.session_id, None)
         self._vad_states.pop(session.session_id, None)
+        asr = self._asr_sessions.pop(session.session_id, None)
+        if asr:
+            asr.abort()
 
     @staticmethod
     def make_audio_response(audio_data: bytes) -> OutboundMessage:
