@@ -15,6 +15,7 @@ from gateway.protocols.registry import registry
 from gateway.session import SessionManager
 from gateway.handlers.audio import AudioHandler
 from gateway.pipeline.orchestrator import PipelineOrchestrator
+from gateway.plugins import match_plugin
 
 logger = structlog.get_logger()
 
@@ -95,12 +96,26 @@ class WebSocketServer:
 
             # Create session
             session = await self.session_manager.create_session(device_id, adapter.name)
+            session._last_activity = time.monotonic()
             logger.info(
                 "gateway.device_connected",
                 device_id=device_id,
                 protocol=adapter.name,
                 session_id=session.session_id,
             )
+
+            # Start idle timeout checker
+            async def _idle_checker():
+                IDLE_TIMEOUT = 120  # seconds
+                while True:
+                    await asyncio.sleep(10)
+                    idle = time.monotonic() - getattr(session, "_last_activity", time.monotonic())
+                    if idle > IDLE_TIMEOUT:
+                        logger.info("gateway.idle_timeout device=%s", device_id)
+                        await ws.close(code=1000, reason="Idle timeout")
+                        return
+
+            idle_task = asyncio.create_task(_idle_checker())
 
             # Message loop
             while True:
@@ -128,7 +143,8 @@ class WebSocketServer:
         except Exception:
             logger.exception("gateway.connection_error")
         finally:
-            # Cleanup
+            if "idle_task" in locals():
+                idle_task.cancel()
             if "session" in locals():
                 self.audio_handler.abort(session)
                 await self.session_manager.remove_session(session.session_id)
@@ -242,9 +258,29 @@ class WebSocketServer:
 
                     if asr_text:
                         logger.info("gateway.vad_trigger asr=%s", asr_text[:50])
+                        session._last_activity = time.monotonic()
+
+                        # Check plugins first — skip LLM for simple queries
+                        plugin_result = match_plugin(asr_text)
+                        if plugin_result:
+                            handler, name = plugin_result
+                            try:
+                                reply = handler(asr_text)
+                                if reply:
+                                    logger.info("gateway.plugin hit=%s reply=%s", name, reply[:30])
+                                    await self._send_quick_reply(ws, adapter, session, reply)
+                                    # Restart listening
+                                    self.audio_handler.start_listening(session)
+                                    session._silence_task = asyncio.create_task(
+                                        self._vad_monitor(ws, adapter, session)
+                                    )
+                                    return
+                            except Exception:
+                                logger.exception("gateway.plugin_error name=%s", name)
+
+                        # No plugin match — full LLM pipeline
                         session._processing = True
                         try:
-                            # Use text input directly — skip AI Core's ASR step
                             await self._process_text_and_respond_streaming(
                                 ws, adapter, session, asr_text
                             )
@@ -268,6 +304,79 @@ class WebSocketServer:
             )
         except asyncio.CancelledError:
             pass
+
+    async def _send_quick_reply(self, ws, adapter, session, text: str):
+        """Send a quick text+TTS reply without going through the full LLM pipeline.
+
+        Used for plugin responses (time, date, math) that don't need AI.
+        """
+        try:
+            # Send text
+            start_msg = OutboundMessage(
+                type=MessageType.TEXT, payload="",
+                metadata={"state": "start"},
+            )
+            await ws.send_text(await adapter.encode(start_msg))
+
+            text_msg = OutboundMessage(
+                type=MessageType.TEXT, payload=text,
+                metadata={"state": "sentence"},
+            )
+            await ws.send_text(await adapter.encode(text_msg))
+
+            # TTS for the reply
+            try:
+                from gateway.handlers.audio_codec import mp3_to_pcm_24k, pcm_to_opus_frames
+                tts = await self._get_quick_tts(text)
+                if tts:
+                    ss = OutboundMessage(
+                        type=MessageType.TEXT, payload="",
+                        metadata={"state": "sentence_start"},
+                    )
+                    await ws.send_text(await adapter.encode(ss))
+
+                    pcm = await mp3_to_pcm_24k(tts)
+                    if pcm:
+                        frames = pcm_to_opus_frames(pcm, sample_rate=24000)
+                        for i, frame in enumerate(frames[:5]):
+                            await ws.send_bytes(frame)
+                        for frame in frames[5:]:
+                            await ws.send_bytes(frame)
+                            await asyncio.sleep(0.06)
+            except Exception:
+                logger.exception("gateway.quick_reply_tts_error")
+
+            await asyncio.sleep(0.42)
+            done_msg = OutboundMessage(
+                type=MessageType.TEXT, payload="",
+                metadata={"state": "stop"},
+            )
+            await ws.send_text(await adapter.encode(done_msg))
+            logger.info("gateway.quick_reply sent: %s", text[:30])
+
+        except Exception:
+            logger.exception("gateway.quick_reply_error")
+
+    async def _get_quick_tts(self, text: str) -> bytes | None:
+        """Get TTS audio via AI Core for a short text."""
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # Use AI Core's TTS directly — simpler than full pipeline
+                from gateway.config import settings
+                resp = await client.post(
+                    f"{settings.ai_core_url}/tts/synthesize",
+                    json={"text": text},
+                    headers={"X-Service-Token": settings.service_token} if settings.service_token else {},
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("audio_data"):
+                        import base64
+                        return base64.b64decode(data["audio_data"])
+        except Exception:
+            pass
+        return None
 
     async def _process_text_and_respond_streaming(self, ws, adapter, session, text: str):
         """Process text from streaming ASR through AI pipeline with TTS playback.

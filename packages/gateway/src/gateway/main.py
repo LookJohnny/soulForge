@@ -7,6 +7,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 from gateway.config import settings
+from gateway.plugins import load_plugins
 from gateway.protocols.registry import registry
 from gateway.protocols.xiaozhi import XiaozhiAdapter
 from gateway.protocols.web_audio import WebAudioAdapter
@@ -38,6 +39,7 @@ ws_server = WebSocketServer()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("gateway.startup")
+    load_plugins()
     await ws_server.startup()
     yield
     logger.info("gateway.shutdown")
