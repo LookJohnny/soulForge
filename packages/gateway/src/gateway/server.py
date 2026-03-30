@@ -225,9 +225,10 @@ class WebSocketServer:
             rms = (sum(s * s for s in samples) / len(samples)) ** 0.5
 
             # High energy = user is trying to speak over TTS
-            if rms > 2000:
+            # Threshold must be well above speaker echo level (~3000-8000 RMS)
+            if rms > 12000:
                 session._interrupt_count += 1
-                if session._interrupt_count >= 5:  # ~300ms sustained voice
+                if session._interrupt_count >= 8:  # ~500ms sustained loud voice
                     session._interrupted = True
                     logger.info("gateway.barge_in detected rms=%d", int(rms))
             else:

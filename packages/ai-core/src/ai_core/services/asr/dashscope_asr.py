@@ -16,7 +16,19 @@ _RETRYABLE = (RuntimeError, TimeoutError, ConnectionError, OSError)
 
 
 def _pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000) -> bytes:
-    """Wrap raw PCM bytes in a WAV header."""
+    """Wrap raw PCM bytes in a WAV header, with gain normalization."""
+    import struct
+
+    # Normalize volume: find peak and amplify to ~80% of max
+    if len(pcm_data) >= 2:
+        samples = list(struct.unpack(f"<{len(pcm_data)//2}h", pcm_data))
+        peak = max(abs(s) for s in samples) if samples else 1
+        if peak < 5000 and peak > 0:
+            # Audio is too quiet — normalize to ~80% of max range
+            gain = min(26000 / peak, 10.0)  # cap at 10x to avoid noise amplification
+            samples = [max(-32768, min(32767, int(s * gain))) for s in samples]
+            pcm_data = struct.pack(f"<{len(samples)}h", *samples)
+
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
         wf.setnchannels(1)

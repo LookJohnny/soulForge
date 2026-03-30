@@ -41,7 +41,8 @@ class AudioHandler:
     """
 
     def __init__(self, dashscope_api_key: str = "", asr_model: str = "paraformer-realtime-v2"):
-        self._buffers: dict[str, bytearray] = {}
+        self._buffers: dict[str, bytearray] = {}       # PCM buffer (for VAD)
+        self._raw_opus: dict[str, list[bytes]] = {}     # Raw Opus packets (for reliable ASR)
         self._decoders: dict[str, opuslib.Decoder] = {}
         self._vad_states: dict[str, dict] = {}
         self._asr_sessions: dict[str, StreamingASR] = {}
@@ -51,6 +52,7 @@ class AudioHandler:
     def start_listening(self, session: Session):
         """Start collecting audio for a session."""
         self._buffers[session.session_id] = bytearray()
+        self._raw_opus[session.session_id] = []
         self._decoders[session.session_id] = opuslib.Decoder(16000, 1)
         # Start streaming ASR session
         if self._dashscope_api_key:
@@ -78,7 +80,12 @@ class AudioHandler:
         if buf is None or state is None:
             return
 
-        # Decode Opus to PCM
+        # Save raw Opus packet for later batch decoding (more reliable than per-frame)
+        raw_list = self._raw_opus.get(sid)
+        if raw_list is not None:
+            raw_list.append(audio_data)
+
+        # Decode Opus to PCM (for VAD only — final ASR uses batch decode)
         decoder = self._decoders.get(sid)
         if decoder:
             try:
@@ -148,14 +155,48 @@ class AudioHandler:
         return state is not None and state.get("speech_started", False)
 
     def stop_listening(self, session: Session) -> bytes | None:
-        """Stop collecting and return buffered PCM audio."""
-        buf = self._buffers.pop(session.session_id, None)
+        """Stop collecting and return PCM audio decoded from raw Opus packets.
+
+        Uses a fresh decoder to batch-decode all saved Opus packets,
+        which is more reliable than the per-frame decode used for VAD.
+        """
+        raw_packets = self._raw_opus.pop(session.session_id, None)
+        self._buffers.pop(session.session_id, None)
         self._decoders.pop(session.session_id, None)
         self._vad_states.pop(session.session_id, None)
-        if buf and len(buf) > SILERO_CHUNK_BYTES * 5:  # at least ~160ms of audio
-            logger.info("vad.collected bytes=%d duration=%.1fs", len(buf), len(buf) / 32000)
-            return bytes(buf)
-        return None
+
+        if not raw_packets or len(raw_packets) < 5:
+            return None
+
+        # Batch decode all Opus packets with a fresh decoder
+        fresh_decoder = opuslib.Decoder(16000, 1)
+        pcm_buf = bytearray()
+        for pkt in raw_packets:
+            try:
+                pcm = fresh_decoder.decode(pkt, 960, decode_fec=False)
+                pcm_buf.extend(pcm)
+            except Exception:
+                pass
+
+        if len(pcm_buf) < SILERO_CHUNK_BYTES * 5:
+            return None
+
+        logger.info("vad.collected packets=%d pcm_bytes=%d duration=%.1fs",
+                     len(raw_packets), len(pcm_buf), len(pcm_buf) / 32000)
+
+        # Debug: save WAV for inspection
+        try:
+            import wave as _wave, io as _io
+            wav_buf = _io.BytesIO()
+            with _wave.open(wav_buf, "wb") as wf:
+                wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(16000)
+                wf.writeframes(pcm_buf)
+            with open("/tmp/xiaozhi_latest.wav", "wb") as f:
+                f.write(wav_buf.getvalue())
+        except Exception:
+            pass
+
+        return bytes(pcm_buf)
 
     async def get_streaming_asr_result(self, session: Session) -> str:
         """Finalize and return the streaming ASR result.
@@ -171,6 +212,7 @@ class AudioHandler:
     def abort(self, session: Session):
         """Discard buffered audio."""
         self._buffers.pop(session.session_id, None)
+        self._raw_opus.pop(session.session_id, None)
         self._decoders.pop(session.session_id, None)
         self._vad_states.pop(session.session_id, None)
         asr = self._asr_sessions.pop(session.session_id, None)
