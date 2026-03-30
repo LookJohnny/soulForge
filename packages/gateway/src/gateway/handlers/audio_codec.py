@@ -161,22 +161,46 @@ async def mp3_to_pcm(mp3_data: bytes) -> bytes:
     return stdout
 
 
-def pcm_to_opus_frames(pcm_data: bytes, frame_duration_ms: int = 60) -> list[bytes]:
+async def mp3_to_pcm_24k(mp3_data: bytes) -> bytes:
+    """Decode MP3 to raw PCM at 24kHz 16-bit mono (xiaozhi TTS standard)."""
+    proc = await asyncio.create_subprocess_exec(
+        "ffmpeg", "-hide_banner", "-loglevel", "error",
+        "-i", "pipe:0",
+        "-f", "s16le", "-ar", "24000", "-ac", "1",
+        "pipe:1",
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await asyncio.wait_for(
+        proc.communicate(input=mp3_data), timeout=_FFMPEG_TIMEOUT,
+    )
+    if proc.returncode != 0:
+        logger.error("mp3_to_pcm_24k failed: %s", stderr.decode(errors="replace").strip())
+        return b""
+    return stdout
+
+
+def pcm_to_opus_frames(
+    pcm_data: bytes,
+    sample_rate: int = 24000,
+    frame_duration_ms: int = 60,
+) -> list[bytes]:
     """Encode PCM to a list of raw Opus frames.
 
     Each frame is an independent Opus packet suitable for sending
     as a WebSocket binary message to xiaozhi devices.
 
     Args:
-        pcm_data: Raw PCM bytes (16kHz 16-bit mono).
-        frame_duration_ms: Frame duration (10/20/40/60ms).
+        pcm_data: Raw PCM bytes (mono 16-bit).
+        sample_rate: Sample rate (24000 for xiaozhi TTS output).
+        frame_duration_ms: Frame duration (60ms standard for xiaozhi).
 
     Returns:
         List of raw Opus packets (bytes).
     """
     import opuslib
 
-    sample_rate = 16000
     channels = 1
     frame_size = sample_rate * frame_duration_ms // 1000  # samples per frame
     frame_bytes = frame_size * channels * 2  # bytes per frame (16-bit)

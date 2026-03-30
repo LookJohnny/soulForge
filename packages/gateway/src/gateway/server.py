@@ -356,19 +356,33 @@ class WebSocketServer:
                 full_text += chunk.text
 
                 if chunk.audio_data:
+                    # Send sentence_start before audio (xiaozhi protocol)
+                    ss = OutboundMessage(
+                        type=MessageType.TEXT, payload="",
+                        metadata={"state": "sentence_start"},
+                    )
+                    await ws.send_text(await adapter.encode(ss))
+
                     audio_out = AudioHandler.make_audio_response(chunk.audio_data)
                     raw = await adapter.encode(audio_out)
                     if isinstance(raw, list):
-                        logger.info("gateway.sending %d opus frames", len(raw))
-                        total_opus_frames += len(raw)
-                        # Send frames in small batches — fast enough to keep
-                        # device buffer full, with tiny yields to stay async
-                        for i, frame in enumerate(raw):
+                        n = len(raw)
+                        logger.info("gateway.sending %d opus frames @24kHz", n)
+                        total_opus_frames += n
+                        PRE_BUFFER = 5
+                        # Pre-buffer: send first 5 frames immediately
+                        for frame in raw[:PRE_BUFFER]:
                             await ws.send_bytes(frame)
-                            if i % 10 == 9:  # yield every 10 frames
-                                await asyncio.sleep(0)
+                        # Rate-controlled: remaining frames at ~60ms pace
+                        for frame in raw[PRE_BUFFER:]:
+                            await ws.send_bytes(frame)
+                            await asyncio.sleep(0.06)
                     elif isinstance(raw, bytes):
                         await ws.send_bytes(raw)
+
+            # Wait 420ms after last audio frame (official protocol timing)
+            # = (5 pre-buffer + 2 jitter) * 60ms frame duration
+            await asyncio.sleep(0.42)
 
             # Send stop signal
             done = OutboundMessage(
@@ -377,11 +391,11 @@ class WebSocketServer:
                 metadata={"state": "stop"},
             )
             await ws.send_text(await adapter.encode(done))
+            logger.info("gateway.responding done text=%s frames=%d",
+                        full_text[:50], total_opus_frames)
 
-            # Wait for device to finish playing all buffered audio
-            playback_secs = total_opus_frames * 0.06 + 0.5
-            logger.info("gateway.responding done text=%s frames=%d wait=%.1fs",
-                        full_text[:50], total_opus_frames, playback_secs)
+            # Wait for device to finish playing buffered audio
+            playback_secs = max(total_opus_frames * 0.06 - 2.0, 0.5)
             await asyncio.sleep(playback_secs)
 
             # Resume listening

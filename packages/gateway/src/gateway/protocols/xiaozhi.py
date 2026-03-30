@@ -15,7 +15,7 @@ import uuid
 
 from fastapi import WebSocket
 
-from gateway.handlers.audio_codec import is_opus, is_mp3, mp3_to_pcm, pcm_to_opus_frames
+from gateway.handlers.audio_codec import is_opus, is_mp3, mp3_to_pcm_24k, pcm_to_opus_frames
 from gateway.protocols.base import (
     InboundMessage,
     MessageType,
@@ -83,12 +83,19 @@ class XiaozhiAdapter(ProtocolAdapter):
         audio_params = msg.get("audio_params", {})
         self._device_audio_format = audio_params.get("format", "opus")
 
-        # Send hello response with a valid session_id
+        # Send hello response matching official xiaozhi server format
         self._session_id = str(uuid.uuid4())
         response = {
             "type": "hello",
+            "version": 1,
             "session_id": self._session_id,
             "transport": "websocket",
+            "audio_params": {
+                "format": "opus",
+                "sample_rate": 24000,
+                "channels": 1,
+                "frame_duration": 60,
+            },
         }
         await ws.send_text(json.dumps(response))
 
@@ -159,9 +166,9 @@ class XiaozhiAdapter(ProtocolAdapter):
                 # Convert MP3 (from TTS) to raw Opus frames for xiaozhi playback.
                 # The device expects individual Opus packets, NOT MP3/OGG containers.
                 if is_mp3(audio):
-                    pcm = await mp3_to_pcm(audio)
+                    pcm = await mp3_to_pcm_24k(audio)
                     if pcm:
-                        frames = pcm_to_opus_frames(pcm, frame_duration_ms=60)
+                        frames = pcm_to_opus_frames(pcm, sample_rate=24000, frame_duration_ms=60)
                         # Return list of frames — server.py will send each as a binary msg
                         return frames
                     return []
