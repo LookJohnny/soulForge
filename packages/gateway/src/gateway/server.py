@@ -1,7 +1,9 @@
 """WebSocket server core - handles connections and dispatches to protocol adapters."""
 
+import asyncio
 import hashlib
 import json
+import time
 
 import structlog
 
@@ -106,6 +108,12 @@ class WebSocketServer:
                         break
                     continue
 
+                # Debug: log frame type and size
+                if isinstance(raw_data, bytes):
+                    logger.debug("gateway.frame binary=%d bytes", len(raw_data))
+                else:
+                    logger.info("gateway.frame text=%s", raw_data[:200])
+
                 msg = await adapter.decode(raw_data)
                 msg.device_id = device_id
 
@@ -125,6 +133,14 @@ class WebSocketServer:
         """Route message to appropriate handler."""
         if msg.type == MessageType.AUDIO:
             self.audio_handler.add_audio(session, msg.payload)
+            # Track last audio time for silence detection
+            session._last_audio_time = time.monotonic()
+
+            # Start silence detector if not running
+            if not getattr(session, "_silence_task", None):
+                session._silence_task = asyncio.create_task(
+                    self._vad_monitor(ws, adapter, session)
+                )
 
         elif msg.type == MessageType.CONTROL:
             action = msg.payload.get("action", "") if isinstance(msg.payload, dict) else ""
@@ -133,12 +149,21 @@ class WebSocketServer:
                 state = msg.payload.get("state", "")
                 if state == "start":
                     self.audio_handler.start_listening(session)
+                    session._last_audio_time = time.monotonic()
+                    logger.info("gateway.listen_start")
                 elif state == "stop":
+                    # Cancel silence detector
+                    if getattr(session, "_silence_task", None):
+                        session._silence_task.cancel()
+                        session._silence_task = None
                     audio = self.audio_handler.stop_listening(session)
                     if audio:
                         await self._process_and_respond(ws, adapter, session, audio)
 
             elif action == "abort":
+                if getattr(session, "_silence_task", None):
+                    session._silence_task.cancel()
+                    session._silence_task = None
                 self.audio_handler.abort(session)
                 out = OutboundMessage(
                     type=MessageType.CONTROL,
@@ -155,6 +180,46 @@ class WebSocketServer:
             await self._handle_touch(ws, adapter, session, msg)
 
         elif msg.type == MessageType.HEARTBEAT:
+            pass
+
+    async def _vad_monitor(self, ws, adapter, session):
+        """Monitor VAD state and trigger processing when speech ends.
+
+        Instead of a fixed timeout, this checks the AudioHandler's VAD state
+        every 100ms. Processing is triggered only when:
+        1. Speech was detected (not just noise)
+        2. Followed by sufficient silence (VAD says speech_complete)
+        """
+        MAX_WAIT = 30.0  # absolute max wait time
+        try:
+            start = time.monotonic()
+            while time.monotonic() - start < MAX_WAIT:
+                await asyncio.sleep(0.1)
+
+                if self.audio_handler.is_speech_complete(session):
+                    audio = self.audio_handler.stop_listening(session)
+                    if audio:
+                        logger.info("gateway.vad_trigger bytes=%d", len(audio))
+                        session._processing = True
+                        try:
+                            await self._process_and_respond(ws, adapter, session, audio)
+                        finally:
+                            session._processing = False
+                        # Restart listening for next utterance
+                        self.audio_handler.start_listening(session)
+                        session._silence_task = asyncio.create_task(
+                            self._vad_monitor(ws, adapter, session)
+                        )
+                    return
+
+            # Max wait reached without speech — restart listening
+            logger.info("gateway.vad_timeout no speech detected")
+            self.audio_handler.stop_listening(session)
+            self.audio_handler.start_listening(session)
+            session._silence_task = asyncio.create_task(
+                self._vad_monitor(ws, adapter, session)
+            )
+        except asyncio.CancelledError:
             pass
 
     async def _process_text_and_respond(self, ws, adapter, session, text: str):
@@ -187,7 +252,10 @@ class WebSocketServer:
                 if chunk.audio_data:
                     audio_out = AudioHandler.make_audio_response(chunk.audio_data)
                     raw = await adapter.encode(audio_out)
-                    if isinstance(raw, bytes):
+                    if isinstance(raw, list):
+                        for frame in raw:
+                            await ws.send_bytes(frame)
+                    elif isinstance(raw, bytes):
                         await ws.send_bytes(raw)
 
             # Send stop signal
@@ -230,7 +298,10 @@ class WebSocketServer:
                 if result.get("audio_data"):
                     audio_out = AudioHandler.make_audio_response(result["audio_data"])
                     raw = await adapter.encode(audio_out)
-                    if isinstance(raw, bytes):
+                    if isinstance(raw, list):
+                        for frame in raw:
+                            await ws.send_bytes(frame)
+                    elif isinstance(raw, bytes):
                         await ws.send_bytes(raw)
 
                 done = OutboundMessage(
@@ -246,6 +317,7 @@ class WebSocketServer:
         """Process audio through AI pipeline with streaming response."""
         try:
             # Send thinking indicator immediately
+            logger.info("gateway.responding start")
             thinking = OutboundMessage(
                 type=MessageType.TEXT,
                 payload="",
@@ -260,6 +332,8 @@ class WebSocketServer:
                     break
 
                 # Send each sentence text + audio immediately as it's ready
+                logger.info("gateway.sending sentence=%s audio=%d",
+                            chunk.text[:30], len(chunk.audio_data) if chunk.audio_data else 0)
                 text_out = OutboundMessage(
                     type=MessageType.TEXT,
                     payload=chunk.text,
@@ -271,7 +345,13 @@ class WebSocketServer:
                 if chunk.audio_data:
                     audio_out = AudioHandler.make_audio_response(chunk.audio_data)
                     raw = await adapter.encode(audio_out)
-                    if isinstance(raw, bytes):
+                    # raw may be a list of Opus frames or a single bytes object
+                    if isinstance(raw, list):
+                        logger.info("gateway.sending %d opus frames", len(raw))
+                        for frame in raw:
+                            await ws.send_bytes(frame)
+                    elif isinstance(raw, bytes):
+                        logger.info("gateway.sending audio=%d bytes", len(raw))
                         await ws.send_bytes(raw)
 
             # Send stop signal
@@ -281,6 +361,7 @@ class WebSocketServer:
                 metadata={"state": "stop"},
             )
             await ws.send_text(await adapter.encode(done))
+            logger.info("gateway.responding done text=%s", full_text[:50])
 
             await self.session_manager.add_to_history(
                 session.session_id, "assistant", full_text

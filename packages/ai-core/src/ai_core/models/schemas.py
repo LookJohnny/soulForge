@@ -74,7 +74,8 @@ class ChatRequest(BaseModel):
     end_user_id: str | None = None
     device_id: str
     session_id: str
-    audio_data: str | None = None  # base64 PCM
+    audio_data: str | None = None  # base64 audio
+    audio_format: str = "pcm"      # pcm or opus
     text_input: str | None = Field(default=None, max_length=2000)
 
     @field_validator("character_id")

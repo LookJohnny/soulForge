@@ -238,7 +238,7 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
         if len(audio_bytes) > MAX_AUDIO_BYTES:
             raise HTTPException(status_code=422, detail="Audio data exceeds 10MB limit")
         asr = await get_asr_client()
-        user_text = await asr.recognize(audio_bytes)
+        user_text = await asr.recognize(audio_bytes, audio_format=req.audio_format)
 
     if not user_text:
         raise HTTPException(status_code=400, detail="No input provided (text or audio)")

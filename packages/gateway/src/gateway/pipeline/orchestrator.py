@@ -162,7 +162,7 @@ class PipelineOrchestrator:
         return result
 
     async def process_audio_stream(
-        self, session: Session, audio_data: bytes
+        self, session: Session, audio_data: bytes, audio_format: str = "pcm"
     ) -> AsyncIterator[StreamChunk]:
         """Stream audio through AI pipeline, yielding per-sentence chunks."""
         if not session.character_id:
@@ -174,6 +174,7 @@ class PipelineOrchestrator:
             "device_id": session.device_id,
             "session_id": session.session_id,
             "audio_data": base64.b64encode(audio_data).decode(),
+            "audio_format": audio_format,
         }
 
         headers = {}

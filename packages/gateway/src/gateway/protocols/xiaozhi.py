@@ -11,10 +11,11 @@ This adapter transparently converts:
 
 import json
 import logging
+import uuid
 
 from fastapi import WebSocket
 
-from gateway.handlers.audio_codec import is_opus, is_mp3, opus_to_pcm, mp3_to_opus
+from gateway.handlers.audio_codec import is_opus, is_mp3, mp3_to_pcm, pcm_to_opus_frames
 from gateway.protocols.base import (
     InboundMessage,
     MessageType,
@@ -82,10 +83,11 @@ class XiaozhiAdapter(ProtocolAdapter):
         audio_params = msg.get("audio_params", {})
         self._device_audio_format = audio_params.get("format", "opus")
 
-        # Send hello response
+        # Send hello response with a valid session_id
+        self._session_id = str(uuid.uuid4())
         response = {
             "type": "hello",
-            "session_id": "",  # will be set by session manager
+            "session_id": self._session_id,
             "transport": "websocket",
         }
         await ws.send_text(json.dumps(response))
@@ -97,16 +99,13 @@ class XiaozhiAdapter(ProtocolAdapter):
         return device_id
 
     async def decode(self, raw_data: bytes | str) -> InboundMessage:
-        """Decode xiaozhi frame. Opus audio is decoded to PCM for ASR."""
+        """Decode xiaozhi frame. Audio is passed as-is (Opus frames)."""
         if isinstance(raw_data, bytes):
-            audio = raw_data
-            # Decode Opus to PCM if needed (ASR expects 16kHz 16-bit PCM)
-            if is_opus(audio):
-                audio = await opus_to_pcm(audio)
+            # Pass raw Opus frames directly — ASR supports Opus natively
             return InboundMessage(
                 type=MessageType.AUDIO,
                 device_id="",  # set by session context
-                payload=audio,
+                payload=raw_data,
             )
 
         # Text frame = JSON control message
@@ -157,9 +156,15 @@ class XiaozhiAdapter(ProtocolAdapter):
         if message.type == MessageType.AUDIO:
             if isinstance(message.payload, bytes):
                 audio = message.payload
-                # Convert MP3 (from TTS) to Opus for xiaozhi device
-                if self._device_audio_format == "opus" and is_mp3(audio):
-                    audio = await mp3_to_opus(audio)
+                # Convert MP3 (from TTS) to raw Opus frames for xiaozhi playback.
+                # The device expects individual Opus packets, NOT MP3/OGG containers.
+                if is_mp3(audio):
+                    pcm = await mp3_to_pcm(audio)
+                    if pcm:
+                        frames = pcm_to_opus_frames(pcm, frame_duration_ms=60)
+                        # Return list of frames — server.py will send each as a binary msg
+                        return frames
+                    return []
                 return audio
             raise ValueError("Audio payload must be bytes")
 
