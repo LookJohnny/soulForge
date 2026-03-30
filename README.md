@@ -161,22 +161,30 @@ PAD 情绪值直接驱动物理硬件：
 
 **开箱即用的硬件接入——小智设备连上就能说话**：
 
-- **Opus 音频编解码** — 自动适配小智的 Opus 协议（OGG 16kHz mono），入站 Opus→PCM 给 ASR，出站 MP3→Opus 给设备播放
-- **流式语音响应** — LLM 流式输出 → 逐句断句 → 每句即时 TTS + 推送，首句音频延迟从 3-8 秒降至 1-2 秒
+- **Opus 双向编解码** — 入站: opuslib 逐帧解码 Opus→PCM 给 ASR；出站: MP3→PCM→裸 Opus 帧逐帧发送给设备
+- **Silero VAD 智能降噪** — 神经网络语音活动检测，精准区分人声与环境噪音，只在说话时触发处理
+- **流式语音响应** — LLM 流式输出 → 逐句断句 → 每句即时 TTS → Opus 帧批量推送，首句延迟 ~2 秒
+- **多轮对话记忆** — 会话内最近 10 轮对话历史传给 LLM，支持上下文连续对话
+- **播放/监听状态机** — TTS 播放时自动屏蔽麦克风，防止扬声器回声触发误识别
 - **设备自动注册** — 新设备首次连接自动创建记录并绑定默认角色，零配置
-- **协议自动识别** — Gateway 通过 hello 消息自动检测小智协议，协商音频格式
-- **完整 SoulForge 能力** — 情绪引擎、记忆、关系进化、性格漂移全部生效
+- **OTA 兼容** — 内置 `/ota/` 端点，劫持设备 OTA 流程指向 SoulForge Gateway
+- **固件二进制修补** — NVS WebSocket URL + OTA URL 原地修补，无需编译固件
 
 ```
-小智 ESP32-S3  ──(WebSocket/Opus)──►  Gateway (:8080)
-                                         │ XiaozhiAdapter 自动识别
-                                         │ Opus↔PCM 透明转码
-                                         ▼
-                                     AI Core (:8100)
-                                         │ 流式 SSE: 逐句 text+audio
-                                         │ ASR → 情绪 → 记忆 → LLM → TTS
-                                         ▼
-                                     设备播放 Opus 音频
+小智 ESP32-S3  ──(WebSocket)──►  Gateway (:8080)
+   │                                │ XiaozhiAdapter 协议自动识别
+   │ Opus 16kHz 裸帧               │ opuslib 逐帧解码 → PCM
+   │                                │ Silero VAD 过滤噪音
+   ▼                                ▼
+ 麦克风 → Opus帧 ──────►  ASR (DashScope) → 文本
+                                    │
+                          DeepSeek LLM (带历史)
+                                    │
+                          Fish Audio TTS → MP3
+                                    │
+                          PCM → Opus帧编码 (opuslib)
+                                    │
+ 扬声器 ◄── Opus帧 ◄────── 逐帧批量发送
 ```
 
 ### 儿童安全
@@ -352,8 +360,8 @@ data: {"type":"done","full_text":"嘿嘿，太棒啦！我是快乐小鼠呀！"
 
 **后端**: Python 3.12+ / FastAPI / asyncpg / Redis / Milvus
 **前端**: Next.js 16 / NextAuth v5 / Prisma / React 19
-**AI**: DashScope (LLM+ASR) / Fish Audio (TTS)
-**硬件**: 小智 ESP32-S3 (Opus 16kHz / WebSocket)
+**AI**: DeepSeek (LLM) / DashScope (ASR) / Fish Audio (TTS) / Silero (VAD)
+**硬件**: 小智 ESP32-S3 (Opus 16kHz / WebSocket) / opuslib / ffmpeg
 **基建**: PostgreSQL / Redis / Milvus / MinIO / Docker / ffmpeg
 
 ## License
