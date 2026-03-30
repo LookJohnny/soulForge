@@ -23,10 +23,8 @@ logger = structlog.get_logger()
 class WebSocketServer:
     def __init__(self):
         self.session_manager = SessionManager()
-        # Pass DashScope API key for streaming ASR
-        import os
         self.audio_handler = AudioHandler(
-            dashscope_api_key=os.environ.get("DASHSCOPE_API_KEY", ""),
+            dashscope_api_key=settings.dashscope_api_key,
         )
         self.orchestrator = PipelineOrchestrator()
 
@@ -252,9 +250,32 @@ class WebSocketServer:
                 await asyncio.sleep(0.1)
 
                 if self.audio_handler.is_speech_complete(session):
-                    # Get streaming ASR result (already processed in parallel!)
+                    # Try streaming ASR first (low latency)
                     asr_text = await self.audio_handler.get_streaming_asr_result(session)
-                    self.audio_handler.stop_listening(session)
+                    audio = self.audio_handler.stop_listening(session)
+
+                    # If streaming ASR failed or returned garbage, fall back to batch
+                    if not asr_text or len(asr_text) < 2 or asr_text.startswith("sentence_id"):
+                        if audio and asr_text:
+                            logger.info("gateway.streaming_asr_fallback bad=%s", asr_text[:30])
+                        if audio:
+                            # Fall back to sending audio to AI Core for batch ASR
+                            session._processing = True
+                            try:
+                                await self._process_and_respond(ws, adapter, session, audio)
+                            finally:
+                                session._processing = False
+                            self.audio_handler.start_listening(session)
+                            session._silence_task = asyncio.create_task(
+                                self._vad_monitor(ws, adapter, session)
+                            )
+                            return
+                        logger.info("gateway.vad_trigger empty asr")
+                        self.audio_handler.start_listening(session)
+                        session._silence_task = asyncio.create_task(
+                            self._vad_monitor(ws, adapter, session)
+                        )
+                        return
 
                     if asr_text:
                         logger.info("gateway.vad_trigger asr=%s", asr_text[:50])

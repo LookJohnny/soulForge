@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     # Service token for ai-core authentication
     service_token: str = ""
 
+    # DashScope (for streaming ASR in gateway)
+    dashscope_api_key: str = ""
+
     # Gateway
     gateway_port: int = 8080
 

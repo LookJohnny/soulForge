@@ -33,15 +33,37 @@ class _ASRCallback(dashscope_asr.RecognitionCallback):
         self._done = threading.Event()
 
     def on_event(self, result):
-        # Intermediate results
-        sentences = result.get_sentence()
-        if sentences:
-            self.partial_text = "".join(s.get("text", "") for s in sentences)
+        # Extract text from DashScope streaming result
+        try:
+            # DashScope result has output.sentence which is a list of dicts
+            output = getattr(result, "output", None) or {}
+            if isinstance(output, dict):
+                sentences = output.get("sentence", [])
+            elif hasattr(output, "sentence"):
+                sentences = output.sentence
+            else:
+                sentences = result.get_sentence() if hasattr(result, "get_sentence") else []
+
+            if sentences:
+                parts = []
+                for s in sentences:
+                    if isinstance(s, dict):
+                        parts.append(s.get("text", ""))
+                    else:
+                        parts.append(str(s))
+                text = "".join(parts)
+                if text:
+                    self.partial_text = text
+        except Exception:
+            pass
 
     def on_complete(self):
-        if self.partial_text:
-            self.final_text = self.partial_text
+        self.final_text = self.partial_text or self.final_text
         self._done.set()
+
+    def on_event_result(self, result):
+        """Alternative callback name used by some DashScope SDK versions."""
+        self.on_event(result)
 
     def on_error(self, result):
         self.error = str(result)
