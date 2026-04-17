@@ -45,6 +45,19 @@ SoulForge 是一个通用 AI 人格引擎平台。为毛绒玩具、耳机、手
 
 ## 核心特性
 
+### 人格化设计理念：是角色，不是扮演角色
+
+SoulForge 的所有模板和引擎围绕一个原则：**让用户相信这个 AI 玩具就是那个角色本身，而不是在 cosplay**。
+
+- **Prompt 写法**：不是"你要扮演 X"的规则列表，而是**第二人称内心代入**（"你叫 X。你是一只...，有体温、有呼吸"），内嵌 3 条微型示例而不是 20 条"不要做 Y"
+- **允许不完整回复**：dialogue 可以为空（只用动作回应）、可以是"……"、可以有结巴（"那个、就是……算了"）和自我修正
+- **身体感受注入** (`embodiment.py`)：根据时间/PAD/触摸时长生成"有点困了""心跳有点快""被抱着暖暖的"等感官片段，让角色有**身体**
+- **中途唤起**：长时间静默或用户情绪翻转时，注入"刚冒出来的念头"，角色不再机械回应最后一句
+- **安全是本能不是规则**：被问"你是AI吗"—— 角色"听不懂这个词"，绝不说"作为AI我不能..."破壁台词
+- **PAD 优先**：结构化输出时 LLM 的 PAD 值直接驱动情绪，不再被关键词扫描覆盖
+
+详见 `packages/ai-core/src/ai_core/templates/system_prompt.jinja2` 和 `embodiment.py`。
+
 ### 结构化 AI 回复
 
 LLM 不再输出纯文本——每次回复都是结构化 JSON：
@@ -93,9 +106,32 @@ LLM 直接输出 PAD 值，驱动一切下游系统：
 - **通用声音匹配** — 基于性格 4D 向量 (warmth/energy/maturity/gravity) + 性别自动匹配最佳声音
 - **任何角色都适配** — DIY 角色也能自动匹配，无需手动选声音
 - **情绪驱动语音** — PAD 值自动映射为情绪标签 + 语速语量调节
-- **10 秒声音克隆** — 上传声优样本即可创建角色专属音色
+- **URL 声音克隆** — 粘贴 10 秒以上原声 URL，一键生成角色专属音色 refId（无需本地上传）
+- **预录音效片段** — audioClips 映射让特定拟声词直接播放原版音频，跳过 TTS 合成
 - **智能文本清洗** — 处理 `~`、重叠语气词、重复标点，让语音更自然
 - **DashScope CosyVoice 备选** — 24 种预设声音 + SSML 音效引擎
+
+### 非语言角色 (Vocalized Mode)
+
+**让只会"咕咕嘎嘎""doro~"的角色拥有完整灵魂**：
+
+- **VOCALIZED 模式** — 设 `languageMode=VOCALIZED`，LLM 的 dialogue 只能从你定义的拟声词库里选
+- **拟声词库 (palette)** — 角色能发出的全部音节（如 `["咕","嘎","咕咕","嘎嘎"]` / `["doro","哆啰"]`）
+- **语义分离** — thought 字段记录角色心里真正想的（完整中文），dialogue 只出拟声；PAD + action 正常表达
+- **专属动作** — species 含"企鹅/鸭"解锁 waddle，含"doro/团子/史莱姆"解锁 wiggle
+- **声音克隆绑定** — voiceCloneRefId 直接挂在角色上，TTS 自动优先使用克隆音色
+- **原声片段** — audioClips 把 `"doro~" → 原声 MP3 URL` 一一对应，保留真实 IP 音色
+
+示例：咕咕嘎嘎企鹅（明日方舟：终末地风格）
+```json
+{
+  "dialogue": "咕咕！嘎——",
+  "action": "拍了拍圆滚滚的肚子，左右摇晃两下",
+  "thought": "主人今天回来啦，好开心",
+  "pad": {"p": 0.6, "a": 0.5, "d": 0.2},
+  "stance": "excited"
+}
+// → motor.action = "waddle"（企鹅专属）
 
 ### PersonaContext 通用称呼系统
 
@@ -123,7 +159,7 @@ PAD 情绪值直接驱动物理硬件：
 ```
 
 - **LED** — 8 种表情 + RGB 颜色 + 亮度，评分制匹配防止情绪闪烁
-- **Motor** — nod/shake/tilt/sway/bounce，arousal 驱动
+- **Motor** — nod/shake/tilt/sway/bounce + 物种专属 waddle（企鹅/鸭）/ wiggle（doro/史莱姆）
 - **Vibration** — pulse/steady/double/heartbeat，梯度强度
 
 ### 手机端聊天
@@ -216,21 +252,27 @@ soulForge/
 ├── packages/
 │   ├── ai-core/                # Python FastAPI 灵魂引擎
 │   │   └── src/ai_core/
-│   │       ├── api/            # REST 端点 (chat/pipeline/tts/rag/idol)
+│   │       ├── api/            # REST 端点 (chat/pipeline/tts/rag/idol/voice_clone)
 │   │       ├── services/
 │   │       │   ├── response_parser.py    # 结构化 JSON 回复解析
 │   │       │   ├── persona_context.py    # 通用称呼系统
-│   │       │   ├── hardware_mapper.py    # PAD → 硬件指令
+│   │       │   ├── hardware_mapper.py    # PAD → 硬件指令 (含 waddle/wiggle)
 │   │       │   ├── emotion.py            # 情感状态机
 │   │       │   ├── pad_model.py          # PAD 3D 连续情感
-│   │       │   ├── prompt_builder.py     # Prompt 组装引擎
+│   │       │   ├── embodiment.py         # 身体感受注入 + 中途念头
+│   │       │   ├── prompt_builder.py     # Prompt 组装引擎 (三模板路由)
 │   │       │   ├── voice_matcher.py      # 4D 声音匹配
+│   │       │   ├── voice_clone.py        # Fish Audio 声音克隆 (文件+URL)
+│   │       │   ├── proactive_trigger.py  # 开场 + 中途静默触发
 │   │       │   ├── tts/
-│   │       │   │   ├── fish_audio_tts.py # Fish Audio S1 (主力)
+│   │       │   │   ├── fish_audio_tts.py # Fish Audio S1 (克隆 refId + audio_clips)
 │   │       │   │   ├── dashscope_tts.py  # CosyVoice (备选)
 │   │       │   │   └── edge_tts_provider.py # Edge TTS (免费降级)
 │   │       │   └── ...                   # memory/content-filter/cache/rag
 │   │       └── templates/      # Jinja2 系统 Prompt 模板
+│   │           ├── system_prompt.jinja2       # 通用角色 (第二人称代入)
+│   │           ├── idol_prompt.jinja2         # 偶像/恋爱角色
+│   │           └── vocalized_prompt.jinja2    # 非语言角色 (咕咕嘎嘎/doro)
 │   ├── gateway/                # WebSocket 网关 (设备连接)
 │   │   └── src/gateway/
 │   │       ├── protocols/
