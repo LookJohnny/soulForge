@@ -48,6 +48,7 @@ class TestTriggerGeneration:
     @patch("ai_core.services.proactive_trigger.random")
     async def test_bestfriend_with_preference_memory(self, mock_random):
         mock_random.random.return_value = 0.1  # always trigger
+        mock_random.choice = lambda x: x[0]
         memories = [{"type": "PREFERENCE", "content": "喜欢恐龙"}]
         result = await self.svc.maybe_generate_trigger("u1", "c1", "s1", "BESTFRIEND", memories)
         assert result is not None
@@ -57,6 +58,7 @@ class TestTriggerGeneration:
     @patch("ai_core.services.proactive_trigger.random")
     async def test_event_memory_trigger(self, mock_random):
         mock_random.random.return_value = 0.1
+        mock_random.choice = lambda x: x[0]
         memories = [{"type": "EVENT", "content": "明天要考试"}]
         result = await self.svc.maybe_generate_trigger("u1", "c1", "s1", "FRIEND", memories)
         assert result is not None
@@ -66,6 +68,7 @@ class TestTriggerGeneration:
     @patch("ai_core.services.proactive_trigger.random")
     async def test_topic_memory_trigger(self, mock_random):
         mock_random.random.return_value = 0.1
+        mock_random.choice = lambda x: x[0]
         memories = [{"type": "TOPIC", "content": "太空"}]
         result = await self.svc.maybe_generate_trigger("u1", "c1", "s1", "FAMILIAR", memories)
         assert result is not None
@@ -92,6 +95,7 @@ class TestTriggerGeneration:
     @patch("ai_core.services.proactive_trigger.random")
     async def test_preference_prioritized_over_topic(self, mock_random):
         mock_random.random.return_value = 0.1
+        mock_random.choice = lambda x: x[0]
         memories = [
             {"type": "TOPIC", "content": "天气"},
             {"type": "PREFERENCE", "content": "喜欢画画"},

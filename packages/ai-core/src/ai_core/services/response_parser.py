@@ -118,9 +118,14 @@ def parse_llm_response(raw_text: str) -> StructuredResponse:
             if fixed is not None:
                 data = fixed
 
-    # Validate: parsed dict must have a dialogue/text key to be the right object
-    if isinstance(data, dict) and not (data.get("dialogue") or data.get("text")):
-        data = None  # Matched a sub-object (e.g. PAD), not the full response
+    # Validate: parsed dict must look like a top-level response, not a
+    # nested sub-object like {"p":0,"a":0,"d":0}. A genuine response has at
+    # least one of the expressive fields (dialogue/action/thought), even if
+    # dialogue itself is an empty string (valid for "silent action" replies).
+    if isinstance(data, dict):
+        _has_top_level = any(k in data for k in ("dialogue", "text", "action", "thought"))
+        if not _has_top_level:
+            data = None  # Matched a sub-object (e.g. PAD), not the full response
 
     # Fallback 1: YAML-like format (key: value lines)
     if not isinstance(data, dict):
@@ -172,8 +177,11 @@ def parse_llm_response(raw_text: str) -> StructuredResponse:
             tone=str(voice_raw.get("tone", "")),
         )
 
-    # If dialogue is empty but we have raw text, fall back
-    if not resp.dialogue:
+    # Empty dialogue is legitimate when the character is responding with
+    # only an action or a silent thought (e.g. a hug, a sigh, a look).
+    # In that case the response is still structurally valid — don't fall
+    # back to raw text, which would clobber action/thought.
+    if not resp.dialogue and not (resp.action or resp.thought):
         resp.dialogue = _clean_legacy_text(raw_text)
         resp.parsed_ok = False
 

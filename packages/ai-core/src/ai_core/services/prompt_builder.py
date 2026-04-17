@@ -126,6 +126,8 @@ class PromptBuilder:
         time_context: str | None = None,
         scene: str | None = None,
         touch_context: str | None = None,
+        sensations: str | None = None,
+        mid_session_thought: str | None = None,
         structured_output: bool = True,
     ) -> dict:
         """Build complete system prompt and voice config.
@@ -204,14 +206,22 @@ class PromptBuilder:
         if user_mood and user_mood != "neutral":
             user_mood_instruction = pctx.mood_response(user_mood)
 
-        # Format memories for template
+        # Format memories for template — vary phrasing so recall feels natural,
+        # not like a database query. Use a stable per-memory hash so the same
+        # memory picks the same wording across turns (avoids "你说过" one turn,
+        # "上次你说" the next for the same fact).
         memory_context = []
         if memories:
             _ref = pctx.user_ref
-            _MEMORY_FMT = {"TOPIC": "上次聊了{content}", "PREFERENCE": f"{_ref}{{content}}", "EVENT": f"{_ref}说过{{content}}"}
+            _TOPIC_FMTS = ["上次聊到{content}", "我们之前聊过{content}", "想起来我们说过{content}"]
+            _PREF_FMTS = [f"{_ref}{{content}}", f"{_ref}好像{{content}}", f"{_ref}以前提过{{content}}"]
+            _EVENT_FMTS = [f"{_ref}说过{{content}}", f"{_ref}之前提到{{content}}", f"好像{_ref}那次讲过{{content}}"]
+            _BY_TYPE = {"TOPIC": _TOPIC_FMTS, "PREFERENCE": _PREF_FMTS, "EVENT": _EVENT_FMTS}
             for m in memories:
-                fmt = _MEMORY_FMT.get(m.get("type", ""), f"{_ref}说过{{content}}")
-                memory_context.append(fmt.format(content=m.get("content", "")))
+                content = m.get("content", "")
+                fmts = _BY_TYPE.get(m.get("type", ""), _EVENT_FMTS)
+                fmt = fmts[hash(content) % len(fmts)]
+                memory_context.append(fmt.format(content=content))
 
         # Relationship stage description (use romance stages for idol archetype)
         relationship_description = ""
@@ -259,6 +269,8 @@ class PromptBuilder:
             user_mood_instruction=user_mood_instruction,
             touch_context=touch_context or "",
             time_context=time_context or "",
+            sensations=sensations or "",
+            mid_session_thought=mid_session_thought or "",
             catchphrases=base.get("catchphrases", []),
             suffix=base.get("suffix", ""),
             relationship=base.get("relationship", pctx.rel_default),

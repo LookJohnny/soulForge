@@ -90,6 +90,21 @@ async def chat(req: ChatRequest, request: Request):
 
     # 3c. Get current emotion state (discrete, for prompt builder compatibility)
     emotion_state = await emotion_engine.get_emotion(req.session_id)
+    prev_pad = await emotion_engine.get_pad_state(req.session_id)
+
+    # 3d. Track silence + mood shift across turns for mid-session embodiment
+    cache = get_cache()
+    _now_ts = time.time()
+    _last_seen_raw = await cache.get(f"last_user_seen:{req.session_id}")
+    silence_seconds = 0.0
+    if _last_seen_raw:
+        try:
+            silence_seconds = max(0.0, _now_ts - float(_last_seen_raw))
+        except (TypeError, ValueError):
+            silence_seconds = 0.0
+    prev_user_mood = await cache.get(f"prev_user_mood:{req.session_id}")
+    await cache.set(f"last_user_seen:{req.session_id}", str(_now_ts), ttl=3600)
+    await cache.set(f"prev_user_mood:{req.session_id}", user_mood or "neutral", ttl=3600)
 
     # 4. Retrieve memories
     memory_service = await get_memory_service()
@@ -120,9 +135,27 @@ async def chat(req: ChatRequest, request: Request):
 
     # 7. Time awareness
     from ai_core.services.time_awareness import build_time_prompt
-    time_context = build_time_prompt(rel_state.get("last_interaction_date"))
+    # Archetype for embodiment / time wording — need character row
+    _char_row = await (await get_prompt_builder())._get_character(req.character_id, brand_id)
+    _archetype = (_char_row or {}).get("archetype", "ANIMAL")
+    time_context = build_time_prompt(rel_state.get("last_interaction_date"), archetype=_archetype)
 
-    # 8. Build prompt (personality with drift + emotion + user mood + memories + relationship + trigger + time)
+    # 7b. Embodied sensations + mid-session inner thought
+    from ai_core.services.embodiment import build_sensations, build_mid_session_thought
+    sensations = build_sensations(
+        pad=prev_pad,
+        touch_gesture=touch_gesture,
+        touch_duration_ms=(touch_ctx or {}).get("duration_ms") if touch_ctx else None,
+        archetype=_archetype,
+    )
+    mid_thought = build_mid_session_thought(
+        silence_seconds=silence_seconds,
+        user_mood=user_mood,
+        prev_user_mood=prev_user_mood,
+        archetype=_archetype,
+    )
+
+    # 8. Build prompt (personality with drift + emotion + user mood + memories + relationship + trigger + time + body)
     builder = await get_prompt_builder()
     try:
         prompt_result = await builder.build(
@@ -137,32 +170,48 @@ async def chat(req: ChatRequest, request: Request):
             proactive_trigger=proactive_line,
             time_context=time_context,
             touch_context=touch_prompt,
+            sensations=sensations,
+            mid_session_thought=mid_thought,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
     # 8. LLM inference
     llm = await get_llm_client()
-    ai_text = await llm.chat(
+    ai_raw = await llm.chat(
         system_prompt=prompt_result["system_prompt"],
         user_input=user_text,
     )
 
-    # 9. Extract inline emotion tag + content safety filter
+    # 9. Parse structured output — dialogue/action/thought/pad/voice/stance
+    from ai_core.services.response_parser import parse_llm_response
     from ai_core.services.emotion import extract_inline_emotion
+    parsed = parse_llm_response(ai_raw)
+    ai_text = parsed.dialogue if parsed.dialogue else ai_raw
     ai_text, inline_emotion = extract_inline_emotion(ai_text)
     ai_text = content_filter.filter_output(ai_text)
 
-    # 10. Determine emotion: inline tag > keyword+empathy, then fuse via PAD
-    text_emotion = inline_emotion or emotion_engine.detect_emotion(ai_text, previous=emotion_state, user_mood=user_mood)
-    pad_state, new_emotion = await emotion_engine.update_with_pad(
-        session_id=req.session_id,
-        text_emotion=text_emotion,
-        touch_gesture=touch_gesture,
-        user_mood=user_mood,
-        personality=prompt_result.get("personality"),
-        relationship_stage=rel_state.get("stage"),
-    )
+    # 10. Emotion update — trust the LLM's explicit PAD when structured parse
+    # succeeded. Fall back to keyword detection only for unparsed responses.
+    if parsed.parsed_ok:
+        pad_state, new_emotion = await emotion_engine.update_with_explicit_pad(
+            session_id=req.session_id,
+            pad_values={"p": parsed.pad.p, "a": parsed.pad.a, "d": parsed.pad.d},
+            touch_gesture=touch_gesture,
+            user_mood=user_mood,
+            personality=prompt_result.get("personality"),
+            relationship_stage=rel_state.get("stage"),
+        )
+    else:
+        text_emotion = inline_emotion or emotion_engine.detect_emotion(ai_text, previous=emotion_state, user_mood=user_mood)
+        pad_state, new_emotion = await emotion_engine.update_with_pad(
+            session_id=req.session_id,
+            text_emotion=text_emotion,
+            touch_gesture=touch_gesture,
+            user_mood=user_mood,
+            personality=prompt_result.get("personality"),
+            relationship_stage=rel_state.get("stage"),
+        )
 
     # 11. TTS with PAD-computed parameters (more nuanced than discrete lookup)
     audio_b64 = None
@@ -270,6 +319,21 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
         await touch_engine.clear_touch_context(req.session_id)
 
     emotion_state = await emotion_engine.get_emotion(req.session_id)
+    prev_pad = await emotion_engine.get_pad_state(req.session_id)
+
+    # Track silence + mood-shift for mid-session embodiment
+    cache = get_cache()
+    _now_ts = time.time()
+    _last_seen_raw = await cache.get(f"last_user_seen:{req.session_id}")
+    silence_seconds = 0.0
+    if _last_seen_raw:
+        try:
+            silence_seconds = max(0.0, _now_ts - float(_last_seen_raw))
+        except (TypeError, ValueError):
+            silence_seconds = 0.0
+    prev_user_mood = await cache.get(f"prev_user_mood:{req.session_id}")
+    await cache.set(f"last_user_seen:{req.session_id}", str(_now_ts), ttl=3600)
+    await cache.set(f"prev_user_mood:{req.session_id}", user_mood or "neutral", ttl=3600)
 
     # 4. Memories + relationship
     memory_service = await get_memory_service()
@@ -296,12 +360,27 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
             memories=memories,
         )
 
-    # 6. Time awareness
+    # 6. Time awareness + embodied sensations (needs archetype)
     from ai_core.services.time_awareness import build_time_prompt
-    time_context = build_time_prompt(rel_state.get("last_interaction_date"))
+    from ai_core.services.embodiment import build_sensations, build_mid_session_thought
+    builder = await get_prompt_builder()
+    _char_row = await builder._get_character(req.character_id, brand_id)
+    _archetype = (_char_row or {}).get("archetype", "ANIMAL")
+    time_context = build_time_prompt(rel_state.get("last_interaction_date"), archetype=_archetype)
+    sensations = build_sensations(
+        pad=prev_pad,
+        touch_gesture=touch_gesture,
+        touch_duration_ms=(touch_ctx or {}).get("duration_ms") if touch_ctx else None,
+        archetype=_archetype,
+    )
+    mid_thought = build_mid_session_thought(
+        silence_seconds=silence_seconds,
+        user_mood=user_mood,
+        prev_user_mood=prev_user_mood,
+        archetype=_archetype,
+    )
 
     # 7. Build prompt (plain text mode for device/TTS pipelines)
-    builder = await get_prompt_builder()
     try:
         prompt_result = await builder.build(
             character_id=req.character_id,
@@ -315,6 +394,8 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
             proactive_trigger=proactive_line,
             time_context=time_context,
             touch_context=touch_prompt,
+            sensations=sensations,
+            mid_session_thought=mid_thought,
             structured_output=False,
         )
     except ValueError as e:

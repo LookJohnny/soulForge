@@ -371,6 +371,55 @@ class EmotionEngine:
 
     # ── PAD-based methods (smooth continuous transitions) ──
 
+    async def update_with_explicit_pad(
+        self,
+        session_id: str,
+        pad_values: dict | "PADState",
+        touch_gesture: str | None = None,
+        user_mood: str | None = None,
+        personality: dict | None = None,
+        relationship_stage: str | None = None,
+    ) -> tuple[PADState, str]:
+        """Update PAD state using values explicitly supplied by the LLM
+        (structured output mode). These are a more reliable signal than
+        keyword-based detection, so they drive the text_target directly
+        rather than going through emotion_to_pad(keyword).
+        """
+        # Accept either dict or PADState
+        if isinstance(pad_values, PADState):
+            explicit = pad_values
+        else:
+            explicit = PADState(
+                p=float(pad_values.get("p", 0) or 0),
+                a=float(pad_values.get("a", 0) or 0),
+                d=float(pad_values.get("d", 0) or 0),
+            ).clamp()
+
+        current = await self.pad.get_pad(session_id)
+
+        baseline = await self.pad.get_baseline(session_id)
+        if baseline is None and personality:
+            from ai_core.services.pad_model import personality_to_baseline
+            baseline = personality_to_baseline(personality)
+            await self.pad.set_baseline(session_id, baseline)
+
+        from ai_core.services.pad_model import USER_MOOD_PAD, transition_pad
+        touch_impulse = TOUCH_PAD_IMPULSE.get(touch_gesture) if touch_gesture else None
+        mood_pad = USER_MOOD_PAD.get(user_mood) if user_mood and user_mood != "neutral" else None
+
+        new_state = transition_pad(
+            current=current,
+            text_target=explicit,
+            touch_impulse=touch_impulse,
+            user_mood_pad=mood_pad,
+            baseline=baseline,
+            relationship_stage=relationship_stage,
+        )
+        await self.pad.set_pad(session_id, new_state)
+        discrete = pad_to_emotion(new_state)
+        await self.set_emotion(session_id, discrete)
+        return new_state, discrete
+
     async def update_with_pad(
         self,
         session_id: str,

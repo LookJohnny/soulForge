@@ -188,6 +188,9 @@ class TouchEngine:
             "emotion_hint": TOUCH_EMOTION_MAP.get(gesture, "calm"),
             "affinity_bonus": affinity_bonus,
             "intensity": intensity,
+            # Duration is surfaced so downstream (embodiment.py) can decide
+            # whether a hug has gone on long enough to feel *sustained*.
+            "duration_ms": duration_ms or 0,
         }
 
         # Store in cache for session context
