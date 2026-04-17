@@ -70,6 +70,52 @@ async def clone_voice(audio_bytes: bytes, title: str,
     }
 
 
+async def clone_voice_from_url(audio_url: str, title: str,
+                                description: str = "") -> dict:
+    """Fetch an audio URL and clone it via Fish Audio.
+
+    Convenience wrapper for the vocalized-character flow where the user
+    supplies a URL to source-material audio rather than uploading a file.
+
+    Args:
+        audio_url: Publicly fetchable audio URL (MP3/WAV/OGG, 10-60s).
+        title: Voice model name.
+        description: Optional description.
+
+    Returns:
+        Same shape as clone_voice().
+
+    Raises:
+        RuntimeError if download fails or clone fails.
+    """
+    if not audio_url or not audio_url.startswith(("http://", "https://")):
+        raise RuntimeError("voice_clone: audio_url must be http(s)")
+
+    # Download the audio sample. Cap size to protect us from arbitrary URLs.
+    MAX_DOWNLOAD = 25 * 1024 * 1024  # 25MB
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+        try:
+            resp = await client.get(audio_url)
+        except httpx.HTTPError as e:
+            raise RuntimeError(f"voice_clone: download failed: {e}") from e
+
+    if resp.status_code != 200:
+        raise RuntimeError(f"voice_clone: download HTTP {resp.status_code}")
+
+    audio_bytes = resp.content
+    if not audio_bytes or len(audio_bytes) < 1000:
+        raise RuntimeError("voice_clone: audio too small (need at least ~10 seconds)")
+    if len(audio_bytes) > MAX_DOWNLOAD:
+        raise RuntimeError(f"voice_clone: audio exceeds {MAX_DOWNLOAD // (1024*1024)}MB limit")
+
+    content_type = resp.headers.get("content-type", "").lower()
+    if content_type and not content_type.startswith(("audio/", "application/octet-stream")):
+        logger.warning("voice_clone.unexpected_content_type", content_type=content_type, url=audio_url[:120])
+
+    logger.info("voice_clone.url_downloaded", url=audio_url[:120], bytes=len(audio_bytes))
+    return await clone_voice(audio_bytes, title, description)
+
+
 async def delete_voice(fish_audio_id: str) -> bool:
     """Delete a cloned voice model from Fish Audio."""
     api_key = settings.fish_audio_api_key

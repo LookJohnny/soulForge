@@ -86,8 +86,11 @@ export default function NewCharacterPage() {
     languageMode: "VERBAL" as "VERBAL" | "VOCALIZED",
     vocalizationPalette: [""],
     voiceCloneUrl: "",
+    voiceCloneRefId: "",
     audioClipsRaw: [{ phrase: "", url: "" }],
   });
+  const [cloning, setCloning] = useState(false);
+  const [cloneError, setCloneError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     setSaving(true);
@@ -115,6 +118,7 @@ export default function NewCharacterPage() {
       forbidden: form.forbidden.filter(Boolean),
       vocalizationPalette: form.languageMode === "VOCALIZED" ? form.vocalizationPalette.filter(Boolean) : [],
       voiceCloneUrl: form.voiceCloneUrl || null,
+      voiceCloneRefId: form.voiceCloneRefId || null,
       audioClips: audioClipsFinal,
     };
     const res = await fetch("/api/characters", {
@@ -128,6 +132,41 @@ export default function NewCharacterPage() {
     } else {
       setSaving(false);
       alert("创建失败，请重试");
+    }
+  };
+
+  const triggerVoiceClone = async () => {
+    const url = form.voiceCloneUrl.trim();
+    if (!url) {
+      setCloneError("请先填写音频 URL");
+      return;
+    }
+    setCloning(true);
+    setCloneError(null);
+    try {
+      const res = await fetch("/api/voice-clone/from-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          audioUrl: url,
+          title: form.name || "未命名角色",
+          description: `${form.archetype} ${form.species || form.customSpecies || ""}`.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCloneError(data.error || `克隆失败 (HTTP ${res.status})`);
+        return;
+      }
+      if (!data.fishAudioId) {
+        setCloneError("返回内容缺少 fishAudioId");
+        return;
+      }
+      setForm((prev) => ({ ...prev, voiceCloneRefId: data.fishAudioId }));
+    } catch (e) {
+      setCloneError(e instanceof Error ? e.message : "网络错误");
+    } finally {
+      setCloning(false);
     }
   };
 
@@ -548,17 +587,51 @@ export default function NewCharacterPage() {
                 <div className="glass rounded-2xl p-5">
                   <label className="block text-[11px] text-white/35 mb-2 font-medium tracking-wide uppercase">声音克隆样本（可选）</label>
                   <p className="text-[10px] text-white/15 mb-3">
-                    Fish Audio 声音克隆：粘贴 10 秒以上清晰原声的 URL。留空则系统按性格自动匹配预设音色。
+                    Fish Audio 声音克隆：粘贴 10 秒以上清晰原声的 URL，点&ldquo;立即克隆&rdquo;生成专属音色 ID。留空则系统按性格自动匹配预设音色。
                   </p>
-                  <input
-                    value={form.voiceCloneUrl}
-                    onChange={(e) => setForm({ ...form, voiceCloneUrl: e.target.value })}
-                    className="input-dark w-full"
-                    placeholder="https://.../voice-sample.mp3"
-                    type="url"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      value={form.voiceCloneUrl}
+                      onChange={(e) => {
+                        setForm({ ...form, voiceCloneUrl: e.target.value, voiceCloneRefId: "" });
+                        setCloneError(null);
+                      }}
+                      className="input-dark flex-1"
+                      placeholder="https://.../voice-sample.mp3"
+                      type="url"
+                    />
+                    <button
+                      type="button"
+                      onClick={triggerVoiceClone}
+                      disabled={cloning || !form.voiceCloneUrl.trim()}
+                      className="px-4 py-2 rounded-xl text-[12px] bg-violet-500/12 text-violet-300/80 border border-violet-500/20 hover:bg-violet-500/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap"
+                    >
+                      {cloning ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          克隆中...
+                        </span>
+                      ) : form.voiceCloneRefId ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Check className="w-3.5 h-3.5" />
+                          重新克隆
+                        </span>
+                      ) : (
+                        "立即克隆"
+                      )}
+                    </button>
+                  </div>
+                  {form.voiceCloneRefId && (
+                    <p className="text-[10px] text-violet-300/70 mt-2 break-all">
+                      ✓ 克隆成功 · ID:{" "}
+                      <code className="font-mono text-violet-300/90">{form.voiceCloneRefId}</code>
+                    </p>
+                  )}
+                  {cloneError && (
+                    <p className="text-[10px] text-red-400/80 mt-2">⚠ {cloneError}</p>
+                  )}
                   <p className="text-[10px] text-white/15 mt-1.5">
-                    版权提醒：商用请确认样本已获授权。
+                    版权提醒：商用请确认样本已获授权。Fish Audio 克隆通常需要 5-30 秒。
                   </p>
                 </div>
 

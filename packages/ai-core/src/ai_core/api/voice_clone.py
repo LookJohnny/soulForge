@@ -2,13 +2,20 @@
 
 import structlog
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
+from pydantic import BaseModel, Field
 
-from ai_core.services.voice_clone import clone_voice, delete_voice
+from ai_core.services.voice_clone import clone_voice, clone_voice_from_url, delete_voice
 
 router = APIRouter(prefix="/voice-clone", tags=["voice-clone"])
 logger = structlog.get_logger()
 
 MAX_AUDIO_SIZE = 20 * 1024 * 1024  # 20MB
+
+
+class CloneFromUrlRequest(BaseModel):
+    audio_url: str = Field(..., min_length=10, max_length=2000)
+    title: str = Field(..., min_length=1, max_length=100)
+    description: str = Field(default="", max_length=500)
 
 
 @router.post("/create")
@@ -39,6 +46,26 @@ async def create_cloned_voice(
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
+    return result
+
+
+@router.post("/from-url")
+async def create_cloned_voice_from_url(req: CloneFromUrlRequest, request: Request):
+    """Clone a Fish Audio voice from a publicly-fetchable audio URL.
+
+    Used by the character creation wizard when the designer supplies a
+    source-material URL (e.g. a 10-20s voice-actor sample) instead of
+    uploading a file. Returns the reference_id that should be written to
+    Character.voice_clone_ref_id.
+    """
+    try:
+        result = await clone_voice_from_url(
+            audio_url=req.audio_url,
+            title=req.title,
+            description=req.description,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
     return result
 
 
