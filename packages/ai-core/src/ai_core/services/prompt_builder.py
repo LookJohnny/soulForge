@@ -109,6 +109,7 @@ class PromptBuilder:
         self._templates = {
             "default": self.env.get_template("system_prompt.jinja2"),
             "idol": self.env.get_template("idol_prompt.jinja2"),
+            "vocalized": self.env.get_template("vocalized_prompt.jinja2"),
         }
         self.template = self._templates["default"]
 
@@ -247,15 +248,26 @@ class PromptBuilder:
                 from ai_core.services.idol_presets import SCENE_PROMPTS
                 scene_prompt = SCENE_PROMPTS.get(scene, "")
 
-        # Select template: idol for HUMAN romance archetype, default otherwise
+        # Select template: vocalized (non-verbal) takes highest priority, then
+        # idol for HUMAN romance archetype, then default.
+        language_mode = (base.get("language_mode") or "VERBAL").upper()
         template = self._templates["default"]
-        if base.get("archetype") == "HUMAN" and scene_prompt:
+        if language_mode == "VOCALIZED":
+            template = self._templates["vocalized"]
+        elif base.get("archetype") == "HUMAN" and scene_prompt:
             template = self._templates["idol"]
         elif base.get("archetype") == "HUMAN" and base.get("relationship", "") in (
             "暗恋对象", "青梅竹马", "深爱的人", "开朗的恋人", "表面冷漠的恋人",
             "温柔的恋人", "热血恋人", "若即若离的暧昧对象",
         ):
             template = self._templates["idol"]
+
+        # Sanitize vocalization palette — short tokens only, no full sentences
+        raw_palette = base.get("vocalization_palette") or []
+        if isinstance(raw_palette, str):
+            # JSONB returned as string — not expected for TEXT[], but be tolerant
+            raw_palette = [raw_palette]
+        safe_palette = [_sanitize_user_field(str(p), max_length=24) for p in raw_palette][:20]
 
         # Render template with PersonaContext-driven variables
         system_prompt = template.render(
@@ -288,6 +300,8 @@ class PromptBuilder:
             forbidden=base.get("forbidden", []),
             structured_output=structured_output,
             rag_context=rag_context,
+            # Vocalized mode — palette of allowed non-verbal utterances.
+            vocalization_palette=safe_palette,
         )
 
         # Get voice info — explicit assignment or auto-match
@@ -333,6 +347,9 @@ class PromptBuilder:
             "ssml_effect": ssml_effect,
             "personality": personality,
             "_species": base.get("species", ""),  # for Fish Audio voice resolution
+            "_language_mode": language_mode,
+            "_voice_clone_ref_id": base.get("voice_clone_ref_id"),
+            "_audio_clips": base.get("audio_clips") or {},
         }
 
     async def _get_character(self, character_id: str, brand_id: str) -> dict | None:
@@ -346,15 +363,26 @@ class PromptBuilder:
             row = await conn.fetchrow(
                 """SELECT id, name, archetype, species, age_setting, backstory, relationship,
                           personality, catchphrases, suffix, topics, forbidden,
-                          response_length, voice_id, voice_speed, emotion_config
+                          response_length, voice_id, voice_speed, emotion_config,
+                          language_mode, vocalization_palette, audio_clips,
+                          voice_clone_url, voice_clone_ref_id
                    FROM characters WHERE id = $1 AND brand_id = $2""",
                 character_id,
                 brand_id,
             )
             if not row:
                 return None
-            # Convert UUID objects to strings for JSON serialization
-            result = {k: (str(v) if hasattr(v, 'hex') else v) for k, v in dict(row).items()}
+            # Convert UUID objects to strings and asyncpg enums to plain strings.
+            result = {}
+            for k, v in dict(row).items():
+                if hasattr(v, "hex"):
+                    result[k] = str(v)
+                elif hasattr(v, "value") and not isinstance(v, (int, float, bool)):
+                    # asyncpg returns postgres enums as strings already, but
+                    # be defensive in case a wrapper is introduced.
+                    result[k] = getattr(v, "value", v)
+                else:
+                    result[k] = v
             await self.cache.set_json(cache_key, result, ttl=self.CACHE_TTL)
             return result
 

@@ -221,6 +221,13 @@ async def chat(req: ChatRequest, request: Request):
         ssml_pitch, ssml_rate = emotion_engine.apply_tts_offsets_pad(pad_state, ssml_pitch, ssml_rate)
 
         tts = await get_tts_client()
+        if hasattr(tts._provider, "set_character_context"):
+            tts._provider.set_character_context(
+                species=prompt_result.get("_species", ""),
+                personality=prompt_result.get("personality"),
+                voice_clone_ref_id=prompt_result.get("_voice_clone_ref_id"),
+                audio_clips=prompt_result.get("_audio_clips"),
+            )
         audio_bytes = await tts.synthesize(
             text=ai_text,
             voice=prompt_result["voice_id"],
@@ -468,6 +475,13 @@ async def chat_stream(req: ChatRequest, request: Request):
                 if prompt_result.get("voice_id"):
                     try:
                         tts = await get_tts_client()
+                        if hasattr(tts._provider, "set_character_context"):
+                            tts._provider.set_character_context(
+                                species=prompt_result.get("_species", ""),
+                                personality=prompt_result.get("personality"),
+                                voice_clone_ref_id=prompt_result.get("_voice_clone_ref_id"),
+                                audio_clips=prompt_result.get("_audio_clips"),
+                            )
                         audio_bytes = await tts.synthesize(
                             text=sentence,
                             voice=prompt_result["voice_id"],
@@ -497,6 +511,13 @@ async def chat_stream(req: ChatRequest, request: Request):
                 if prompt_result.get("voice_id"):
                     try:
                         tts = await get_tts_client()
+                        if hasattr(tts._provider, "set_character_context"):
+                            tts._provider.set_character_context(
+                                species=prompt_result.get("_species", ""),
+                                personality=prompt_result.get("personality"),
+                                voice_clone_ref_id=prompt_result.get("_voice_clone_ref_id"),
+                                audio_clips=prompt_result.get("_audio_clips"),
+                            )
                         audio_bytes = await tts.synthesize(
                             text=remaining,
                             voice=prompt_result["voice_id"],
@@ -685,6 +706,13 @@ async def touch_event(req: TouchEventRequest, request: Request):
                     pad_state, ssml_pitch, ssml_rate
                 )
                 tts = await get_tts_client()
+                if hasattr(tts._provider, "set_character_context"):
+                    tts._provider.set_character_context(
+                        species=prompt_result.get("_species", ""),
+                        personality=prompt_result.get("personality"),
+                        voice_clone_ref_id=prompt_result.get("_voice_clone_ref_id"),
+                        audio_clips=prompt_result.get("_audio_clips"),
+                    )
                 audio_bytes = await tts.synthesize(
                     text=text_response,
                     voice=voice_id,

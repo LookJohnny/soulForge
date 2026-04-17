@@ -216,11 +216,23 @@ class FishAudioTTSProvider(TTSProvider):
         logger.info("tts.fish_audio_init", model=self.model)
 
     def set_character_context(self, species: str = "", personality: dict | None = None,
-                               age_setting: int | None = None, relationship: str | None = None):
-        """Set character context for voice resolution. Call before synthesize."""
+                               age_setting: int | None = None, relationship: str | None = None,
+                               voice_clone_ref_id: str | None = None,
+                               audio_clips: dict | None = None):
+        """Set character context for voice resolution. Call before synthesize.
+
+        voice_clone_ref_id: Fish Audio cloned voice reference ID. If set, this
+        overrides personality-based auto-matching so vocalized characters
+        (咕咕嘎嘎 / doro) can use their actual source-material voice.
+        audio_clips: { "phrase": "https://.../phrase.mp3" } — when the text
+        to synthesize exactly matches a key, the clip is returned verbatim
+        instead of going through TTS (preserves true original audio).
+        """
         self._char_context = {
             "species": species, "personality": personality,
             "age_setting": age_setting, "relationship": relationship,
+            "voice_clone_ref_id": voice_clone_ref_id,
+            "audio_clips": audio_clips or {},
         }
 
     def _wrap_emotion(self, text: str, emotion_tag: str) -> str:
@@ -252,14 +264,19 @@ class FishAudioTTSProvider(TTSProvider):
             "latency": "balanced",
         }
 
-        # Resolve voice to Fish Audio reference ID using personality vector matching
-        resolved = resolve_fish_voice(
-            voice_id=voice,
-            species=self._char_context.get("species", ""),
-            personality=self._char_context.get("personality"),
-            age_setting=self._char_context.get("age_setting"),
-            relationship=self._char_context.get("relationship"),
-        )
+        # Voice resolution order: character-level clone > explicit voice_id arg >
+        # personality-vector auto-match against the preset library.
+        clone_ref = self._char_context.get("voice_clone_ref_id")
+        if clone_ref:
+            resolved = clone_ref
+        else:
+            resolved = resolve_fish_voice(
+                voice_id=voice,
+                species=self._char_context.get("species", ""),
+                personality=self._char_context.get("personality"),
+                age_setting=self._char_context.get("age_setting"),
+                relationship=self._char_context.get("relationship"),
+            )
         if resolved:
             body["reference_id"] = resolved
 
@@ -304,6 +321,14 @@ class FishAudioTTSProvider(TTSProvider):
         ssml_rate: float = 1.0,
         ssml_effect: str = "",
     ) -> bytes:
+        # Pre-recorded audio clip shortcut: vocalized characters can map specific
+        # phrases ("doro~", "咕咕") to source-material audio URLs. When the text
+        # matches a clip key, return that audio verbatim instead of synthesizing
+        # — preserves the true IP voice for nonverbal signature sounds.
+        clip = await self._resolve_audio_clip(text)
+        if clip is not None:
+            return clip
+
         # Convert SSML params to Fish Audio prosody
         # ssml_pitch/ssml_rate come from the structured response voice params
         fish_speed = ssml_rate * speed
@@ -318,6 +343,24 @@ class FishAudioTTSProvider(TTSProvider):
         prosody = {"speed": round(fish_speed, 2), "volume": 0}
 
         return await self._call_api(text_with_emotion, voice, prosody)
+
+    async def _resolve_audio_clip(self, text: str) -> bytes | None:
+        """Return pre-recorded audio bytes if text exactly matches a clip key."""
+        clips = self._char_context.get("audio_clips") or {}
+        if not clips or not text:
+            return None
+        key = text.strip().rstrip("。！？,.!?~～").strip()
+        url = clips.get(key) or clips.get(text.strip())
+        if not url:
+            return None
+        try:
+            resp = await self._client.get(url, timeout=10.0)
+            if resp.status_code == 200 and resp.content:
+                logger.info("tts.fish_audio_clip_hit", key=key[:20], bytes=len(resp.content))
+                return resp.content
+        except Exception:
+            logger.exception("tts.fish_audio_clip_fetch_failed", url=url[:80])
+        return None
 
     async def synthesize_to_wav(
         self,

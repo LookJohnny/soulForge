@@ -62,6 +62,11 @@ export default async function CharacterDetailPage({
               }`}>
                 {character.status === "PUBLISHED" ? "已发布" : "草稿"}
               </span>
+              {(character as { languageMode?: string }).languageMode === "VOCALIZED" && (
+                <span className="px-2.5 py-[3px] text-[10px] rounded-full font-medium bg-violet-500/15 text-violet-300/80">
+                  🐧 拟声角色
+                </span>
+              )}
             </div>
             <p className="text-[12px] text-white/30 mb-2">
               {character.species} · {character.relationship || "好朋友"} · {character.ageSetting ? `${character.ageSetting}岁` : "年龄未设定"}
@@ -119,6 +124,19 @@ export default async function CharacterDetailPage({
         {/* Speech */}
         <div className="glass rounded-2xl p-5 animate-fade-in stagger-3">
           <h3 className="text-[11px] text-white/25 uppercase tracking-wider mb-3 font-medium">说话风格</h3>
+          {(character as { languageMode?: string; vocalizationPalette?: string[] }).languageMode === "VOCALIZED" && (() => {
+            const palette = (character as { vocalizationPalette?: string[] }).vocalizationPalette || [];
+            return palette.length > 0 ? (
+              <div className="mb-3">
+                <span className="text-[10px] text-white/20">拟声词库</span>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {palette.map((v: string, i: number) => (
+                    <span key={i} className="px-2 py-[2px] text-[11px] rounded-full bg-violet-500/10 text-violet-300/70">&ldquo;{v}&rdquo;</span>
+                  ))}
+                </div>
+              </div>
+            ) : null;
+          })()}
           {character.catchphrases.length > 0 && (
             <div className="mb-3">
               <span className="text-[10px] text-white/20">口头禅</span>
@@ -168,7 +186,11 @@ export default async function CharacterDetailPage({
           )}
           <div>
             <span className="text-[10px] text-white/20">音色</span>
-            {character.voice ? (
+            {(character as { voiceCloneRefId?: string; voiceCloneUrl?: string }).voiceCloneRefId ? (
+              <p className="text-[13px] text-violet-300/70 mt-1">&#9835; 声音克隆 (Fish Audio) · {character.voiceSpeed}x</p>
+            ) : (character as { voiceCloneUrl?: string }).voiceCloneUrl ? (
+              <p className="text-[13px] text-amber-300/70 mt-1">&#9835; 克隆样本已上传，待生成 · {character.voiceSpeed}x</p>
+            ) : character.voice ? (
               <p className="text-[13px] text-white/40 mt-1">&#9835; {character.voice.name} · {character.voiceSpeed}x</p>
             ) : (
               <p className="text-[12px] text-white/25 mt-1">自动匹配（基于性格向量）</p>

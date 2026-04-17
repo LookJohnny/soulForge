@@ -27,6 +27,12 @@ export const characterCreateSchema = z.object({
   llmProvider: z.string().max(50).nullable().optional(),
   llmModel: z.string().max(100).nullable().optional(),
   ttsProvider: z.string().max(50).nullable().optional(),
+  // Sprint 4: Vocalized / non-verbal language mode
+  languageMode: z.enum(["VERBAL", "VOCALIZED"]).optional().default("VERBAL"),
+  vocalizationPalette: z.array(z.string().min(1).max(24)).max(20).optional().default([]),
+  audioClips: z.record(z.string(), z.string().url()).nullable().optional(),
+  voiceCloneUrl: z.string().url().max(500).nullable().optional(),
+  voiceCloneRefId: z.string().max(64).nullable().optional(),
 });
 
 export const characterUpdateSchema = characterCreateSchema.partial();

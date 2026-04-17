@@ -30,7 +30,11 @@ class LEDCommand:
 
 @dataclass
 class MotorCommand:
-    action: str = "none"    # nod/shake/tilt_left/tilt_right/sway/bounce/none
+    # Available actions:
+    #   nod / shake / tilt_left / tilt_right / sway / bounce — generic
+    #   waddle — penguin-style left-right body rock (for vocalized ANIMAL birds)
+    #   wiggle — doro/mochi-style quick whole-body jiggle (for small blob chars)
+    action: str = "none"
     speed: float = 0.0      # 0.0-1.0
     intensity: float = 0.0  # 0.0-1.0
 
@@ -104,10 +108,34 @@ def _map_led(p: float, a: float, d: float) -> LEDCommand:
     return LEDCommand(expression=expr, color=cfg["color"], brightness=brightness)
 
 
+# Species keywords that unlock species-specific motor actions
+_WADDLE_SPECIES = ("企鹅", "penguin", "duck", "鸭")
+_WIGGLE_SPECIES = ("doro", "团子", "粘土", "史莱姆", "slime", "jelly", "果冻")
+
+
+def _species_motor_bias(species: str) -> dict[str, float]:
+    """Return per-action score bonuses for species-specific actions.
+
+    Penguins and ducks waddle when they get excited. Blob/mochi-type
+    characters (doro, slime, jelly) wiggle instead of bouncing — their
+    whole body moves, not just their head.
+    """
+    s = (species or "").lower()
+    if any(k in s for k in _WADDLE_SPECIES):
+        return {"waddle": 0.25, "bounce": -0.1}
+    if any(k in s for k in _WIGGLE_SPECIES):
+        return {"wiggle": 0.35, "nod": -0.2}  # blobs have no neck
+    return {}
+
+
 # ── Motor: PAD → physical movement ────────────────
 
-def _map_motor(p: float, a: float, d: float) -> MotorCommand:
-    """Map PAD to motor action. Low arousal → no movement."""
+def _map_motor(p: float, a: float, d: float, species: str = "") -> MotorCommand:
+    """Map PAD to motor action. Low arousal → no movement.
+
+    species: optional species hint to unlock species-specific actions
+    (penguin → waddle, doro/slime → wiggle).
+    """
 
     # Arousal threshold: below this, stay still
     if abs(a) < 0.15 and abs(p) < 0.3:
@@ -120,7 +148,11 @@ def _map_motor(p: float, a: float, d: float) -> MotorCommand:
         "sway":       a * 0.5 + abs(p) * 0.2,              # general arousal
         "tilt_left":  -d * 0.8 + p * 0.2,                  # shy / cute
         "shake":      -p * 0.5 + a * 0.5,                  # disagree / upset
+        "waddle":     p * 0.5 + a * 0.6 - 0.5,             # gated by species bonus
+        "wiggle":     a * 0.7 - 0.5,                       # gated by species bonus
     }
+    for action, bonus in _species_motor_bias(species).items():
+        candidates[action] = candidates.get(action, 0) + bonus
 
     action = max(candidates, key=candidates.get)
     best_score = candidates[action]
@@ -167,13 +199,15 @@ def _map_vibration(p: float, a: float, d: float) -> VibrationCommand:
 
 # ── Public API ───────────────────────────────────
 
-def pad_to_hardware(p: float, a: float, d: float) -> HardwareCommand:
+def pad_to_hardware(p: float, a: float, d: float, species: str = "") -> HardwareCommand:
     """Convert PAD emotion values to hardware commands.
 
     Args:
         p: Pleasure  -1.0 to 1.0  (happy ↔ sad)
         a: Arousal   -1.0 to 1.0  (calm ↔ excited)
         d: Dominance -1.0 to 1.0  (shy ↔ confident)
+        species: optional species hint — unlocks waddle (penguin/duck)
+            and wiggle (doro/slime) motor actions.
 
     Returns:
         HardwareCommand with led, motor, vibration instructions.
@@ -184,6 +218,6 @@ def pad_to_hardware(p: float, a: float, d: float) -> HardwareCommand:
 
     return HardwareCommand(
         led=_map_led(p, a, d),
-        motor=_map_motor(p, a, d),
+        motor=_map_motor(p, a, d, species=species),
         vibration=_map_vibration(p, a, d),
     )

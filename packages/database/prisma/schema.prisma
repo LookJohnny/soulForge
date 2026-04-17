@@ -61,6 +61,11 @@ enum RelationshipStage {
   BESTFRIEND
 }
 
+enum LanguageMode {
+  VERBAL      // 正常说话的角色（默认）
+  VOCALIZED   // 只用拟声词/音节表达（咕咕嘎嘎企鹅 / doro）
+}
+
 // ─── Brand / Tenant ────────────────────────────────
 
 model Brand {
@@ -143,6 +148,12 @@ model Character {
   llmProvider    String?         @map("llm_provider") @db.VarChar(50)
   llmModel       String?         @map("llm_model") @db.VarChar(100)
   ttsProvider    String?         @map("tts_provider") @db.VarChar(50)
+  // Sprint 4: Vocalized-language support (non-verbal characters)
+  languageMode         LanguageMode @default(VERBAL) @map("language_mode")
+  vocalizationPalette  String[]     @default([]) @map("vocalization_palette") /// 允许的拟声词/音节集合
+  audioClips           Json?        @map("audio_clips")                        /// { "doro~": "https://.../doro.mp3" }
+  voiceCloneUrl        String?      @map("voice_clone_url") @db.VarChar(500)  /// Fish Audio 声音克隆样本 URL (10s+ 原声)
+  voiceCloneRefId      String?      @map("voice_clone_ref_id") @db.VarChar(64) /// Fish Audio 克隆后返回的 reference_id
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")
 

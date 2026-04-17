@@ -55,6 +55,11 @@ export async function POST(req: NextRequest) {
         llmProvider: body.llmProvider ?? null,
         llmModel: body.llmModel ?? null,
         ttsProvider: body.ttsProvider ?? null,
+        languageMode: body.languageMode ?? "VERBAL",
+        vocalizationPalette: body.vocalizationPalette ?? [],
+        audioClips: body.audioClips ?? undefined,
+        voiceCloneUrl: body.voiceCloneUrl ?? null,
+        voiceCloneRefId: body.voiceCloneRefId ?? null,
         status: "DRAFT",
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any,

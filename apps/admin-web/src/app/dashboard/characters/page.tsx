@@ -84,6 +84,11 @@ export default async function CharactersPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5">
+                    {(char as { languageMode?: string }).languageMode === "VOCALIZED" && (
+                      <span className="px-2 py-[2px] text-[9px] rounded-full font-medium bg-violet-100 text-violet-600" title="非语言角色">
+                        🐧 拟声
+                      </span>
+                    )}
                     {archetypeMap[char.archetype as string] && (
                       <span className={`px-2 py-[2px] text-[9px] rounded-full font-medium ${archetypeMap[char.archetype as string].color}`}>
                         {archetypeMap[char.archetype as string].label}

@@ -155,6 +155,8 @@ async def chat_preview(req: ChatPreviewRequest, request: Request):
             tts._provider.set_character_context(
                 species=prompt_result.get("_species", ""),
                 personality=prompt_result.get("personality"),
+                voice_clone_ref_id=prompt_result.get("_voice_clone_ref_id"),
+                audio_clips=prompt_result.get("_audio_clips"),
             )
         if hasattr(tts._provider, "synthesize_with_pad"):
             audio_data = await tts._provider.synthesize_with_pad(
@@ -240,7 +242,10 @@ async def chat_preview_stream(req: ChatPreviewRequest, request: Request):
 
             # Phase 4b: Hardware commands (opt-in)
             if req.with_hardware:
-                hw = pad_to_hardware(parsed.pad.p, parsed.pad.a, parsed.pad.d)
+                hw = pad_to_hardware(
+                    parsed.pad.p, parsed.pad.a, parsed.pad.d,
+                    species=prompt_result.get("_species", ""),
+                )
                 yield f"data: {json.dumps({'type': 'hardware', **hw.to_dict()}, ensure_ascii=False)}\n\n"
 
             # ── Phase 5: TTS (sentence-level progressive audio) ──
@@ -254,6 +259,8 @@ async def chat_preview_stream(req: ChatPreviewRequest, request: Request):
                     tts._provider.set_character_context(
                         species=prompt_result.get("_species", ""),
                         personality=prompt_result.get("personality"),
+                        voice_clone_ref_id=prompt_result.get("_voice_clone_ref_id"),
+                        audio_clips=prompt_result.get("_audio_clips"),
                     )
                 use_pad_tts = hasattr(tts._provider, "synthesize_with_pad")
 

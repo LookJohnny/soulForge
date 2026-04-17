@@ -17,6 +17,7 @@ const steps = [
   { id: "basic", label: "基本信息" },
   { id: "personality", label: "性格" },
   { id: "speech", label: "说话风格" },
+  { id: "voice", label: "音色 & 语言" },
   { id: "boundary", label: "话题边界" },
   { id: "preview", label: "预览" },
 ];
@@ -81,17 +82,40 @@ export default function NewCharacterPage() {
     topics: [""],
     forbidden: ["暴力", "恐怖"],
     responseLength: "SHORT" as "SHORT" | "MEDIUM" | "LONG",
+    // Vocalized mode: 咕咕嘎嘎 / doro-style non-verbal characters
+    languageMode: "VERBAL" as "VERBAL" | "VOCALIZED",
+    vocalizationPalette: [""],
+    voiceCloneUrl: "",
+    audioClipsRaw: [{ phrase: "", url: "" }],
   });
 
   const handleSubmit = async () => {
     setSaving(true);
+    // Audio clips: collect non-empty { phrase, url } pairs into a map.
+    // Only persisted for VOCALIZED characters where they're meaningful.
+    const audioClips =
+      form.languageMode === "VOCALIZED"
+        ? form.audioClipsRaw
+            .filter((c) => c.phrase && c.url)
+            .reduce<Record<string, string>>((acc, c) => {
+              acc[c.phrase] = c.url;
+              return acc;
+            }, {})
+        : null;
+    const audioClipsFinal = audioClips && Object.keys(audioClips).length > 0 ? audioClips : null;
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { audioClipsRaw: _ignored, customSpecies: _ignored2, contentTier: _ignored3, ...base } = form;
     const payload = {
-      ...form,
+      ...base,
       species: form.archetype === "ABSTRACT" ? null : (form.species || form.customSpecies || null),
       ageSetting: form.ageSetting ? parseInt(form.ageSetting) : null,
       catchphrases: form.catchphrases.filter(Boolean),
       topics: form.topics.filter(Boolean),
       forbidden: form.forbidden.filter(Boolean),
+      vocalizationPalette: form.languageMode === "VOCALIZED" ? form.vocalizationPalette.filter(Boolean) : [],
+      voiceCloneUrl: form.voiceCloneUrl || null,
+      audioClips: audioClipsFinal,
     };
     const res = await fetch("/api/characters", {
       method: "POST",
@@ -139,6 +163,11 @@ export default function NewCharacterPage() {
       if (!form.name) return false;
       if (form.archetype === "ABSTRACT") return true;
       return form.species || form.customSpecies;
+    }
+    if (step === 3 && form.languageMode === "VOCALIZED") {
+      // Vocalized characters need at least one palette entry so the prompt
+      // can give the LLM something to draw from.
+      return form.vocalizationPalette.some((v) => v.trim().length > 0);
     }
     return true;
   };
@@ -428,8 +457,177 @@ export default function NewCharacterPage() {
             </div>
           )}
 
-          {/* ─── Step 3: Boundaries ─── */}
+          {/* ─── Step 3: Voice & Language Mode ─── */}
           {step === 3 && (
+            <div className="max-w-xl mx-auto">
+              <div className="text-center mb-8">
+                <h2 className="text-[22px] font-bold tracking-tight text-gold">音色 & 语言</h2>
+                <p className="text-[13px] text-white/25 mt-1">角色是说人话，还是用拟声词表达？</p>
+              </div>
+              <div className="space-y-5">
+                {/* Language mode toggle */}
+                <div className="glass rounded-2xl p-5">
+                  <label className="block text-[11px] text-white/35 mb-3 font-medium tracking-wide uppercase">语言模式</label>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, languageMode: "VERBAL" })}
+                      className={`p-4 rounded-xl text-left transition-all duration-300 ${
+                        form.languageMode === "VERBAL"
+                          ? "bg-amber-500/10 ring-1 ring-amber-500/25 text-amber-300"
+                          : "bg-white/[0.02] text-white/35 hover:bg-white/[0.04] border border-white/[0.04]"
+                      }`}
+                    >
+                      <div className="text-[14px] font-medium">🗣️ 正常说话</div>
+                      <div className="text-[10px] text-white/25 mt-1">角色用中文对话（默认）</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, languageMode: "VOCALIZED" })}
+                      className={`p-4 rounded-xl text-left transition-all duration-300 ${
+                        form.languageMode === "VOCALIZED"
+                          ? "bg-violet-500/10 ring-1 ring-violet-500/25 text-violet-300"
+                          : "bg-white/[0.02] text-white/35 hover:bg-white/[0.04] border border-white/[0.04]"
+                      }`}
+                    >
+                      <div className="text-[14px] font-medium">🐧 只用拟声词</div>
+                      <div className="text-[10px] text-white/25 mt-1">咕咕嘎嘎 / doro 类非语言角色</div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Vocalization palette — only for VOCALIZED */}
+                {form.languageMode === "VOCALIZED" && (
+                  <div className="glass rounded-2xl p-5">
+                    <label className="block text-[11px] text-white/35 mb-2 font-medium tracking-wide uppercase">拟声词库 *</label>
+                    <p className="text-[10px] text-white/15 mb-3">角色能发出的全部音节（例：咕、嘎、咕咕、嘎嘎 / doro、哆啰）</p>
+                    <div className="space-y-2">
+                      {form.vocalizationPalette.map((v, i) => (
+                        <div key={i} className="flex gap-2">
+                          <input
+                            value={v}
+                            onChange={(e) => {
+                              const l = [...form.vocalizationPalette];
+                              l[i] = e.target.value;
+                              setForm({ ...form, vocalizationPalette: l });
+                            }}
+                            className="input-dark flex-1"
+                            placeholder={`音节 ${i + 1}（如：咕咕）`}
+                            maxLength={24}
+                          />
+                          {form.vocalizationPalette.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setForm({
+                                  ...form,
+                                  vocalizationPalette: form.vocalizationPalette.filter((_, j) => j !== i),
+                                })
+                              }
+                              className="px-3 text-white/15 hover:text-red-400 transition-colors"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm({ ...form, vocalizationPalette: [...form.vocalizationPalette, ""] })
+                        }
+                        className="text-[11px] text-violet-400/50 hover:text-violet-300 transition-colors"
+                      >
+                        + 添加音节
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Voice clone URL */}
+                <div className="glass rounded-2xl p-5">
+                  <label className="block text-[11px] text-white/35 mb-2 font-medium tracking-wide uppercase">声音克隆样本（可选）</label>
+                  <p className="text-[10px] text-white/15 mb-3">
+                    Fish Audio 声音克隆：粘贴 10 秒以上清晰原声的 URL。留空则系统按性格自动匹配预设音色。
+                  </p>
+                  <input
+                    value={form.voiceCloneUrl}
+                    onChange={(e) => setForm({ ...form, voiceCloneUrl: e.target.value })}
+                    className="input-dark w-full"
+                    placeholder="https://.../voice-sample.mp3"
+                    type="url"
+                  />
+                  <p className="text-[10px] text-white/15 mt-1.5">
+                    版权提醒：商用请确认样本已获授权。
+                  </p>
+                </div>
+
+                {/* Audio clips — only for VOCALIZED */}
+                {form.languageMode === "VOCALIZED" && (
+                  <div className="glass rounded-2xl p-5">
+                    <label className="block text-[11px] text-white/35 mb-2 font-medium tracking-wide uppercase">预录音效片段（可选）</label>
+                    <p className="text-[10px] text-white/15 mb-3">
+                      将&ldquo;音节 → 原声音频 URL&rdquo;一一对应。匹配时直接播放原音，跳过 TTS 合成。
+                    </p>
+                    <div className="space-y-2">
+                      {form.audioClipsRaw.map((c, i) => (
+                        <div key={i} className="flex gap-2">
+                          <input
+                            value={c.phrase}
+                            onChange={(e) => {
+                              const l = [...form.audioClipsRaw];
+                              l[i] = { ...l[i], phrase: e.target.value };
+                              setForm({ ...form, audioClipsRaw: l });
+                            }}
+                            className="input-dark w-1/3"
+                            placeholder="音节"
+                            maxLength={24}
+                          />
+                          <input
+                            value={c.url}
+                            onChange={(e) => {
+                              const l = [...form.audioClipsRaw];
+                              l[i] = { ...l[i], url: e.target.value };
+                              setForm({ ...form, audioClipsRaw: l });
+                            }}
+                            className="input-dark flex-1"
+                            placeholder="https://.../clip.mp3"
+                            type="url"
+                          />
+                          {form.audioClipsRaw.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setForm({
+                                  ...form,
+                                  audioClipsRaw: form.audioClipsRaw.filter((_, j) => j !== i),
+                                })
+                              }
+                              className="px-3 text-white/15 hover:text-red-400 transition-colors"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm({ ...form, audioClipsRaw: [...form.audioClipsRaw, { phrase: "", url: "" }] })
+                        }
+                        className="text-[11px] text-violet-400/50 hover:text-violet-300 transition-colors"
+                      >
+                        + 添加片段
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ─── Step 4: Boundaries ─── */}
+          {step === 4 && (
             <div className="max-w-xl mx-auto">
               <div className="text-center mb-8">
                 <h2 className="text-[22px] font-bold tracking-tight text-gold">话题边界</h2>
@@ -467,8 +665,8 @@ export default function NewCharacterPage() {
             </div>
           )}
 
-          {/* ─── Step 4: Preview ─── */}
-          {step === 4 && (
+          {/* ─── Step 5: Preview ─── */}
+          {step === 5 && (
             <div className="max-w-2xl mx-auto">
               <div className="text-center mb-8">
                 <h2 className="text-[22px] font-bold tracking-tight text-gold">预览</h2>
@@ -482,7 +680,14 @@ export default function NewCharacterPage() {
                       {speciesOptions.find((s) => s.value === form.species)?.emoji || "✨"}
                     </div>
                     <div>
-                      <h3 className="text-[18px] font-bold text-white/90">{form.name || "未命名"}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-[18px] font-bold text-white/90">{form.name || "未命名"}</h3>
+                        {form.languageMode === "VOCALIZED" && (
+                          <span className="px-2 py-[2px] text-[10px] rounded-full bg-violet-500/12 text-violet-300/80 border border-violet-500/20">
+                            🐧 拟声
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-white/25">{form.species || form.customSpecies || "未选物种"} · {form.relationship}</p>
                     </div>
                   </div>
@@ -502,6 +707,16 @@ export default function NewCharacterPage() {
 
                 <div className="glass rounded-2xl p-6 space-y-4 animate-fade-in stagger-2">
                   <h4 className="text-[12px] font-medium text-white/35 uppercase tracking-wide">语言 & 话题</h4>
+                  {form.languageMode === "VOCALIZED" && form.vocalizationPalette.filter(Boolean).length > 0 && (
+                    <div>
+                      <span className="text-[10px] text-white/20">拟声词库</span>
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {form.vocalizationPalette.filter(Boolean).map((v, i) => (
+                          <span key={i} className="px-2 py-[2px] text-[11px] rounded-full bg-violet-500/8 text-violet-300/70">&ldquo;{v}&rdquo;</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {form.suffix && <div><span className="text-[10px] text-white/20">句尾口癖</span><p className="text-[13px] text-amber-300/70 mt-0.5">{form.suffix}</p></div>}
                   {form.catchphrases.filter(Boolean).length > 0 && (
                     <div>
