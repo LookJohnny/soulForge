@@ -1,3 +1,5 @@
+import { auth } from "@/lib/auth";
+import { getAiCoreServiceHeaders, invalidateCharacterCache } from "@/lib/ai-core-admin";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
@@ -8,6 +10,11 @@ const AI_CORE_URL = process.env.AI_CORE_URL || "http://127.0.0.1:8100";
  * Protected by middleware (admin auth required).
  */
 export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const formData = await req.formData();
   const audio = formData.get("audio") as File | null;
   const title = formData.get("title") as string;
@@ -15,6 +22,15 @@ export async function POST(req: NextRequest) {
 
   if (!audio || !title) {
     return NextResponse.json({ error: "Missing audio or title" }, { status: 400 });
+  }
+  if (characterId) {
+    const character = await prisma.character.findFirst({
+      where: { id: characterId, brandId: session.user.brandId },
+      select: { id: true },
+    });
+    if (!character) {
+      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+    }
   }
 
   // Forward to AI Core voice-clone API
@@ -25,6 +41,7 @@ export async function POST(req: NextRequest) {
 
   const resp = await fetch(`${AI_CORE_URL}/voice-clone/create`, {
     method: "POST",
+    headers: getAiCoreServiceHeaders(session.user.brandId),
     body: aiFormData,
   });
 
@@ -53,6 +70,7 @@ export async function POST(req: NextRequest) {
       where: { id: characterId },
       data: { voiceId: voice.id },
     });
+    await invalidateCharacterCache(session.user.brandId, characterId);
   }
 
   return NextResponse.json({

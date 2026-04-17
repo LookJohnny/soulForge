@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { invalidateCharacterCache } from "@/lib/ai-core-admin";
 import { prisma } from "@/lib/prisma";
 import { characterUpdateSchema } from "@/lib/validations/character";
 import { ZodError } from "zod";
@@ -70,6 +71,7 @@ export async function PATCH(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data: data as any,
   });
+  await invalidateCharacterCache(session.user.brandId, id);
 
   return NextResponse.json(character);
 }
@@ -93,5 +95,6 @@ export async function DELETE(
   }
 
   await prisma.character.delete({ where: { id } });
+  await invalidateCharacterCache(session.user.brandId, id);
   return NextResponse.json({ ok: true });
 }

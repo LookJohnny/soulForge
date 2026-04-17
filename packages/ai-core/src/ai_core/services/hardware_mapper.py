@@ -141,6 +141,16 @@ def _map_motor(p: float, a: float, d: float, species: str = "") -> MotorCommand:
     if abs(a) < 0.15 and abs(p) < 0.3:
         return MotorCommand()
 
+    species_bonus = _species_motor_bias(species)
+    if "waddle" in species_bonus and p >= 0.35 and a >= 0.35:
+        speed = max(0.25, min(1.0, 0.25 + a * 0.55))
+        intensity = max(0.2, min(1.0, a * 0.45 + p * 0.35))
+        return MotorCommand(action="waddle", speed=speed, intensity=intensity)
+    if "wiggle" in species_bonus and p >= 0.25 and a >= 0.35:
+        speed = max(0.25, min(1.0, 0.3 + a * 0.5))
+        intensity = max(0.2, min(1.0, a * 0.5 + p * 0.25))
+        return MotorCommand(action="wiggle", speed=speed, intensity=intensity)
+
     # Score each action
     candidates = {
         "bounce":     p * 0.8 + a * 0.8,                   # happy + excited
@@ -151,7 +161,7 @@ def _map_motor(p: float, a: float, d: float, species: str = "") -> MotorCommand:
         "waddle":     p * 0.5 + a * 0.6 - 0.5,             # gated by species bonus
         "wiggle":     a * 0.7 - 0.5,                       # gated by species bonus
     }
-    for action, bonus in _species_motor_bias(species).items():
+    for action, bonus in species_bonus.items():
         candidates[action] = candidates.get(action, 0) + bonus
 
     action = max(candidates, key=candidates.get)
