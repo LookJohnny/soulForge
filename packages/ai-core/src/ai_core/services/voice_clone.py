@@ -1,34 +1,35 @@
 """Voice Clone Service — upload audio → create Fish Audio voice model.
 
 Flow:
-  1. User uploads MP3/WAV audio (10-60 seconds)
+  1. User uploads MP3/WAV audio (10-60 seconds) or supplies a public URL
   2. POST to Fish Audio /model API with audio file
   3. Get back reference_id (32-char hex)
-  4. Store in VoiceProfile.fishAudioId
+  4. Store in VoiceProfile.fishAudioId or Character.voice_clone_ref_id
   5. TTS automatically uses this voice for the character
-"""
 
-import asyncio
-import ipaddress
-import socket
-from urllib.parse import urljoin, urlsplit
+All URL-based fetches go through ``services.url_safety`` which defeats
+DNS rebinding and blocks private/loopback/CGNAT/multicast targets.
+"""
 
 import httpx
 import structlog
 
 from ai_core.config import settings
+from ai_core.services.url_safety import fetch_public_url
 
 logger = structlog.get_logger()
 
 _FISH_API = "https://api.fish.audio"
-_MAX_REDIRECTS = 5
-
-
-def _is_public_ip(value: str) -> bool:
-    return ipaddress.ip_address(value).is_global
+_AUDIO_CONTENT_TYPES = ("audio/", "application/octet-stream")
 
 
 def _looks_like_audio_bytes(data: bytes) -> bool:
+    """Cheap magic-byte check to reject obvious non-audio payloads.
+
+    Covers WAV, MP3 (ID3 or raw MPEG frame), Ogg, FLAC, and MP4/M4A
+    (ftyp box in the first 12 bytes). Not exhaustive — treat as a
+    smoke filter, not a strict validator.
+    """
     if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WAVE":
         return True
     if len(data) >= 3 and data[:3] == b"ID3":
@@ -42,48 +43,6 @@ def _looks_like_audio_bytes(data: bytes) -> bool:
     if len(data) >= 12 and data[4:8] == b"ftyp":
         return True
     return False
-
-
-async def _resolve_host_ips(hostname: str, port: int) -> set[str]:
-    loop = asyncio.get_running_loop()
-    addrinfo = await loop.getaddrinfo(
-        hostname,
-        port,
-        type=socket.SOCK_STREAM,
-        proto=socket.IPPROTO_TCP,
-    )
-    return {item[4][0] for item in addrinfo if item and item[4]}
-
-
-async def _assert_public_http_url(
-    audio_url: str,
-    resolver=_resolve_host_ips,
-) -> None:
-    parsed = urlsplit(audio_url)
-    if parsed.scheme not in ("http", "https") or not parsed.hostname:
-        raise RuntimeError("voice_clone: audio_url must be http(s)")
-    if parsed.username or parsed.password:
-        raise RuntimeError("voice_clone: credentialed URLs are not allowed")
-
-    host = parsed.hostname
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
-
-    try:
-        if not _is_public_ip(host):
-            raise RuntimeError("voice_clone: audio_url must resolve to a public IP")
-        return
-    except ValueError:
-        pass
-
-    try:
-        resolved_ips = await resolver(host, port)
-    except OSError as e:
-        raise RuntimeError(f"voice_clone: unable to resolve host: {e}") from e
-
-    if not resolved_ips:
-        raise RuntimeError("voice_clone: host did not resolve to any IP")
-    if any(not _is_public_ip(ip) for ip in resolved_ips):
-        raise RuntimeError("voice_clone: audio_url must resolve to public IPs only")
 
 
 async def clone_voice(audio_bytes: bytes, title: str,
@@ -140,79 +99,38 @@ async def clone_voice(audio_bytes: bytes, title: str,
 
 async def clone_voice_from_url(audio_url: str, title: str,
                                 description: str = "") -> dict:
-    """Fetch an audio URL and clone it via Fish Audio.
+    """Fetch an audio URL safely and clone it via Fish Audio.
 
-    Convenience wrapper for the vocalized-character flow where the user
-    supplies a URL to source-material audio rather than uploading a file.
-
-    Args:
-        audio_url: Publicly fetchable audio URL (MP3/WAV/OGG, 10-60s).
-        title: Voice model name.
-        description: Optional description.
-
-    Returns:
-        Same shape as clone_voice().
+    Used by the vocalized-character flow where the designer supplies a
+    URL to source-material audio. Downloads via the SSRF-hardened
+    ``fetch_public_url`` (IP-pinned, redirect-validated, size-capped,
+    public-IP-only) before handing bytes to the Fish Audio API.
 
     Raises:
-        RuntimeError if download fails or clone fails.
+        RuntimeError if download fails, URL is unsafe, or clone fails.
     """
-    # Download the audio sample. Cap size to protect us from arbitrary URLs.
-    MAX_DOWNLOAD = 25 * 1024 * 1024  # 25MB
-    audio_url_current = audio_url
-    audio_bytes = b""
-    content_type = ""
+    result = await fetch_public_url(
+        audio_url,
+        max_bytes=25 * 1024 * 1024,
+        timeout_s=30.0,
+        allowed_content_types=_AUDIO_CONTENT_TYPES,
+    )
 
-    async with httpx.AsyncClient(timeout=30.0, follow_redirects=False) as client:
-        for _ in range(_MAX_REDIRECTS + 1):
-            await _assert_public_http_url(audio_url_current)
-            try:
-                async with client.stream("GET", audio_url_current) as resp:
-                    if resp.status_code in (301, 302, 303, 307, 308):
-                        location = resp.headers.get("location")
-                        if not location:
-                            raise RuntimeError("voice_clone: redirect missing location")
-                        audio_url_current = urljoin(str(resp.request.url), location)
-                        continue
-
-                    if resp.status_code != 200:
-                        raise RuntimeError(f"voice_clone: download HTTP {resp.status_code}")
-
-                    content_type = resp.headers.get("content-type", "").lower()
-                    content_length = resp.headers.get("content-length")
-                    if content_length:
-                        try:
-                            if int(content_length) > MAX_DOWNLOAD:
-                                raise RuntimeError(
-                                    f"voice_clone: audio exceeds {MAX_DOWNLOAD // (1024*1024)}MB limit"
-                                )
-                        except ValueError:
-                            pass
-
-                    chunks: list[bytes] = []
-                    size = 0
-                    async for chunk in resp.aiter_bytes():
-                        size += len(chunk)
-                        if size > MAX_DOWNLOAD:
-                            raise RuntimeError(
-                                f"voice_clone: audio exceeds {MAX_DOWNLOAD // (1024*1024)}MB limit"
-                            )
-                        chunks.append(chunk)
-                    audio_bytes = b"".join(chunks)
-                    break
-            except httpx.HTTPError as e:
-                raise RuntimeError(f"voice_clone: download failed: {e}") from e
-        else:
-            raise RuntimeError("voice_clone: too many redirects")
-
-    if not audio_bytes or len(audio_bytes) < 1000:
+    audio_bytes = result.content
+    if len(audio_bytes) < 1000:
         raise RuntimeError("voice_clone: audio too small (need at least ~10 seconds)")
-
-    if content_type and not content_type.startswith(("audio/", "application/octet-stream")):
-        raise RuntimeError("voice_clone: URL did not return audio content")
     if not _looks_like_audio_bytes(audio_bytes):
         raise RuntimeError("voice_clone: downloaded content is not recognized audio")
 
-    logger.info("voice_clone.url_downloaded", url=audio_url_current[:120], bytes=len(audio_bytes))
+    # Log the URL without query string so S3 presigned params / tokens
+    # don't end up in log aggregators.
+    url_for_log = audio_url.split("?", 1)[0]
+    logger.info(
+        "voice_clone.url_downloaded",
+        url=url_for_log[:120],
+        bytes=len(audio_bytes),
+        content_type=result.content_type,
+    )
     return await clone_voice(audio_bytes, title, description)
 
 

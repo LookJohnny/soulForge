@@ -64,13 +64,9 @@ _MEMORY_TRIGGERS: dict[str, list[str]] = {
 # Priority order for selecting memory type
 _TYPE_PRIORITY = ["PREFERENCE", "EVENT", "TOPIC"]
 
-# Mid-session nudges — fire when user has gone quiet or flipped mood.
-# These are prompt *hints*, not lines to speak verbatim.
-_MID_SESSION_NUDGES = {
-    "long_silence": "你想主动开口——不用打破气氛，一句轻声的话就好。",
-    "mood_darken": "你察觉到对方的情绪沉下来了，靠近一点，但别追问原因。",
-    "mood_lighten": "对方的心情好像松开了，你可以悄悄陪着这份轻快。",
-}
+# NOTE: Mid-session silence / mood-shift nudges were moved into
+# embodiment.build_mid_session_thought() to keep "inner state" logic
+# in one place. Don't add duplicate nudge tables here.
 
 
 class ProactiveTriggerService:
@@ -147,28 +143,3 @@ class ProactiveTriggerService:
             return None
         return random.choice(greetings)
 
-    def mid_session_nudge(
-        self,
-        *,
-        silence_seconds: float,
-        user_mood: str | None,
-        prev_user_mood: str | None,
-    ) -> str | None:
-        """Return a mid-session inner-thought hint (or None).
-
-        Fires on long silence or noticeable mood shift within the session —
-        gives the character permission to proactively adjust its approach
-        instead of mechanically answering the last message.
-        """
-        if prev_user_mood and user_mood and prev_user_mood != user_mood:
-            darkening = {"sad", "worried", "lonely", "angry", "tired"}
-            lightening = {"happy", "excited"}
-            if user_mood in darkening and prev_user_mood in lightening | {"neutral"}:
-                return _MID_SESSION_NUDGES["mood_darken"]
-            if user_mood in lightening and prev_user_mood in darkening:
-                return _MID_SESSION_NUDGES["mood_lighten"]
-
-        if silence_seconds >= 90:
-            return _MID_SESSION_NUDGES["long_silence"]
-
-        return None

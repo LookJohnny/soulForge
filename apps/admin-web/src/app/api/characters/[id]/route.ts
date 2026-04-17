@@ -71,9 +71,11 @@ export async function PATCH(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data: data as any,
   });
-  await invalidateCharacterCache(session.user.brandId, id);
+  // Best-effort cache bust. See invalidateCharacterCache docstring for why
+  // this is non-fatal: the DB is authoritative, the cache will expire on TTL.
+  const cacheCleared = await invalidateCharacterCache(session.user.brandId, id);
 
-  return NextResponse.json(character);
+  return NextResponse.json({ ...character, _cacheCleared: cacheCleared });
 }
 
 export async function DELETE(
@@ -95,6 +97,6 @@ export async function DELETE(
   }
 
   await prisma.character.delete({ where: { id } });
-  await invalidateCharacterCache(session.user.brandId, id);
-  return NextResponse.json({ ok: true });
+  const cacheCleared = await invalidateCharacterCache(session.user.brandId, id);
+  return NextResponse.json({ ok: true, _cacheCleared: cacheCleared });
 }

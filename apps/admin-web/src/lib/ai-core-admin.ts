@@ -17,8 +17,24 @@ export function getAiCoreServiceHeaders(brandId: string, extra?: Record<string, 
   return buildAiCoreServiceHeaders(brandId, extra);
 }
 
-export async function invalidateCharacterCache(brandId: string, characterId: string) {
-  let lastError: Error | null = null;
+/**
+ * Invalidate the AI Core character cache. Returns `true` on success.
+ *
+ * **Non-fatal by design.** Callers invoke this AFTER the authoritative
+ * DB write has committed. If the invalidation fails (AI Core down, network
+ * blip, service token misconfigured) the DB is still correct; the cache
+ * will naturally expire on its TTL. We don't want to surface a 500 to the
+ * user when the state they actually care about is already saved — that
+ * produces the "retry + duplicate write" failure mode.
+ *
+ * Failures are logged so ops can still see them. The caller may optionally
+ * forward the stale-cache warning to the client.
+ */
+export async function invalidateCharacterCache(
+  brandId: string,
+  characterId: string
+): Promise<boolean> {
+  let lastError: unknown = null;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
@@ -32,13 +48,17 @@ export async function invalidateCharacterCache(brandId: string, characterId: str
 
       if (!resp.ok) {
         const err = await resp.text();
-        throw new Error(`AI Core cache invalidation failed (${resp.status}): ${err.slice(0, 200)}`);
+        throw new Error(`HTTP ${resp.status}: ${err.slice(0, 200)}`);
       }
-      return;
+      return true;
     } catch (error) {
-      lastError = error instanceof Error ? error : new Error("Unknown AI Core cache invalidation error");
+      lastError = error;
     }
   }
 
-  throw lastError ?? new Error("AI Core cache invalidation failed");
+  console.warn(
+    "[ai-core-admin] character cache invalidation failed (DB write already committed, cache will expire on TTL)",
+    { brandId, characterId, error: lastError }
+  );
+  return false;
 }

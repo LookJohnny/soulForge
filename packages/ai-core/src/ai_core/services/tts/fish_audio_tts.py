@@ -6,7 +6,13 @@ Key features:
   - Emotion control via inline tags: S1 uses (happy), S2-Pro uses [happy]
   - Prosody: speed (0.5-2.0), volume (-20 to +20 dB)
   - Streaming chunked audio response
+
+Concurrency: the provider is a singleton, but per-request character context
+(species / personality / voice_clone_ref_id / audio_clips) lives in an
+asyncio ContextVar so concurrent requests don't clobber each other.
 """
+
+from contextvars import ContextVar
 
 import httpx
 import structlog
@@ -16,6 +22,11 @@ from ai_core.config import settings
 from ai_core.services.tts.base import TTSProvider
 
 logger = structlog.get_logger()
+
+# Per-request character context. Each asyncio task has its own value;
+# set_character_context() writes only to the current task's scope so
+# two parallel chats never step on each other's voice_clone_ref_id.
+_CHAR_CONTEXT: ContextVar[dict] = ContextVar("fish_audio_char_context", default={})
 
 _API_BASE = "https://api.fish.audio"
 _TTS_ENDPOINT = f"{_API_BASE}/v1/tts"
@@ -203,7 +214,6 @@ class FishAudioTTSProvider(TTSProvider):
     def __init__(self):
         self.api_key = settings.fish_audio_api_key
         self.model = settings.fish_audio_model  # "s1" or "s2-pro"
-        self._char_context: dict = {}  # set by chat endpoint before synthesis
         if not self.api_key:
             raise RuntimeError("FISH_AUDIO_API_KEY not configured")
         self._client = httpx.AsyncClient(
@@ -221,6 +231,10 @@ class FishAudioTTSProvider(TTSProvider):
                                audio_clips: dict | None = None):
         """Set character context for voice resolution. Call before synthesize.
 
+        The context is stored in an asyncio ContextVar so each concurrent
+        request gets its own isolated view — critical because the provider
+        is a long-lived singleton shared across tasks.
+
         voice_clone_ref_id: Fish Audio cloned voice reference ID. If set, this
         overrides personality-based auto-matching so vocalized characters
         (咕咕嘎嘎 / doro) can use their actual source-material voice.
@@ -228,12 +242,21 @@ class FishAudioTTSProvider(TTSProvider):
         to synthesize exactly matches a key, the clip is returned verbatim
         instead of going through TTS (preserves true original audio).
         """
-        self._char_context = {
+        _CHAR_CONTEXT.set({
             "species": species, "personality": personality,
             "age_setting": age_setting, "relationship": relationship,
             "voice_clone_ref_id": voice_clone_ref_id,
             "audio_clips": audio_clips or {},
-        }
+        })
+
+    @property
+    def _char_context(self) -> dict:
+        """Read the current task's character context.
+
+        Exposed as a property so existing call sites (including tests) keep
+        working. The backing store is the module-level ContextVar.
+        """
+        return _CHAR_CONTEXT.get()
 
     def _wrap_emotion(self, text: str, emotion_tag: str) -> str:
         """Prepend emotion tag to text based on model version."""
@@ -345,7 +368,13 @@ class FishAudioTTSProvider(TTSProvider):
         return await self._call_api(text_with_emotion, voice, prosody)
 
     async def _resolve_audio_clip(self, text: str) -> bytes | None:
-        """Return pre-recorded audio bytes if text exactly matches a clip key."""
+        """Return pre-recorded audio bytes if text exactly matches a clip key.
+
+        ``audio_clips`` URLs are designer-supplied and stored on the
+        Character row. They are fetched here at TTS time, so the same
+        SSRF hardening used by the voice-clone flow applies: only public
+        IPs, IP-pinned connect, size cap, audio content-type filter.
+        """
         clips = self._char_context.get("audio_clips") or {}
         if not clips or not text:
             return None
@@ -354,12 +383,33 @@ class FishAudioTTSProvider(TTSProvider):
         if not url:
             return None
         try:
-            resp = await self._client.get(url, timeout=10.0)
-            if resp.status_code == 200 and resp.content:
-                logger.info("tts.fish_audio_clip_hit", key=key[:20], bytes=len(resp.content))
-                return resp.content
+            from ai_core.services.url_safety import fetch_public_url
+            result = await fetch_public_url(
+                url,
+                max_bytes=5 * 1024 * 1024,  # clips are short; cap lower than voice samples
+                timeout_s=10.0,
+                allowed_content_types=("audio/", "application/octet-stream"),
+            )
+            if result.content:
+                logger.info(
+                    "tts.fish_audio_clip_hit",
+                    key=key[:20],
+                    bytes=len(result.content),
+                )
+                return result.content
+        except RuntimeError as e:
+            # Expected failure modes: SSRF rejection, content-type, size,
+            # HTTP error. Log the reason (not the raw URL query) at warn.
+            logger.warning(
+                "tts.fish_audio_clip_unsafe_or_failed",
+                reason=str(e),
+                url=url.split("?", 1)[0][:120],
+            )
         except Exception:
-            logger.exception("tts.fish_audio_clip_fetch_failed", url=url[:80])
+            logger.exception(
+                "tts.fish_audio_clip_fetch_error",
+                url=url.split("?", 1)[0][:120],
+            )
         return None
 
     async def synthesize_to_wav(

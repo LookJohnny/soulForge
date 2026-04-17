@@ -19,6 +19,7 @@ from ai_core.services.content_filter import ContentFilter
 from ai_core.services.response_parser import parse_llm_response, StructuredResponse, PADValues
 from ai_core.services.hardware_mapper import pad_to_hardware
 from ai_core.services.text_splitter import split_sentences
+from ai_core.services.tts.context import prepare_for_character as _tts_prepare_for_character
 from ai_core.models.schemas import HistoryMessage
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -151,13 +152,7 @@ async def chat_preview(req: ChatPreviewRequest, request: Request):
         voice_id = req.voice or prompt_result.get("voice_id")
         tts = await get_tts_client()
 
-        if hasattr(tts._provider, "set_character_context"):
-            tts._provider.set_character_context(
-                species=prompt_result.get("_species", ""),
-                personality=prompt_result.get("personality"),
-                voice_clone_ref_id=prompt_result.get("_voice_clone_ref_id"),
-                audio_clips=prompt_result.get("_audio_clips"),
-            )
+        _tts_prepare_for_character(tts, prompt_result)
         if hasattr(tts._provider, "synthesize_with_pad"):
             audio_data = await tts._provider.synthesize_with_pad(
                 text=dialogue, voice=voice_id,
@@ -254,14 +249,7 @@ async def chat_preview_stream(req: ChatPreviewRequest, request: Request):
                 tts = await get_tts_client()
                 sentences = split_sentences(dialogue)
 
-                # Fish Audio: set species for voice matching + use PAD-driven synthesis
-                if hasattr(tts._provider, "set_character_context"):
-                    tts._provider.set_character_context(
-                        species=prompt_result.get("_species", ""),
-                        personality=prompt_result.get("personality"),
-                        voice_clone_ref_id=prompt_result.get("_voice_clone_ref_id"),
-                        audio_clips=prompt_result.get("_audio_clips"),
-                    )
+                _tts_prepare_for_character(tts, prompt_result)
                 use_pad_tts = hasattr(tts._provider, "synthesize_with_pad")
 
                 for i, sentence in enumerate(sentences):
