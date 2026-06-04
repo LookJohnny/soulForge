@@ -295,17 +295,21 @@ class MemoryService:
         text = " ".join(m.get("content", "") for m in memories)
         hints: dict[str, str | float] = {}
         if any(k in text for k in ("疲惫", "累", "焦虑", "低打扰", "安静")):
-            hints.update({
-                "speech_policy": "low_disturbance",
-                "eye": "soft_hold",
-                "light": "warm_low",
-                "motion_intensity": 0.2,
-            })
+            hints.update(
+                {
+                    "speech_policy": "low_disturbance",
+                    "eye": "soft_hold",
+                    "light": "warm_low",
+                    "motion_intensity": 0.2,
+                }
+            )
         if any(k in text for k in ("直接", "事实", "风险", "先结论", "少废话")):
-            hints.update({
-                "speech_policy": "direct",
-                "motion_intensity": min(float(hints.get("motion_intensity", 0.35)), 0.35),
-            })
+            hints.update(
+                {
+                    "speech_policy": "direct",
+                    "motion_intensity": min(float(hints.get("motion_intensity", 0.35)), 0.35),
+                }
+            )
         return hints
 
     async def _mark_used(self, memory: dict, use_mode: str, response_id: str | None = None) -> None:

@@ -6,10 +6,10 @@ Uses cosyvoice-v3-flash with SSML markup for pitch/rate/effect control:
 
 import asyncio
 
-import structlog
 import dashscope
+import structlog
 from dashscope.audio.tts_v2 import SpeechSynthesizer
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from ai_core.config import settings
 from ai_core.services.tts.base import TTSProvider
@@ -38,7 +38,7 @@ def _wrap_ssml(text: str, pitch: float, rate: float, effect: str) -> str:
     Only includes non-default attributes to keep the markup minimal.
     Returns plain text if all params are default (no SSML needed).
     """
-    is_default = (pitch == 1.0 and rate == 1.0 and not effect)
+    is_default = pitch == 1.0 and rate == 1.0 and not effect
     if is_default:
         return text
 
@@ -117,8 +117,8 @@ class DashScopeTTSProvider(TTSProvider):
                 asyncio.to_thread(_sync_call),
                 timeout=settings.tts_timeout,
             )
-        except asyncio.TimeoutError:
-            raise TimeoutError(f"TTS synthesis timed out after {settings.tts_timeout}s")
+        except TimeoutError as e:
+            raise TimeoutError(f"TTS synthesis timed out after {settings.tts_timeout}s") from e
 
         # If SSML failed (returns None), retry with plain text
         if audio is None and ssml_text != text:
@@ -149,8 +149,14 @@ class DashScopeTTSProvider(TTSProvider):
         ssml_effect: str = "",
     ) -> bytes:
         return await self.synthesize(
-            text, voice, speed, pitch_rate, speech_rate,
-            ssml_pitch, ssml_rate, ssml_effect,
+            text,
+            voice,
+            speed,
+            pitch_rate,
+            speech_rate,
+            ssml_pitch,
+            ssml_rate,
+            ssml_effect,
         )
 
     def get_voices(self) -> dict[str, str]:

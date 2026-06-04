@@ -15,7 +15,6 @@ Improvements over v1:
 
 from __future__ import annotations
 
-import json
 import math
 from dataclasses import dataclass
 
@@ -30,9 +29,11 @@ logger = structlog.get_logger()
 # PAD State
 # ──────────────────────────────────────────────
 
+
 @dataclass
 class PADState:
     """3D emotion point in PAD space."""
+
     p: float = 0.0
     a: float = 0.0
     d: float = 0.0
@@ -45,14 +46,12 @@ class PADState:
 
     def distance_to(self, other: PADState) -> float:
         return math.sqrt(
-            (self.p - other.p) ** 2
-            + (self.a - other.a) ** 2
-            + (self.d - other.d) ** 2
+            (self.p - other.p) ** 2 + (self.a - other.a) ** 2 + (self.d - other.d) ** 2
         )
 
     def magnitude(self) -> float:
         """Distance from origin — how "intense" the emotion is."""
-        return math.sqrt(self.p ** 2 + self.a ** 2 + self.d ** 2)
+        return math.sqrt(self.p**2 + self.a**2 + self.d**2)
 
     def lerp(self, target: PADState, alpha: float) -> PADState:
         alpha = max(0.0, min(1.0, alpha))
@@ -78,6 +77,7 @@ class PADState:
 # [NEW] Personality → PAD baseline
 # ──────────────────────────────────────────────
 
+
 def personality_to_baseline(personality: dict | None) -> PADState:
     """Convert 5-trait personality to a PAD baseline that the character "rests" at.
 
@@ -91,12 +91,13 @@ def personality_to_baseline(personality: dict | None) -> PADState:
     energy = personality.get("energy", 50)
     extrovert = personality.get("extrovert", 50)
     humor = personality.get("humor", 50)
-    curiosity = personality.get("curiosity", 50)
 
     # Map traits to PAD baseline (trait 50 → 0, trait 100 → offset)
-    p = (warmth - 50) * 0.006 + (humor - 50) * 0.003     # warmth/humor → positive pleasure
+    p = (warmth - 50) * 0.006 + (humor - 50) * 0.003  # warmth/humor → positive pleasure
     a = (energy - 50) * 0.006 + (extrovert - 50) * 0.004  # energy/extrovert → higher arousal
-    d = (extrovert - 50) * 0.004 - (warmth - 50) * 0.002  # extrovert → dominant, warmth → submissive
+    d = (extrovert - 50) * 0.004 - (
+        warmth - 50
+    ) * 0.002  # extrovert → dominant, warmth → submissive
 
     return PADState(p=p, a=a, d=d).clamp()
 
@@ -106,36 +107,36 @@ def personality_to_baseline(personality: dict | None) -> PADState:
 # ──────────────────────────────────────────────
 
 EMOTION_PAD_ANCHORS: dict[str, PADState] = {
-    "happy":    PADState(p=0.8,  a=0.3,  d=0.4),
-    "sad":      PADState(p=-0.7, a=-0.4, d=-0.5),
-    "shy":      PADState(p=0.2,  a=-0.2, d=-0.6),
-    "angry":    PADState(p=-0.6, a=0.7,  d=0.5),
-    "playful":  PADState(p=0.5,  a=0.8,  d=0.1),
-    "curious":  PADState(p=0.4,  a=0.3,  d=0.1),
-    "worried":  PADState(p=-0.3, a=0.2,  d=-0.4),
-    "calm":     PADState(p=0.1,  a=-0.5, d=0.0),
+    "happy": PADState(p=0.8, a=0.3, d=0.4),
+    "sad": PADState(p=-0.7, a=-0.4, d=-0.5),
+    "shy": PADState(p=0.2, a=-0.2, d=-0.6),
+    "angry": PADState(p=-0.6, a=0.7, d=0.5),
+    "playful": PADState(p=0.5, a=0.8, d=0.1),
+    "curious": PADState(p=0.4, a=0.3, d=0.1),
+    "worried": PADState(p=-0.3, a=0.2, d=-0.4),
+    "calm": PADState(p=0.1, a=-0.5, d=0.0),
 }
 
 TOUCH_PAD_IMPULSE: dict[str, PADState] = {
-    "pat":     PADState(p=0.3,  a=0.1,  d=0.1),
-    "stroke":  PADState(p=0.3,  a=-0.2, d=0.0),
-    "hug":     PADState(p=-0.1, a=0.2,  d=-0.3),
-    "squeeze": PADState(p=-0.2, a=0.3,  d=-0.2),
-    "poke":    PADState(p=0.2,  a=0.4,  d=0.1),
-    "hold":    PADState(p=0.2,  a=-0.3, d=0.0),
-    "shake":   PADState(p=0.2,  a=0.5,  d=0.1),
-    "none":    PADState(p=0.0,  a=0.0,  d=0.0),
+    "pat": PADState(p=0.3, a=0.1, d=0.1),
+    "stroke": PADState(p=0.3, a=-0.2, d=0.0),
+    "hug": PADState(p=-0.1, a=0.2, d=-0.3),
+    "squeeze": PADState(p=-0.2, a=0.3, d=-0.2),
+    "poke": PADState(p=0.2, a=0.4, d=0.1),
+    "hold": PADState(p=0.2, a=-0.3, d=0.0),
+    "shake": PADState(p=0.2, a=0.5, d=0.1),
+    "none": PADState(p=0.0, a=0.0, d=0.0),
 }
 
 USER_MOOD_PAD: dict[str, PADState] = {
-    "happy":   PADState(p=0.6,  a=0.4,  d=0.3),
-    "sad":     PADState(p=-0.5, a=-0.2, d=-0.4),
-    "angry":   PADState(p=-0.5, a=0.6,  d=0.4),
-    "worried": PADState(p=-0.3, a=0.3,  d=-0.3),
-    "excited": PADState(p=0.6,  a=0.7,  d=0.3),
-    "tired":   PADState(p=-0.1, a=-0.6, d=-0.2),
-    "lonely":  PADState(p=-0.4, a=-0.3, d=-0.5),
-    "neutral": PADState(p=0.0,  a=0.0,  d=0.0),
+    "happy": PADState(p=0.6, a=0.4, d=0.3),
+    "sad": PADState(p=-0.5, a=-0.2, d=-0.4),
+    "angry": PADState(p=-0.5, a=0.6, d=0.4),
+    "worried": PADState(p=-0.3, a=0.3, d=-0.3),
+    "excited": PADState(p=0.6, a=0.7, d=0.3),
+    "tired": PADState(p=-0.1, a=-0.6, d=-0.2),
+    "lonely": PADState(p=-0.4, a=-0.3, d=-0.5),
+    "neutral": PADState(p=0.0, a=0.0, d=0.0),
 }
 
 # ──────────────────────────────────────────────
@@ -143,11 +144,11 @@ USER_MOOD_PAD: dict[str, PADState] = {
 # ──────────────────────────────────────────────
 
 RELATIONSHIP_WEIGHTS: dict[str, dict[str, float]] = {
-    "STRANGER":      {"touch": 0.3, "empathy": 0.1, "transition": 0.3},
-    "ACQUAINTANCE":  {"touch": 0.5, "empathy": 0.15, "transition": 0.35},
-    "FAMILIAR":      {"touch": 0.7, "empathy": 0.2, "transition": 0.4},
-    "FRIEND":        {"touch": 0.9, "empathy": 0.3, "transition": 0.45},
-    "BESTFRIEND":    {"touch": 1.2, "empathy": 0.4, "transition": 0.5},
+    "STRANGER": {"touch": 0.3, "empathy": 0.1, "transition": 0.3},
+    "ACQUAINTANCE": {"touch": 0.5, "empathy": 0.15, "transition": 0.35},
+    "FAMILIAR": {"touch": 0.7, "empathy": 0.2, "transition": 0.4},
+    "FRIEND": {"touch": 0.9, "empathy": 0.3, "transition": 0.45},
+    "BESTFRIEND": {"touch": 1.2, "empathy": 0.4, "transition": 0.5},
 }
 
 _DEFAULT_REL_WEIGHTS = {"touch": 0.5, "empathy": 0.2, "transition": 0.4}
@@ -232,6 +233,7 @@ def transition_pad(
 
     # ── Step 3: Touch impulse (diminishing + relationship-scaled) ──
     if touch_impulse:
+
         def _dampen(val: float, delta: float) -> float:
             headroom = 1.0 - abs(val)
             damping = max(0.1, headroom)
@@ -253,6 +255,7 @@ def transition_pad(
 # PAD → TTS parameter computation
 # ──────────────────────────────────────────────
 
+
 def pad_to_tts_offsets(state: PADState) -> dict[str, float]:
     pitch_offset = state.p * 0.06 + state.a * 0.04
     rate_offset = state.a * 0.05 + state.d * 0.02
@@ -267,6 +270,7 @@ def pad_to_tts_offsets(state: PADState) -> dict[str, float]:
 # ──────────────────────────────────────────────
 # PAD → Prompt description (v2 — more granular)
 # ──────────────────────────────────────────────
+
 
 def pad_to_prompt_description(state: PADState) -> str:
     """Generate nuanced emotion description from PAD values."""
@@ -343,7 +347,9 @@ class PADEngine:
         return None
 
     async def set_baseline(self, session_id: str, baseline: PADState) -> None:
-        await self.cache.set_json(f"pad_baseline:{session_id}", baseline.to_dict(), ttl=_BASELINE_TTL)
+        await self.cache.set_json(
+            f"pad_baseline:{session_id}", baseline.to_dict(), ttl=_BASELINE_TTL
+        )
 
     async def update(
         self,

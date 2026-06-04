@@ -15,7 +15,7 @@ import uuid
 
 from fastapi import WebSocket
 
-from gateway.handlers.audio_codec import is_opus, is_mp3, mp3_to_pcm_24k, pcm_to_opus_frames
+from gateway.handlers.audio_codec import is_mp3, mp3_to_pcm_24k, pcm_to_opus_frames
 from gateway.protocols.base import (
     InboundMessage,
     MessageType,
@@ -72,9 +72,15 @@ class XiaozhiAdapter(ProtocolAdapter):
                 or headers.get("mac-address")
                 or ""
             )
-            logger.info("xiaozhi.headers: %s", {k: v for k, v in headers.items() if k in (
-                "device-id", "client-id", "authorization", "protocol-version", "user-agent"
-            )})
+            logger.info(
+                "xiaozhi.headers: %s",
+                {
+                    k: v
+                    for k, v in headers.items()
+                    if k
+                    in ("device-id", "client-id", "authorization", "protocol-version", "user-agent")
+                },
+            )
 
         if not device_id:
             raise ValueError(f"Missing device_id in hello/headers: keys={list(msg.keys())}")
@@ -101,7 +107,8 @@ class XiaozhiAdapter(ProtocolAdapter):
 
         logger.info(
             "Xiaozhi device connected: %s (audio: %s)",
-            device_id, self._device_audio_format,
+            device_id,
+            self._device_audio_format,
         )
         return device_id
 
@@ -181,10 +188,12 @@ class XiaozhiAdapter(ProtocolAdapter):
 
         if message.type == MessageType.TEXT:
             # TTS text response format
-            return json.dumps({
-                "type": "tts",
-                "state": message.metadata.get("state", "start"),
-                "text": message.payload if isinstance(message.payload, str) else "",
-            })
+            return json.dumps(
+                {
+                    "type": "tts",
+                    "state": message.metadata.get("state", "start"),
+                    "text": message.payload if isinstance(message.payload, str) else "",
+                }
+            )
 
         return json.dumps({"type": "unknown"})

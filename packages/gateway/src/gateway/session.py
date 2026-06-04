@@ -34,7 +34,9 @@ class SessionManager:
         self.redis = redis.from_url(settings.redis_url, decode_responses=True)
         try:
             self._db_pool = await asyncpg.create_pool(
-                settings.database_url, min_size=1, max_size=3,
+                settings.database_url,
+                min_size=1,
+                max_size=3,
             )
         except Exception as e:
             logger.warning("session.db_pool_failed: %s", e)
@@ -128,7 +130,8 @@ class SessionManager:
 
             logger.info(
                 "session.auto_registered device=%s character=%s",
-                device_id, character_id,
+                device_id,
+                character_id,
             )
             return info
         except Exception as e:
@@ -174,13 +177,15 @@ class SessionManager:
             await self.redis.setex(
                 f"session:{session_id}",
                 settings.session_ttl_seconds,
-                json.dumps({
-                    "device_id": device_id,
-                    "character_id": session.character_id,
-                    "end_user_id": session.end_user_id,
-                    "brand_id": session.brand_id,
-                    "protocol": protocol,
-                }),
+                json.dumps(
+                    {
+                        "device_id": device_id,
+                        "character_id": session.character_id,
+                        "end_user_id": session.end_user_id,
+                        "brand_id": session.brand_id,
+                        "protocol": protocol,
+                    }
+                ),
             )
 
         self._local_sessions[session_id] = session

@@ -1,7 +1,9 @@
 """Voice clone API — upload audio sample → create custom voice."""
 
+from typing import Annotated
+
 import structlog
-from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from ai_core.services.voice_clone import clone_voice, clone_voice_from_url, delete_voice
@@ -21,9 +23,9 @@ class CloneFromUrlRequest(BaseModel):
 @router.post("/create")
 async def create_cloned_voice(
     request: Request,
-    audio: UploadFile = File(...),
-    title: str = Form(...),
-    description: str = Form(""),
+    audio: Annotated[UploadFile, File()],
+    title: Annotated[str, Form()],
+    description: Annotated[str, Form()] = "",
 ):
     """Upload audio and create a Fish Audio cloned voice.
 
@@ -39,12 +41,14 @@ async def create_cloned_voice(
     if len(content) > MAX_AUDIO_SIZE:
         raise HTTPException(status_code=422, detail="Audio file exceeds 20MB limit")
     if len(content) < 1000:
-        raise HTTPException(status_code=422, detail="Audio file too small (need at least 10 seconds)")
+        raise HTTPException(
+            status_code=422, detail="Audio file too small (need at least 10 seconds)"
+        )
 
     try:
         result = await clone_voice(content, title, description)
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail=str(e)) from e
 
     return result
 

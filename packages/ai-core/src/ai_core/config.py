@@ -24,8 +24,8 @@ class Settings(BaseSettings):
 
     # ─── LLM Provider ───────────────────────────
     llm_provider: str = "dashscope"
-    llm_base_url: str = ""   # Override; empty = use well-known config
-    llm_api_key: str = ""    # Override; empty = use dashscope_api_key
+    llm_base_url: str = ""  # Override; empty = use well-known config
+    llm_api_key: str = ""  # Override; empty = use dashscope_api_key
     llm_model: str = "qwen2.5-7b-instruct"
     llm_temperature: float = 0.8
     llm_top_p: float = 0.9
@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     llm_timeout: int = 30  # seconds
 
     # ─── TTS Provider ───────────────────────────
-    tts_provider: str = "dashscope"   # dashscope | fish | edge
+    tts_provider: str = "dashscope"  # dashscope | fish | edge
     tts_model: str = "cosyvoice-v3-flash"
     tts_timeout: int = 15  # seconds
 
@@ -60,7 +60,9 @@ class Settings(BaseSettings):
     service_token: str = ""  # Internal service-to-service token (gateway → ai-core)
 
     # ─── CORS ───────────────────────────────────
-    allowed_origins: str = ""  # Comma-separated list, e.g. "https://app.example.com,http://localhost:3000"
+    allowed_origins: str = (
+        ""  # Comma-separated list, e.g. "https://app.example.com,http://localhost:3000"
+    )
 
     # ─── Rate Limiting ──────────────────────────
     rate_limit_chat: str = "30/minute"
@@ -78,6 +80,7 @@ class Settings(BaseSettings):
         # Allow empty in development, but warn
         if not v:
             import warnings
+
             warnings.warn("DASHSCOPE_API_KEY is empty — LLM/TTS/ASR calls will fail", stacklevel=2)
         return v
 

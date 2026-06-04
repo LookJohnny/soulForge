@@ -160,9 +160,7 @@ class WebSocketServer:
 
             # Start VAD monitor if not running
             if not getattr(session, "_silence_task", None):
-                session._silence_task = asyncio.create_task(
-                    self._vad_monitor(ws, adapter, session)
-                )
+                session._silence_task = asyncio.create_task(self._vad_monitor(ws, adapter, session))
 
         elif msg.type == MessageType.CONTROL:
             action = msg.payload.get("action", "") if isinstance(msg.payload, dict) else ""
@@ -212,16 +210,18 @@ class WebSocketServer:
         TTS playback loop checks this flag and aborts.
         """
         import struct
+
         try:
             decoder = getattr(session, "_interrupt_decoder", None)
             if not decoder:
                 import opuslib
+
                 session._interrupt_decoder = opuslib.Decoder(16000, 1)
                 decoder = session._interrupt_decoder
                 session._interrupt_count = 0
 
             pcm = decoder.decode(opus_data, 960, decode_fec=False)
-            samples = struct.unpack(f"<{len(pcm)//2}h", pcm)
+            samples = struct.unpack(f"<{len(pcm) // 2}h", pcm)
             rms = (sum(s * s for s in samples) / len(samples)) ** 0.5
 
             # High energy = user is trying to speak over TTS
@@ -321,9 +321,7 @@ class WebSocketServer:
             logger.info("gateway.vad_timeout no speech detected")
             self.audio_handler.stop_listening(session)
             self.audio_handler.start_listening(session)
-            session._silence_task = asyncio.create_task(
-                self._vad_monitor(ws, adapter, session)
-            )
+            session._silence_task = asyncio.create_task(self._vad_monitor(ws, adapter, session))
         except asyncio.CancelledError:
             pass
 
@@ -335,13 +333,15 @@ class WebSocketServer:
         try:
             # Send text
             start_msg = OutboundMessage(
-                type=MessageType.TEXT, payload="",
+                type=MessageType.TEXT,
+                payload="",
                 metadata={"state": "start"},
             )
             await ws.send_text(await adapter.encode(start_msg))
 
             text_msg = OutboundMessage(
-                type=MessageType.TEXT, payload=text,
+                type=MessageType.TEXT,
+                payload=text,
                 metadata={"state": "sentence"},
             )
             await ws.send_text(await adapter.encode(text_msg))
@@ -349,10 +349,12 @@ class WebSocketServer:
             # TTS for the reply
             try:
                 from gateway.handlers.audio_codec import mp3_to_pcm_24k, pcm_to_opus_frames
+
                 tts = await self._get_quick_tts(text)
                 if tts:
                     ss = OutboundMessage(
-                        type=MessageType.TEXT, payload="",
+                        type=MessageType.TEXT,
+                        payload="",
                         metadata={"state": "sentence_start"},
                     )
                     await ws.send_text(await adapter.encode(ss))
@@ -370,7 +372,8 @@ class WebSocketServer:
 
             await asyncio.sleep(0.42)
             done_msg = OutboundMessage(
-                type=MessageType.TEXT, payload="",
+                type=MessageType.TEXT,
+                payload="",
                 metadata={"state": "stop"},
             )
             await ws.send_text(await adapter.encode(done_msg))
@@ -383,18 +386,23 @@ class WebSocketServer:
         """Get TTS audio via AI Core for a short text."""
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=10.0) as client:
                 # Use AI Core's TTS directly — simpler than full pipeline
                 from gateway.config import settings
+
                 resp = await client.post(
                     f"{settings.ai_core_url}/tts/synthesize",
                     json={"text": text},
-                    headers={"X-Service-Token": settings.service_token} if settings.service_token else {},
+                    headers={"X-Service-Token": settings.service_token}
+                    if settings.service_token
+                    else {},
                 )
                 if resp.status_code == 200:
                     data = resp.json()
                     if data.get("audio_data"):
                         import base64
+
                         return base64.b64decode(data["audio_data"])
         except Exception:
             pass
@@ -410,7 +418,8 @@ class WebSocketServer:
         try:
             logger.info("gateway.responding start (streaming asr: %s)", text[:30])
             thinking = OutboundMessage(
-                type=MessageType.TEXT, payload="",
+                type=MessageType.TEXT,
+                payload="",
                 metadata={"state": "start"},
             )
             await ws.send_text(await adapter.encode(thinking))
@@ -432,10 +441,14 @@ class WebSocketServer:
                     interrupted = True
                     break
 
-                logger.info("gateway.sending sentence=%s audio=%d",
-                            chunk.text[:30], len(chunk.audio_data) if chunk.audio_data else 0)
+                logger.info(
+                    "gateway.sending sentence=%s audio=%d",
+                    chunk.text[:30],
+                    len(chunk.audio_data) if chunk.audio_data else 0,
+                )
                 text_out = OutboundMessage(
-                    type=MessageType.TEXT, payload=chunk.text,
+                    type=MessageType.TEXT,
+                    payload=chunk.text,
                     metadata={"state": "sentence"},
                 )
                 await ws.send_text(await adapter.encode(text_out))
@@ -443,7 +456,8 @@ class WebSocketServer:
 
                 if chunk.audio_data:
                     ss = OutboundMessage(
-                        type=MessageType.TEXT, payload="",
+                        type=MessageType.TEXT,
+                        payload="",
                         metadata={"state": "sentence_start"},
                     )
                     await ws.send_text(await adapter.encode(ss))
@@ -471,7 +485,8 @@ class WebSocketServer:
 
             if interrupted:
                 stop = OutboundMessage(
-                    type=MessageType.TEXT, payload="",
+                    type=MessageType.TEXT,
+                    payload="",
                     metadata={"state": "stop"},
                 )
                 await ws.send_text(await adapter.encode(stop))
@@ -479,7 +494,8 @@ class WebSocketServer:
             else:
                 await asyncio.sleep(0.42)
                 done = OutboundMessage(
-                    type=MessageType.TEXT, payload="",
+                    type=MessageType.TEXT,
+                    payload="",
                     metadata={"state": "stop"},
                 )
                 await ws.send_text(await adapter.encode(done))
@@ -490,14 +506,11 @@ class WebSocketServer:
             session._interrupted = False
             session._interrupt_count = 0
 
-            await self.session_manager.add_to_history(
-                session.session_id, "user", text
+            await self.session_manager.add_to_history(session.session_id, "user", text)
+            await self.session_manager.add_to_history(session.session_id, "assistant", full_text)
+            logger.info(
+                "gateway.responding done text=%s frames=%d", full_text[:50], total_opus_frames
             )
-            await self.session_manager.add_to_history(
-                session.session_id, "assistant", full_text
-            )
-            logger.info("gateway.responding done text=%s frames=%d",
-                        full_text[:50], total_opus_frames)
 
         except Exception:
             session._playing = False
@@ -552,12 +565,8 @@ class WebSocketServer:
             )
             await ws.send_text(await adapter.encode(done))
 
-            await self.session_manager.add_to_history(
-                session.session_id, "user", text
-            )
-            await self.session_manager.add_to_history(
-                session.session_id, "assistant", full_text
-            )
+            await self.session_manager.add_to_history(session.session_id, "user", text)
+            await self.session_manager.add_to_history(session.session_id, "assistant", full_text)
 
         except Exception:
             logger.exception("gateway.text_pipeline_error")
@@ -637,8 +646,11 @@ class WebSocketServer:
                     interrupted = True
                     break
 
-                logger.info("gateway.sending sentence=%s audio=%d",
-                            chunk.text[:30], len(chunk.audio_data) if chunk.audio_data else 0)
+                logger.info(
+                    "gateway.sending sentence=%s audio=%d",
+                    chunk.text[:30],
+                    len(chunk.audio_data) if chunk.audio_data else 0,
+                )
                 text_out = OutboundMessage(
                     type=MessageType.TEXT,
                     payload=chunk.text,
@@ -650,7 +662,8 @@ class WebSocketServer:
                 if chunk.audio_data:
                     # Send sentence_start before audio (xiaozhi protocol)
                     ss = OutboundMessage(
-                        type=MessageType.TEXT, payload="",
+                        type=MessageType.TEXT,
+                        payload="",
                         metadata={"state": "sentence_start"},
                     )
                     await ws.send_text(await adapter.encode(ss))
@@ -681,7 +694,8 @@ class WebSocketServer:
             if interrupted:
                 # User interrupted — send stop immediately, skip waiting
                 stop = OutboundMessage(
-                    type=MessageType.TEXT, payload="",
+                    type=MessageType.TEXT,
+                    payload="",
                     metadata={"state": "stop"},
                 )
                 await ws.send_text(await adapter.encode(stop))
@@ -691,12 +705,14 @@ class WebSocketServer:
                 # Normal completion — wait 420ms then send stop
                 await asyncio.sleep(0.42)
                 done = OutboundMessage(
-                    type=MessageType.TEXT, payload="",
+                    type=MessageType.TEXT,
+                    payload="",
                     metadata={"state": "stop"},
                 )
                 await ws.send_text(await adapter.encode(done))
-                logger.info("gateway.responding done text=%s frames=%d",
-                            full_text[:50], total_opus_frames)
+                logger.info(
+                    "gateway.responding done text=%s frames=%d", full_text[:50], total_opus_frames
+                )
                 # Wait for device to finish playing buffered audio
                 playback_secs = max(total_opus_frames * 0.06 - 2.0, 0.5)
                 await asyncio.sleep(playback_secs)
@@ -707,12 +723,8 @@ class WebSocketServer:
             session._interrupt_count = 0
 
             if user_text:
-                await self.session_manager.add_to_history(
-                    session.session_id, "user", user_text
-                )
-            await self.session_manager.add_to_history(
-                session.session_id, "assistant", full_text
-            )
+                await self.session_manager.add_to_history(session.session_id, "user", user_text)
+            await self.session_manager.add_to_history(session.session_id, "assistant", full_text)
 
         except Exception:
             session._playing = False

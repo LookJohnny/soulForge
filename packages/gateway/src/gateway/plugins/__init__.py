@@ -17,7 +17,6 @@ Example plugin (plugins/time_plugin.py):
 
 import importlib
 import logging
-import os
 import pkgutil
 from pathlib import Path
 
@@ -35,11 +34,13 @@ def plugin(keywords: list[str], name: str = ""):
                   this plugin is called instead of LLM.
         name: Human-readable plugin name (defaults to function name).
     """
+
     def decorator(func):
         plugin_name = name or func.__name__
         _plugins.append((keywords, func, plugin_name))
         logger.info("plugin.registered name=%s keywords=%s", plugin_name, keywords)
         return func
+
     return decorator
 
 

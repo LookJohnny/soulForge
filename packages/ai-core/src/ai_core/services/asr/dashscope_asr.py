@@ -2,12 +2,12 @@
 
 import asyncio
 import io
-import tempfile
 import os
+import tempfile
 import wave
 
 import dashscope
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from ai_core.config import settings
 from ai_core.services.asr.base import ASRProvider
@@ -21,7 +21,7 @@ def _pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000) -> bytes:
 
     # Normalize volume: find peak and amplify to ~80% of max
     if len(pcm_data) >= 2:
-        samples = list(struct.unpack(f"<{len(pcm_data)//2}h", pcm_data))
+        samples = list(struct.unpack(f"<{len(pcm_data) // 2}h", pcm_data))
         peak = max(abs(s) for s in samples) if samples else 1
         if peak < 5000 and peak > 0:
             # Audio is too quiet — normalize to ~80% of max range
@@ -55,10 +55,10 @@ class DashScopeASRProvider(ASRProvider):
             # (raw PCM files without WAV headers may fail to be recognized)
             wav_data = _pcm_to_wav(audio_data, sample_rate=16000)
 
-            tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-            try:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
                 tmp.write(wav_data)
-                tmp.close()
+                tmp_path = tmp.name
+            try:
                 recognition = dashscope.audio.asr.Recognition(
                     model=settings.asr_model,
                     format="wav",
@@ -66,17 +66,17 @@ class DashScopeASRProvider(ASRProvider):
                     callback=None,
                     api_key=settings.dashscope_api_key,
                 )
-                return recognition.call(tmp.name)
+                return recognition.call(tmp_path)
             finally:
-                os.unlink(tmp.name)
+                os.unlink(tmp_path)
 
         try:
             result = await asyncio.wait_for(
                 asyncio.to_thread(_sync_recognize),
                 timeout=settings.asr_timeout,
             )
-        except asyncio.TimeoutError:
-            raise TimeoutError(f"ASR recognition timed out after {settings.asr_timeout}s")
+        except TimeoutError as e:
+            raise TimeoutError(f"ASR recognition timed out after {settings.asr_timeout}s") from e
 
         if result.status_code != 200:
             raise RuntimeError(f"ASR failed: {result.message}")

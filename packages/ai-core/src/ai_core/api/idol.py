@@ -1,11 +1,12 @@
 """Virtual Idol API — preset listing, scene triggering, quick character creation."""
 
-from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException
 
 from ai_core.services.idol_presets import (
-    IDOL_PRESETS, IDOL_VOICE_PRESETS, SCENE_PROMPTS,
-    get_preset, list_presets,
+    IDOL_VOICE_PRESETS,
+    SCENE_PROMPTS,
+    get_preset,
+    list_presets,
 )
 
 router = APIRouter(prefix="/idol", tags=["idol"])
@@ -29,12 +30,7 @@ async def get_idol_preset_detail(key: str):
 @router.get("/scenes")
 async def list_scenes():
     """List available interaction scenes."""
-    return {
-        "scenes": [
-            {"key": key, "description": desc}
-            for key, desc in SCENE_PROMPTS.items()
-        ]
-    }
+    return {"scenes": [{"key": key, "description": desc} for key, desc in SCENE_PROMPTS.items()]}
 
 
 @router.get("/voices")

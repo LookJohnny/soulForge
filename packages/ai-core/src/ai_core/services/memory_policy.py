@@ -28,7 +28,7 @@ class MemoryPolicyEngine:
 
     _CRITICAL_PATTERNS = [
         re.compile(r"\b\d{15,18}[\dXx]?\b"),  # CN identity-like strings
-        re.compile(r"\b\d{13,19}\b"),         # bank-card-like strings
+        re.compile(r"\b\d{13,19}\b"),  # bank-card-like strings
         re.compile(r"(密码|口令|住址|家庭地址|身份证|银行卡|验证码)"),
     ]
     _HIGH_PATTERNS = [
@@ -42,8 +42,18 @@ class MemoryPolicyEngine:
     ]
     _ONE_TIME_MARKERS = ("今天", "刚才", "现在", "这会儿", "此刻", "临时", "一会儿", "这次")
     _RELATIONAL_MARKERS = (
-        "不要迎合", "别迎合", "直接", "基于事实", "不要空泛", "不喜欢鸡血",
-        "指出风险", "严肃", "deep talk", "像朋友", "少废话", "先结论",
+        "不要迎合",
+        "别迎合",
+        "直接",
+        "基于事实",
+        "不要空泛",
+        "不喜欢鸡血",
+        "指出风险",
+        "严肃",
+        "deep talk",
+        "像朋友",
+        "少废话",
+        "先结论",
     )
 
     def classify_sensitivity(self, content: str) -> str:

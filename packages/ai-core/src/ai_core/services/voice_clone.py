@@ -40,13 +40,10 @@ def _looks_like_audio_bytes(data: bytes) -> bool:
         return True
     if len(data) >= 4 and data[:4] == b"fLaC":
         return True
-    if len(data) >= 12 and data[4:8] == b"ftyp":
-        return True
-    return False
+    return bool(len(data) >= 12 and data[4:8] == b"ftyp")
 
 
-async def clone_voice(audio_bytes: bytes, title: str,
-                      description: str = "") -> dict:
+async def clone_voice(audio_bytes: bytes, title: str, description: str = "") -> dict:
     """Upload audio to Fish Audio and create a cloned voice model.
 
     Args:
@@ -97,8 +94,7 @@ async def clone_voice(audio_bytes: bytes, title: str,
     }
 
 
-async def clone_voice_from_url(audio_url: str, title: str,
-                                description: str = "") -> dict:
+async def clone_voice_from_url(audio_url: str, title: str, description: str = "") -> dict:
     """Fetch an audio URL safely and clone it via Fish Audio.
 
     Used by the vocalized-character flow where the designer supplies a

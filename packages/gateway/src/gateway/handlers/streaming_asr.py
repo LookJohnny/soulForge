@@ -15,7 +15,6 @@ Usage:
 
 import asyncio
 import logging
-import os
 import threading
 
 import dashscope.audio.asr as dashscope_asr

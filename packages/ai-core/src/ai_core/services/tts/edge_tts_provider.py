@@ -1,9 +1,5 @@
 """Edge TTS provider — free Microsoft TTS via edge-tts library."""
 
-import io
-import struct
-import tempfile
-
 import edge_tts
 
 from ai_core.services.tts.base import TTSProvider

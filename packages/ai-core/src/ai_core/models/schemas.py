@@ -1,7 +1,7 @@
 import re
 from typing import Literal
 
-from pydantic import BaseModel, field_validator, Field
+from pydantic import BaseModel, Field, field_validator
 
 _UUID_PATTERN = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
@@ -75,7 +75,7 @@ class ChatRequest(BaseModel):
     device_id: str
     session_id: str
     audio_data: str | None = None  # base64 audio
-    audio_format: str = "pcm"      # pcm or opus
+    audio_format: str = "pcm"  # pcm or opus
     text_input: str | None = Field(default=None, max_length=2000)
     history: list[HistoryMessage] | None = None  # conversation history for multi-turn
 

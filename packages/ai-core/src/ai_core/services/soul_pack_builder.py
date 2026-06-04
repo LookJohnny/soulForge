@@ -14,7 +14,7 @@ import hashlib
 import io
 import json
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 
@@ -66,7 +66,9 @@ class SoulPackBuilder:
 
             # Voice profile
             if voice_profile:
-                zf.writestr("voice_profile.json", json.dumps(voice_profile, ensure_ascii=False, indent=2))
+                zf.writestr(
+                    "voice_profile.json", json.dumps(voice_profile, ensure_ascii=False, indent=2)
+                )
 
             # Voice reference audio
             if voice_reference:
@@ -90,7 +92,7 @@ class SoulPackBuilder:
             manifest = {
                 "version": self.VERSION,
                 "character_name": character_data.get("name", "unknown"),
-                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(UTC).isoformat(),
                 "has_voice": voice_profile is not None,
                 "has_rag": bool(rag_documents),
             }

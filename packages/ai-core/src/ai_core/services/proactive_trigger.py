@@ -142,4 +142,3 @@ class ProactiveTriggerService:
         if not greetings:
             return None
         return random.choice(greetings)
-

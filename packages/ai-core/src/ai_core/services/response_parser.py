@@ -19,7 +19,7 @@ _JSON_BARE_RE = re.compile(r"(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})", re.DOTALL)
 
 # Tone keywords that map to SSML effects or TTS behavior
 TONE_SSML_MAP: dict[str, str] = {
-    "whisper": "lolita",    # CosyVoice doesn't have whisper, lolita is softest
+    "whisper": "lolita",  # CosyVoice doesn't have whisper, lolita is softest
     "cute": "lolita",
     "echo": "echo",
     "robot": "robot",
@@ -29,9 +29,9 @@ TONE_SSML_MAP: dict[str, str] = {
 
 @dataclass
 class VoiceParams:
-    speed: float = 1.0    # 0.7 – 1.3
-    pitch: float = 0.0    # -0.15 – 0.15
-    tone: str = ""        # descriptive: gentle, cheerful, teasing, firm, trembling, whisper
+    speed: float = 1.0  # 0.7 – 1.3
+    pitch: float = 0.0  # -0.15 – 0.15
+    tone: str = ""  # descriptive: gentle, cheerful, teasing, firm, trembling, whisper
 
     def to_ssml(self, base_pitch: float = 1.0, base_rate: float = 1.0) -> dict:
         """Convert to TTS parameters."""
@@ -44,9 +44,9 @@ class VoiceParams:
 
 @dataclass
 class PADValues:
-    p: float = 0.0   # pleasure  -1..1
-    a: float = 0.0   # arousal   -1..1
-    d: float = 0.0   # dominance -1..1
+    p: float = 0.0  # pleasure  -1..1
+    a: float = 0.0  # arousal   -1..1
+    d: float = 0.0  # dominance -1..1
 
     def clamp(self) -> "PADValues":
         self.p = max(-1.0, min(1.0, self.p))
@@ -63,7 +63,7 @@ class StructuredResponse:
     pad: PADValues = field(default_factory=PADValues)
     voice: VoiceParams = field(default_factory=VoiceParams)
     stance: str = ""
-    raw: str = ""          # original LLM output for debugging
+    raw: str = ""  # original LLM output for debugging
     parsed_ok: bool = True  # whether JSON parsing succeeded
 
 
@@ -191,6 +191,7 @@ def parse_llm_response(raw_text: str) -> StructuredResponse:
 def _clean_legacy_text(text: str) -> str:
     """Clean up plain-text LLM response (strip emotion tags, etc.)."""
     from ai_core.services.emotion import extract_inline_emotion
+
     cleaned, _ = extract_inline_emotion(text)
     # Also strip action tags in parens for the dialogue portion
     cleaned = re.sub(r"[（(][^）)]{1,40}[）)]", "", cleaned)
@@ -224,10 +225,13 @@ def _try_fix_json(s: str) -> dict | None:
 #   voice: {"speed":1.0,"pitch":0.0,"tone":"gentle"}
 #   stance: caring
 
+
 def _parse_concat_json(raw: str) -> dict | None:
     """Parse concatenated JSON fragments: dialogue{"key":"val"}{"key":"val"}...
 
-    Some models output: spoken text{"action":"..."}{"thought":"..."}{"pad":{...}}{"voice":{...}}{"stance":"..."}
+    Some models output:
+    spoken text{"action":"..."}{"thought":"..."}{"pad":{...}}{"voice":{...}}
+    {"stance":"..."}
     """
     # Find the first { that starts a JSON fragment
     first_brace = raw.find("{")
@@ -258,7 +262,7 @@ def _parse_concat_json(raw: str) -> dict | None:
             elif json_part[i] == "}":
                 depth -= 1
                 if depth == 0:
-                    fragment = json_part[start:i + 1]
+                    fragment = json_part[start : i + 1]
                     try:
                         obj = json.loads(fragment)
                         if isinstance(obj, dict):

@@ -23,11 +23,7 @@ async def list_voices():
     """List available preset voices."""
     tts = await get_tts_client()
     voices = tts.get_preset_voices()
-    return {
-        "voices": [
-            {"id": vid, "name": name} for vid, name in voices.items()
-        ]
-    }
+    return {"voices": [{"id": vid, "name": name} for vid, name in voices.items()]}
 
 
 @router.post("/preview")

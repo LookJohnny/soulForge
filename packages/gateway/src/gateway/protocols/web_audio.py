@@ -46,11 +46,13 @@ class WebAudioAdapter(ProtocolAdapter):
         session_name = msg.get("session_name", "browser")
         device_id = f"web_{session_name}"
 
-        response = json.dumps({
-            "type": "web_hello",
-            "device_id": device_id,
-            "protocol": self.name,
-        })
+        response = json.dumps(
+            {
+                "type": "web_hello",
+                "device_id": device_id,
+                "protocol": self.name,
+            }
+        )
         await ws.send_text(response)
 
         return device_id
@@ -94,15 +96,19 @@ class WebAudioAdapter(ProtocolAdapter):
             state = message.metadata.get("state", "")
 
         if message.type == MessageType.TEXT:
-            return json.dumps({
-                "type": "text",
-                "content": message.payload,
-                "state": state,
-            })
+            return json.dumps(
+                {
+                    "type": "text",
+                    "content": message.payload,
+                    "state": state,
+                }
+            )
         elif message.type == MessageType.CONTROL:
-            return json.dumps({
-                "type": "control",
-                "payload": message.payload,
-            })
+            return json.dumps(
+                {
+                    "type": "control",
+                    "payload": message.payload,
+                }
+            )
 
         return json.dumps({"type": "unknown"})

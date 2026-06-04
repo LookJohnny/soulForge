@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 SILERO_CHUNK_SAMPLES = 512
 SILERO_CHUNK_BYTES = SILERO_CHUNK_SAMPLES * 2  # 1024 bytes per chunk
 SPEECH_PROB_THRESHOLD = 0.5  # Silero probability threshold for speech
-SPEECH_START_FRAMES = 3      # consecutive voiced frames to confirm speech start
-SILENCE_END_FRAMES = 20      # consecutive silent frames to confirm speech end (~640ms)
+SPEECH_START_FRAMES = 3  # consecutive voiced frames to confirm speech start
+SILENCE_END_FRAMES = 20  # consecutive silent frames to confirm speech end (~640ms)
 
 # Load model once at module level (shared across all sessions)
 _silero_model = load_silero_vad()
@@ -41,8 +41,8 @@ class AudioHandler:
     """
 
     def __init__(self, dashscope_api_key: str = "", asr_model: str = "paraformer-realtime-v2"):
-        self._buffers: dict[str, bytearray] = {}       # PCM buffer (for VAD)
-        self._raw_opus: dict[str, list[bytes]] = {}     # Raw Opus packets (for reliable ASR)
+        self._buffers: dict[str, bytearray] = {}  # PCM buffer (for VAD)
+        self._raw_opus: dict[str, list[bytes]] = {}  # Raw Opus packets (for reliable ASR)
         self._decoders: dict[str, opuslib.Decoder] = {}
         self._vad_states: dict[str, dict] = {}
         self._asr_sessions: dict[str, StreamingASR] = {}
@@ -63,12 +63,12 @@ class AudioHandler:
         # Reset Silero model state for new session
         _silero_model.reset_states()
         self._vad_states[session.session_id] = {
-            "pcm_pending": bytearray(),   # accumulates PCM until we have a full Silero chunk
+            "pcm_pending": bytearray(),  # accumulates PCM until we have a full Silero chunk
             "speech_started": False,
-            "voiced_count": 0,            # consecutive voiced frames
-            "silent_count": 0,            # consecutive silent frames after speech
-            "speech_complete": False,      # set True when speech→silence detected
-            "pre_speech_buf": bytearray(), # small buffer of audio right before speech
+            "voiced_count": 0,  # consecutive voiced frames
+            "silent_count": 0,  # consecutive silent frames after speech
+            "speech_complete": False,  # set True when speech→silence detected
+            "pre_speech_buf": bytearray(),  # small buffer of audio right before speech
         }
         logger.info("vad.listen_start session=%s", session.session_id)
 
@@ -142,7 +142,7 @@ class AudioHandler:
                     # Keep a rolling pre-speech buffer (~300ms)
                     state["pre_speech_buf"].extend(frame)
                     if len(state["pre_speech_buf"]) > SILERO_CHUNK_BYTES * 10:
-                        del state["pre_speech_buf"][:SILERO_CHUNK_BYTES * 5]
+                        del state["pre_speech_buf"][: SILERO_CHUNK_BYTES * 5]
 
     def is_speech_complete(self, session: Session) -> bool:
         """Check if VAD detected end of speech."""
@@ -181,15 +181,23 @@ class AudioHandler:
         if len(pcm_buf) < SILERO_CHUNK_BYTES * 5:
             return None
 
-        logger.info("vad.collected packets=%d pcm_bytes=%d duration=%.1fs",
-                     len(raw_packets), len(pcm_buf), len(pcm_buf) / 32000)
+        logger.info(
+            "vad.collected packets=%d pcm_bytes=%d duration=%.1fs",
+            len(raw_packets),
+            len(pcm_buf),
+            len(pcm_buf) / 32000,
+        )
 
         # Debug: save WAV for inspection
         try:
-            import wave as _wave, io as _io
+            import wave as _wave
+            import io as _io
+
             wav_buf = _io.BytesIO()
             with _wave.open(wav_buf, "wb") as wf:
-                wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(16000)
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(16000)
                 wf.writeframes(pcm_buf)
             with open("/tmp/xiaozhi_latest.wav", "wb") as f:
                 f.write(wav_buf.getvalue())

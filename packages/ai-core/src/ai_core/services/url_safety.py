@@ -32,7 +32,7 @@ _MAX_REDIRECTS = 5
 
 @dataclass(frozen=True)
 class FetchResult:
-    url: str                # final URL after redirects (hostname form)
+    url: str  # final URL after redirects (hostname form)
     content: bytes
     content_type: str
 
@@ -126,9 +126,7 @@ async def _resolve_and_validate(
         raise RuntimeError("url_safety: host did not resolve to any IP")
     for ip in resolved:
         if not _is_safe_ip(ip):
-            raise RuntimeError(
-                f"url_safety: host resolves to non-public IP ({ip})"
-            )
+            raise RuntimeError(f"url_safety: host resolves to non-public IP ({ip})")
     return host, port, resolved
 
 
@@ -185,22 +183,19 @@ async def fetch_public_url(
                         continue
 
                     if resp.status_code != 200:
-                        raise RuntimeError(
-                            f"url_safety: HTTP {resp.status_code} from {host}"
-                        )
+                        raise RuntimeError(f"url_safety: HTTP {resp.status_code} from {host}")
 
                     content_type = resp.headers.get("content-type", "").lower()
                     if allowed_content_types and not content_type.startswith(allowed_content_types):
-                        raise RuntimeError(
-                            f"url_safety: content-type {content_type!r} not allowed"
-                        )
+                        raise RuntimeError(f"url_safety: content-type {content_type!r} not allowed")
 
                     content_length = resp.headers.get("content-length")
                     if content_length:
                         try:
                             if int(content_length) > max_bytes:
+                                limit_mb = max_bytes // (1024 * 1024)
                                 raise RuntimeError(
-                                    f"url_safety: content exceeds {max_bytes // (1024*1024)}MB limit"
+                                    f"url_safety: content exceeds {limit_mb}MB limit"
                                 )
                         except ValueError:
                             pass
@@ -211,7 +206,7 @@ async def fetch_public_url(
                         size += len(chunk)
                         if size > max_bytes:
                             raise RuntimeError(
-                                f"url_safety: content exceeds {max_bytes // (1024*1024)}MB limit"
+                                f"url_safety: content exceeds {max_bytes // (1024 * 1024)}MB limit"
                             )
                         chunks.append(chunk)
                     return FetchResult(

@@ -1,7 +1,6 @@
 """License enforcement middleware — checks quota before processing requests."""
 
 import time
-from datetime import date
 
 import structlog
 from starlette.middleware.base import BaseHTTPMiddleware

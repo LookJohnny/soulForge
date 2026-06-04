@@ -75,11 +75,13 @@ async def export_soul_pack(req: ExportRequest, request: Request):
 
     # Record the export in soul_packs table
     import hashlib
+
     checksum = hashlib.sha256(soulpack_bytes).hexdigest()
     try:
         await pool.execute(
             """INSERT INTO soul_packs
-                   (id, brand_id, character_id, version, checksum, file_url, file_size, metadata, created_at)
+                   (id, brand_id, character_id, version, checksum, file_url, file_size,
+                    metadata, created_at)
                VALUES (gen_random_uuid(), $1, $2, '1.0', $3, '', $4, $5, now())""",
             brand_id,
             req.character_id,
@@ -150,8 +152,8 @@ async def import_soul_pack(req: ImportRequest, request: Request):
 
     try:
         soulpack_bytes = base64.b64decode(req.soulpack_b64)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid base64 data")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Invalid base64 data") from e
 
     try:
         data = builder.read(soulpack_bytes, brand_id)
@@ -159,7 +161,7 @@ async def import_soul_pack(req: ImportRequest, request: Request):
         raise HTTPException(
             status_code=400,
             detail=f"Failed to decrypt/read soulpack: {e}",
-        )
+        ) from e
 
     character_data = data.get("character", {})
     manifest = data.get("manifest", {})
@@ -171,6 +173,7 @@ async def import_soul_pack(req: ImportRequest, request: Request):
 
     # Insert character into DB under the importing brand
     import uuid as _uuid
+
     new_id = str(_uuid.uuid4())
     try:
         await pool.execute(
@@ -178,7 +181,8 @@ async def import_soul_pack(req: ImportRequest, request: Request):
                    (id, brand_id, name, archetype, species, backstory, relationship,
                     personality, catchphrases, suffix, topics, forbidden,
                     response_length, voice_speed, status, created_at, updated_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'DRAFT', now(), now())""",
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                       'DRAFT', now(), now())""",
             new_id,
             brand_id,
             character_data.get("name", "Imported Character"),
@@ -200,11 +204,13 @@ async def import_soul_pack(req: ImportRequest, request: Request):
 
     # Record the import in soul_packs table
     import hashlib
+
     checksum = hashlib.sha256(soulpack_bytes).hexdigest()
     try:
         await pool.execute(
             """INSERT INTO soul_packs
-                   (id, brand_id, character_id, version, checksum, file_url, file_size, metadata, created_at)
+                   (id, brand_id, character_id, version, checksum, file_url, file_size,
+                    metadata, created_at)
                VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, now())""",
             brand_id,
             new_id,

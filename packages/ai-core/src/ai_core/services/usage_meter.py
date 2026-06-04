@@ -3,8 +3,8 @@
 import asyncio
 from datetime import date
 
-import structlog
 import redis.asyncio as aioredis
+import structlog
 
 from ai_core.config import settings
 
@@ -96,6 +96,7 @@ async def flush_to_db(pool) -> None:
 
 async def start_flush_task(pool) -> asyncio.Task:
     """Start background task that flushes every 5 minutes."""
+
     async def _loop():
         while True:
             await asyncio.sleep(300)  # 5 minutes

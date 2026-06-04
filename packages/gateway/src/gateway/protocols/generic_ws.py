@@ -41,12 +41,14 @@ class GenericWSAdapter(ProtocolAdapter):
         msg = json.loads(initial_data)
         device_id = msg.get("device_id", "generic_unknown")
 
-        response = json.dumps({
-            "action": "hello",
-            "status": "ok",
-            "device_id": device_id,
-            "protocol": self.name,
-        })
+        response = json.dumps(
+            {
+                "action": "hello",
+                "status": "ok",
+                "device_id": device_id,
+                "protocol": self.name,
+            }
+        )
         await ws.send_text(response)
 
         return device_id
@@ -103,15 +105,19 @@ class GenericWSAdapter(ProtocolAdapter):
             state = message.metadata.get("state", "")
 
         if message.type == MessageType.TEXT:
-            return json.dumps({
-                "type": "response",
-                "text": message.payload,
-                "state": state,
-            })
+            return json.dumps(
+                {
+                    "type": "response",
+                    "text": message.payload,
+                    "state": state,
+                }
+            )
         elif message.type == MessageType.CONTROL:
-            return json.dumps({
-                "type": "control",
-                "payload": message.payload,
-            })
+            return json.dumps(
+                {
+                    "type": "control",
+                    "payload": message.payload,
+                }
+            )
 
         return json.dumps({"type": "unknown"})

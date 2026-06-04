@@ -12,11 +12,12 @@ Concurrency: the provider is a singleton, but per-request character context
 asyncio ContextVar so concurrent requests don't clobber each other.
 """
 
+import math
 from contextvars import ContextVar
 
 import httpx
 import structlog
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from ai_core.config import settings
 from ai_core.services.tts.base import TTSProvider
@@ -26,61 +27,105 @@ logger = structlog.get_logger()
 # Per-request character context. Each asyncio task has its own value;
 # set_character_context() writes only to the current task's scope so
 # two parallel chats never step on each other's voice_clone_ref_id.
-_CHAR_CONTEXT: ContextVar[dict] = ContextVar("fish_audio_char_context", default={})
+_CHAR_CONTEXT: ContextVar[dict | None] = ContextVar("fish_audio_char_context", default=None)
 
 _API_BASE = "https://api.fish.audio"
 _TTS_ENDPOINT = f"{_API_BASE}/v1/tts"
 
-_RETRYABLE = (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, TimeoutError, ConnectionError)
+_RETRYABLE = (
+    httpx.ConnectError,
+    httpx.ReadTimeout,
+    httpx.WriteTimeout,
+    TimeoutError,
+    ConnectionError,
+)
 
 # ── Fish Audio Voice Library with personality vectors ──
 # Same 4D vector system as voice_matcher.py (warmth, energy, maturity, gravity)
 # Each voice is profiled so the matching algorithm works for ANY character.
 
-import math
-
 FISH_VOICES = {
     # ─── Male voices ─────────────────────────────
     "15896f78e288417db16cc34da8fc6f09": {
-        "w": 45, "e": 55, "m": 30, "g": 20,
-        "gender": "male", "label": "少侠公子 (清冷少年)",
+        "w": 45,
+        "e": 55,
+        "m": 30,
+        "g": 20,
+        "gender": "male",
+        "label": "少侠公子 (清冷少年)",
     },
     "7a02aebcd8f94d8283a02842ce4ddd33": {
-        "w": 55, "e": 70, "m": 25, "g": 10,
-        "gender": "male", "label": "少年感 (元气少年)",
+        "w": 55,
+        "e": 70,
+        "m": 25,
+        "g": 10,
+        "gender": "male",
+        "label": "少年感 (元气少年)",
     },
     "d99547e2dad64ce0aa085319a3c9cc56": {
-        "w": 80, "e": 30, "m": 40, "g": 15,
-        "gender": "male", "label": "温柔男声 (温暖大哥)",
+        "w": 80,
+        "e": 30,
+        "m": 40,
+        "g": 15,
+        "gender": "male",
+        "label": "温柔男声 (温暖大哥)",
     },
     "f4fead56f51646dfbc37ec450a06fc07": {
-        "w": 35, "e": 20, "m": 65, "g": 55,
-        "gender": "male", "label": "沉稳男声 (成熟稳重)",
+        "w": 35,
+        "e": 20,
+        "m": 65,
+        "g": 55,
+        "gender": "male",
+        "label": "沉稳男声 (成熟稳重)",
     },
     "204900525e1243cc9a616c82c8c02636": {
-        "w": 70, "e": 40, "m": 35, "g": 10,
-        "gender": "male", "label": "男4温柔 (轻柔男声)",
+        "w": 70,
+        "e": 40,
+        "m": 35,
+        "g": 10,
+        "gender": "male",
+        "label": "男4温柔 (轻柔男声)",
     },
     # ─── Female voices ────────────────────────────
     "564dc2631c624222a21864b17f3c66a8": {
-        "w": 80, "e": 70, "m": 8, "g": 3,
-        "gender": "female", "label": "萝莉幼态 (软萌童声)",
+        "w": 80,
+        "e": 70,
+        "m": 8,
+        "g": 3,
+        "gender": "female",
+        "label": "萝莉幼态 (软萌童声)",
     },
     "65c4eb56353d42e5b576d01f812e1d1f": {
-        "w": 70, "e": 65, "m": 20, "g": 8,
-        "gender": "female", "label": "可爱女配 (甜美少女)",
+        "w": 70,
+        "e": 65,
+        "m": 20,
+        "g": 8,
+        "gender": "female",
+        "label": "可爱女配 (甜美少女)",
     },
     "f82e3885ac22468eb6c773b96f2c5752": {
-        "w": 75, "e": 60, "m": 15, "g": 5,
-        "gender": "female", "label": "萝莉萌妹 (活泼软萌)",
+        "w": 75,
+        "e": 60,
+        "m": 15,
+        "g": 5,
+        "gender": "female",
+        "label": "萝莉萌妹 (活泼软萌)",
     },
     "c1b7b0d5f19b46aa944e80de970662a1": {
-        "w": 65, "e": 35, "m": 35, "g": 20,
-        "gender": "female", "label": "温柔女声 (温婉姐姐)",
+        "w": 65,
+        "e": 35,
+        "m": 35,
+        "g": 20,
+        "gender": "female",
+        "label": "温柔女声 (温婉姐姐)",
     },
     "a6b29d0ef2404ca1aa8d1fdd8d7a2a90": {
-        "w": 40, "e": 80, "m": 22, "g": 8,
-        "gender": "female", "label": "青春活泼女 (元气少女)",
+        "w": 40,
+        "e": 80,
+        "m": 22,
+        "g": 8,
+        "gender": "female",
+        "label": "青春活泼女 (元气少女)",
     },
 }
 
@@ -93,9 +138,9 @@ def _fish_voice_distance(char_vec: dict, voice: dict) -> float:
     """
     dw = (char_vec["w"] - voice["w"]) * 1.0
     de = (char_vec["e"] - voice["e"]) * 0.8
-    dm = (char_vec["m"] - voice["m"]) * 1.5   # maturity matters most for voice age
+    dm = (char_vec["m"] - voice["m"]) * 1.5  # maturity matters most for voice age
     dg = (char_vec["g"] - voice["g"]) * 0.6
-    return math.sqrt(dw*dw + de*de + dm*dm + dg*dg)
+    return math.sqrt(dw * dw + de * de + dm * dm + dg * dg)
 
 
 def resolve_fish_voice(
@@ -120,6 +165,7 @@ def resolve_fish_voice(
 
     # Build character vector using voice_matcher's algorithm
     from ai_core.services.voice_matcher import _build_character_vector, _classify_species
+
     char_vec = _build_character_vector(species, age_setting, personality, relationship)
     sp = _classify_species(species)
     gender_hint = sp.get("gender_hint")
@@ -149,8 +195,15 @@ def resolve_fish_voice(
             best_vid = vid
 
     label = FISH_VOICES[best_vid]["label"]
-    logger.info("tts.fish_voice_matched", species=species, voice=best_vid, label=label, dist=f"{best_dist:.0f}")
+    logger.info(
+        "tts.fish_voice_matched",
+        species=species,
+        voice=best_vid,
+        label=label,
+        dist=f"{best_dist:.0f}",
+    )
     return best_vid
+
 
 # PAD emotion → Fish Audio emotion tag mapping
 # S1 uses (tag), S2-Pro uses [tag]
@@ -158,15 +211,15 @@ _EMOTION_FROM_PAD: list[tuple[str, callable]] = []  # populated below
 
 # Discrete emotion → Fish Audio inline tag
 EMOTION_TAGS = {
-    "happy":    "happy",
-    "sad":      "sad",
-    "shy":      "shy and nervous",
-    "angry":    "angry",
-    "playful":  "playful and teasing",
-    "curious":  "curious",
-    "worried":  "worried and concerned",
-    "calm":     "",  # no tag for neutral
-    "excited":  "excited",
+    "happy": "happy",
+    "sad": "sad",
+    "shy": "shy and nervous",
+    "angry": "angry",
+    "playful": "playful and teasing",
+    "curious": "curious",
+    "worried": "worried and concerned",
+    "calm": "",  # no tag for neutral
+    "excited": "excited",
 }
 
 
@@ -225,10 +278,15 @@ class FishAudioTTSProvider(TTSProvider):
         )
         logger.info("tts.fish_audio_init", model=self.model)
 
-    def set_character_context(self, species: str = "", personality: dict | None = None,
-                               age_setting: int | None = None, relationship: str | None = None,
-                               voice_clone_ref_id: str | None = None,
-                               audio_clips: dict | None = None):
+    def set_character_context(
+        self,
+        species: str = "",
+        personality: dict | None = None,
+        age_setting: int | None = None,
+        relationship: str | None = None,
+        voice_clone_ref_id: str | None = None,
+        audio_clips: dict | None = None,
+    ):
         """Set character context for voice resolution. Call before synthesize.
 
         The context is stored in an asyncio ContextVar so each concurrent
@@ -242,12 +300,16 @@ class FishAudioTTSProvider(TTSProvider):
         to synthesize exactly matches a key, the clip is returned verbatim
         instead of going through TTS (preserves true original audio).
         """
-        _CHAR_CONTEXT.set({
-            "species": species, "personality": personality,
-            "age_setting": age_setting, "relationship": relationship,
-            "voice_clone_ref_id": voice_clone_ref_id,
-            "audio_clips": audio_clips or {},
-        })
+        _CHAR_CONTEXT.set(
+            {
+                "species": species,
+                "personality": personality,
+                "age_setting": age_setting,
+                "relationship": relationship,
+                "voice_clone_ref_id": voice_clone_ref_id,
+                "audio_clips": audio_clips or {},
+            }
+        )
 
     @property
     def _char_context(self) -> dict:
@@ -256,7 +318,7 @@ class FishAudioTTSProvider(TTSProvider):
         Exposed as a property so existing call sites (including tests) keep
         working. The backing store is the module-level ContextVar.
         """
-        return _CHAR_CONTEXT.get()
+        return _CHAR_CONTEXT.get() or {}
 
     def _wrap_emotion(self, text: str, emotion_tag: str) -> str:
         """Prepend emotion tag to text based on model version."""
@@ -384,6 +446,7 @@ class FishAudioTTSProvider(TTSProvider):
             return None
         try:
             from ai_core.services.url_safety import fetch_public_url
+
             result = await fetch_public_url(
                 url,
                 max_bytes=5 * 1024 * 1024,  # clips are short; cap lower than voice samples
@@ -425,9 +488,14 @@ class FishAudioTTSProvider(TTSProvider):
     ) -> bytes:
         # Same as synthesize — Fish Audio returns MP3 directly
         return await self.synthesize(
-            text=text, voice=voice, speed=speed,
-            pitch_rate=pitch_rate, speech_rate=speech_rate,
-            ssml_pitch=ssml_pitch, ssml_rate=ssml_rate, ssml_effect=ssml_effect,
+            text=text,
+            voice=voice,
+            speed=speed,
+            pitch_rate=pitch_rate,
+            speech_rate=speech_rate,
+            ssml_pitch=ssml_pitch,
+            ssml_rate=ssml_rate,
+            ssml_effect=ssml_effect,
         )
 
     async def synthesize_with_pad(

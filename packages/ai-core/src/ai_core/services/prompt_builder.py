@@ -171,7 +171,10 @@ class PromptBuilder:
                 personality_drift = json.loads(personality_drift)
 
         from ai_core.services.personality_drift import merge_personality_with_drift
-        personality = merge_personality_with_drift(base_personality, custom_offsets, personality_drift)
+
+        personality = merge_personality_with_drift(
+            base_personality, custom_offsets, personality_drift
+        )
         personality_desc = _personality_to_text(personality)
 
         # RAG retrieval
@@ -183,6 +186,7 @@ class PromptBuilder:
 
         # ── PersonaContext: archetype-driven adaptive language ──
         from ai_core.services.persona_context import PersonaContext
+
         archetype = base.get("archetype", "ANIMAL")
         pctx = PersonaContext.from_archetype(archetype)
 
@@ -200,6 +204,7 @@ class PromptBuilder:
         current_emotion_description = ""
         if current_emotion:
             from ai_core.services.emotion import EMOTION_DESCRIPTIONS
+
             current_emotion_description = EMOTION_DESCRIPTIONS.get(emotion_state, "")
 
         # Format user mood for template (using PersonaContext for adaptive language)
@@ -215,12 +220,22 @@ class PromptBuilder:
         if memories:
             _ref = pctx.user_ref
             _TOPIC_FMTS = ["上次聊到{content}", "我们之前聊过{content}", "想起来我们说过{content}"]
-            _PREF_FMTS = [f"{_ref}{{content}}", f"{_ref}好像{{content}}", f"{_ref}以前提过{{content}}"]
-            _EVENT_FMTS = [f"{_ref}说过{{content}}", f"{_ref}之前提到{{content}}", f"好像{_ref}那次讲过{{content}}"]
+            _PREF_FMTS = [
+                f"{_ref}{{content}}",
+                f"{_ref}好像{{content}}",
+                f"{_ref}以前提过{{content}}",
+            ]
+            _EVENT_FMTS = [
+                f"{_ref}说过{{content}}",
+                f"{_ref}之前提到{{content}}",
+                f"好像{_ref}那次讲过{{content}}",
+            ]
             _BY_TYPE = {"TOPIC": _TOPIC_FMTS, "PREFERENCE": _PREF_FMTS, "EVENT": _EVENT_FMTS}
             for m in memories:
                 if m.get("prompt_text"):
-                    memory_context.append(_sanitize_user_field(str(m["prompt_text"]), max_length=300))
+                    memory_context.append(
+                        _sanitize_user_field(str(m["prompt_text"]), max_length=300)
+                    )
                     continue
                 content = m.get("content", "")
                 fmts = _BY_TYPE.get(m.get("type", ""), _EVENT_FMTS)
@@ -232,13 +247,21 @@ class PromptBuilder:
         if relationship_stage:
             archetype = base.get("archetype", "ANIMAL")
             if archetype == "HUMAN" and base.get("relationship", "") in (
-                "暗恋对象", "青梅竹马", "深爱的人", "开朗的恋人", "表面冷漠的恋人",
-                "温柔的恋人", "热血恋人", "若即若离的暧昧对象",
+                "暗恋对象",
+                "青梅竹马",
+                "深爱的人",
+                "开朗的恋人",
+                "表面冷漠的恋人",
+                "温柔的恋人",
+                "热血恋人",
+                "若即若离的暧昧对象",
             ):
                 from ai_core.services.idol_presets import ROMANCE_STAGE_PROMPTS
+
                 relationship_description = ROMANCE_STAGE_PROMPTS.get(relationship_stage, "")
             else:
                 from ai_core.services.relationship import STAGE_PROMPTS
+
                 relationship_description = STAGE_PROMPTS.get(relationship_stage, "")
 
         # Scene prompt for idol mode
@@ -249,6 +272,7 @@ class PromptBuilder:
             if not scene_prompt:
                 # Fallback to legacy static prompts
                 from ai_core.services.idol_presets import SCENE_PROMPTS
+
                 scene_prompt = SCENE_PROMPTS.get(scene, "")
 
         # Select template: vocalized (non-verbal) takes highest priority, then
@@ -257,11 +281,21 @@ class PromptBuilder:
         template = self._templates["default"]
         if language_mode == "VOCALIZED":
             template = self._templates["vocalized"]
-        elif base.get("archetype") == "HUMAN" and scene_prompt:
-            template = self._templates["idol"]
-        elif base.get("archetype") == "HUMAN" and base.get("relationship", "") in (
-            "暗恋对象", "青梅竹马", "深爱的人", "开朗的恋人", "表面冷漠的恋人",
-            "温柔的恋人", "热血恋人", "若即若离的暧昧对象",
+        elif (
+            base.get("archetype") == "HUMAN"
+            and scene_prompt
+            or base.get("archetype") == "HUMAN"
+            and base.get("relationship", "")
+            in (
+                "暗恋对象",
+                "青梅竹马",
+                "深爱的人",
+                "开朗的恋人",
+                "表面冷漠的恋人",
+                "温柔的恋人",
+                "热血恋人",
+                "若即若离的暧昧对象",
+            )
         ):
             template = self._templates["idol"]
 
@@ -325,6 +359,7 @@ class PromptBuilder:
         else:
             # No voice assigned — auto-match based on character traits
             from ai_core.services.voice_matcher import match_voice
+
             matched = match_voice(
                 species=base.get("species", ""),
                 age_setting=base.get("age_setting"),
@@ -398,7 +433,8 @@ class PromptBuilder:
 
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                """SELECT nickname, user_title, personality_offsets, personality_drift, interest_topics
+                """SELECT nickname, user_title, personality_offsets, personality_drift,
+                          interest_topics
                    FROM user_customizations
                    WHERE end_user_id = $1 AND character_id = $2 AND is_active = true""",
                 end_user_id,
@@ -406,7 +442,7 @@ class PromptBuilder:
             )
             if not row:
                 return None
-            result = {k: (str(v) if hasattr(v, 'hex') else v) for k, v in dict(row).items()}
+            result = {k: (str(v) if hasattr(v, "hex") else v) for k, v in dict(row).items()}
             await self.cache.set_json(cache_key, result, ttl=self.CACHE_TTL)
             return result
 
@@ -419,11 +455,13 @@ class PromptBuilder:
 
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT dashscope_voice_id, fish_audio_id, reference_audio FROM voice_profiles WHERE id = $1",
+                """SELECT dashscope_voice_id, fish_audio_id, reference_audio
+                   FROM voice_profiles
+                   WHERE id = $1""",
                 voice_id,
             )
             if not row:
                 return None
-            result = {k: (str(v) if hasattr(v, 'hex') else v) for k, v in dict(row).items()}
+            result = {k: (str(v) if hasattr(v, "hex") else v) for k, v in dict(row).items()}
             await self.cache.set_json(cache_key, result, ttl=self.CACHE_TTL)
             return result

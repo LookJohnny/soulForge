@@ -7,6 +7,7 @@ Supports three auth methods:
 """
 
 import base64
+import contextlib
 import hashlib
 import hmac
 import json
@@ -14,10 +15,10 @@ import struct
 import time
 
 import structlog
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import padding as sym_padding
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import padding as sym_padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -48,6 +49,7 @@ class AuthInfo:
 # ──────────────────────────────────────────────
 # JWE Decryption (NextAuth v5 / Auth.js)
 # ──────────────────────────────────────────────
+
 
 def _base64url_decode(s: str) -> bytes:
     s += "=" * (4 - len(s) % 4)
@@ -114,6 +116,7 @@ def decrypt_nextauth_jwe(token: str) -> dict:
 # API Key verification
 # ──────────────────────────────────────────────
 
+
 async def _verify_api_key(key: str) -> dict | None:
     """Verify API key against the api_keys table. Returns auth info or None."""
     if not key.startswith("sk-") or len(key) < 12:
@@ -138,12 +141,8 @@ async def _verify_api_key(key: str) -> dict | None:
         return None
 
     # Update last_used_at (best-effort)
-    try:
-        await pool.execute(
-            "UPDATE api_keys SET last_used_at = now() WHERE prefix = $1", prefix
-        )
-    except Exception:
-        pass
+    with contextlib.suppress(Exception):
+        await pool.execute("UPDATE api_keys SET last_used_at = now() WHERE prefix = $1", prefix)
 
     return {"brand_id": str(row["brand_id"]), "name": row["name"]}
 
@@ -197,7 +196,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if token.startswith("sk-"):
             result = await _verify_api_key(token)
             if not result:
-                return JSONResponse(status_code=401, content={"error": "Invalid or expired API key"})
+                return JSONResponse(
+                    status_code=401, content={"error": "Invalid or expired API key"}
+                )
             request.state.auth = AuthInfo(
                 user_id=None,
                 brand_id=result["brand_id"],

@@ -90,6 +90,7 @@ async def health():
 async def xiaozhi_ota(request: Request):
     """Xiaozhi OTA compatibility — return SoulForge WebSocket config."""
     import time as _time
+
     body = await request.body()
     logger.info(
         "ota.request",
@@ -119,6 +120,7 @@ async def xiaozhi_ota(request: Request):
 async def xiaozhi_ota_subpath(path: str, request: Request):
     """Catch all OTA sub-paths (e.g. /ota/activate)."""
     import time as _time
+
     body = await request.body()
     logger.info("ota.subpath", path=path, body_len=len(body))
     return {

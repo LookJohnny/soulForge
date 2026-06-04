@@ -7,8 +7,8 @@ Drift stored as JSONB in user_customizations.personality_drift.
 
 from datetime import date
 
-import structlog
 import asyncpg
+import structlog
 
 from ai_core.services.cache import CacheService
 
@@ -23,9 +23,7 @@ _MAX_TOTAL_DRIFT = 30
 _DRIFTABLE_TRAITS = ("extrovert", "humor", "warmth", "curiosity", "energy")
 
 
-def merge_personality_with_drift(
-    base: dict, offsets: dict | None, drift: dict | None
-) -> dict:
+def merge_personality_with_drift(base: dict, offsets: dict | None, drift: dict | None) -> dict:
     """Merge base personality + user offsets + micro-drift, clamp to 0-100."""
     result = dict(base)
     if offsets:
@@ -69,6 +67,7 @@ class PersonalityDriftService:
             )
 
         import json
+
         drift = {}
         if row:
             if isinstance(row, str):
@@ -103,6 +102,7 @@ class PersonalityDriftService:
 
             # Count emotions in this session
             from collections import Counter
+
             emotion_counts = Counter(emotion_history)
 
             # Compute drift deltas
@@ -139,6 +139,7 @@ class PersonalityDriftService:
 
             # Write to DB
             import json
+
             async with self.pool.acquire() as conn:
                 await conn.execute(
                     """UPDATE user_customizations

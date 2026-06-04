@@ -10,14 +10,17 @@ backward compatibility with prompts, TTS, and API responses.
 """
 
 import re
+
 import structlog
 
 from ai_core.services.cache import CacheService
 from ai_core.services.pad_model import (
-    PADEngine, PADState,
-    pad_to_emotion, emotion_to_pad,
-    pad_to_tts_offsets, pad_to_prompt_description,
     TOUCH_PAD_IMPULSE,
+    PADEngine,
+    PADState,
+    pad_to_emotion,
+    pad_to_prompt_description,
+    pad_to_tts_offsets,
 )
 
 logger = structlog.get_logger()
@@ -56,32 +59,90 @@ USER_MOOD_RESPONSES: dict[str, str] = {
 # Keywords for detecting user's mood from their input
 _USER_MOOD_KEYWORDS: dict[str, list[str]] = {
     "happy": [
-        "太好了", "好开心", "高兴", "开心", "哈哈", "耶", "棒", "考了100",
-        "赢了", "成功", "好消息", "终于", "太棒了", "超开心",
+        "太好了",
+        "好开心",
+        "高兴",
+        "开心",
+        "哈哈",
+        "耶",
+        "棒",
+        "考了100",
+        "赢了",
+        "成功",
+        "好消息",
+        "终于",
+        "太棒了",
+        "超开心",
     ],
     "sad": [
-        "难过", "伤心", "哭", "不开心", "失败", "没考好", "输了", "被骂",
-        "不想", "好烦", "好累", "唉", "呜呜", "委屈", "被欺负",
+        "难过",
+        "伤心",
+        "哭",
+        "不开心",
+        "失败",
+        "没考好",
+        "输了",
+        "被骂",
+        "不想",
+        "好烦",
+        "好累",
+        "唉",
+        "呜呜",
+        "委屈",
+        "被欺负",
     ],
     "angry": [
-        "生气", "气死了", "烦死了", "讨厌", "可恶", "不公平", "凭什么",
-        "受不了", "太过分",
+        "生气",
+        "气死了",
+        "烦死了",
+        "讨厌",
+        "可恶",
+        "不公平",
+        "凭什么",
+        "受不了",
+        "太过分",
     ],
     "worried": [
-        "害怕", "担心", "紧张", "怎么办", "考试", "不敢", "万一",
-        "来不及", "完蛋了", "糟糕",
+        "害怕",
+        "担心",
+        "紧张",
+        "怎么办",
+        "考试",
+        "不敢",
+        "万一",
+        "来不及",
+        "完蛋了",
+        "糟糕",
     ],
     "excited": [
-        "好期待", "等不及", "终于要", "明天就", "马上就", "兴奋",
-        "太期待了", "迫不及待",
+        "好期待",
+        "等不及",
+        "终于要",
+        "明天就",
+        "马上就",
+        "兴奋",
+        "太期待了",
+        "迫不及待",
     ],
     "tired": [
-        "好累", "好困", "好无聊", "没意思", "不想动", "累死了",
-        "困死了", "打哈欠",
+        "好累",
+        "好困",
+        "好无聊",
+        "没意思",
+        "不想动",
+        "累死了",
+        "困死了",
+        "打哈欠",
     ],
     "lonely": [
-        "没人陪", "一个人", "孤单", "寂寞", "想你", "没朋友",
-        "好无聊", "都不理我",
+        "没人陪",
+        "一个人",
+        "孤单",
+        "寂寞",
+        "想你",
+        "没朋友",
+        "好无聊",
+        "都不理我",
     ],
     "neutral": [],
 }
@@ -103,39 +164,98 @@ EMOTION_TTS_OFFSETS: dict[str, dict[str, float]] = {
 # Keywords are exclusive to one emotion to eliminate cross-contamination.
 _EMOTION_KEYWORDS_WEIGHTED: dict[str, list[tuple[str, float]]] = {
     "happy": [
-        ("好开心", 3), ("太棒了", 3), ("好耶", 3), ("超开心", 3), ("万岁", 2),
-        ("开心", 2), ("高兴", 2), ("快乐", 2), ("真棒", 2), ("好极了", 2),
-        ("太好了", 2), ("哈哈", 1.5), ("耶", 1.5), ("超棒", 1.5), ("真好", 1),
+        ("好开心", 3),
+        ("太棒了", 3),
+        ("好耶", 3),
+        ("超开心", 3),
+        ("万岁", 2),
+        ("开心", 2),
+        ("高兴", 2),
+        ("快乐", 2),
+        ("真棒", 2),
+        ("好极了", 2),
+        ("太好了", 2),
+        ("哈哈", 1.5),
+        ("耶", 1.5),
+        ("超棒", 1.5),
+        ("真好", 1),
     ],
     "sad": [
-        ("好难过", 3), ("好伤心", 3), ("呜呜呜", 3),
-        ("难过", 2), ("伤心", 2), ("不开心", 2), ("失落", 2), ("沮丧", 2), ("哭", 2),
-        ("好可惜", 1.5), ("叹气", 1.5), ("呜呜", 1.5), ("唉", 1.5), ("心疼", 1.5), ("呜", 1),
+        ("好难过", 3),
+        ("好伤心", 3),
+        ("呜呜呜", 3),
+        ("难过", 2),
+        ("伤心", 2),
+        ("不开心", 2),
+        ("失落", 2),
+        ("沮丧", 2),
+        ("哭", 2),
+        ("好可惜", 1.5),
+        ("叹气", 1.5),
+        ("呜呜", 1.5),
+        ("唉", 1.5),
+        ("心疼", 1.5),
+        ("呜", 1),
     ],
     "shy": [
-        ("好害羞", 3), ("脸红了", 3), ("扭扭捏捏", 3),
-        ("害羞", 2), ("不好意思", 2), ("捂脸", 2),
-        ("人家", 1.5), ("讨厌啦", 1.5), ("哎呀", 1),
+        ("好害羞", 3),
+        ("脸红了", 3),
+        ("扭扭捏捏", 3),
+        ("害羞", 2),
+        ("不好意思", 2),
+        ("捂脸", 2),
+        ("人家", 1.5),
+        ("讨厌啦", 1.5),
+        ("哎呀", 1),
     ],
     "angry": [
-        ("气死了", 3), ("烦死了", 3), ("可恶", 3),
-        ("生气", 2), ("不理你", 2), ("好气", 2),
-        ("哼", 1), ("讨厌", 1),
+        ("气死了", 3),
+        ("烦死了", 3),
+        ("可恶", 3),
+        ("生气", 2),
+        ("不理你", 2),
+        ("好气", 2),
+        ("哼", 1),
+        ("讨厌", 1),
     ],
     "playful": [
-        ("逗你玩", 3), ("骗你的", 3), ("才怪", 3),
-        ("猜猜看", 2), ("调皮", 2), ("捣蛋", 2), ("偷笑", 2), ("坏笑", 2),
-        ("嘻嘻", 1.5), ("嘿嘿", 1.5), ("猜猜", 1.5), ("才不", 1),
+        ("逗你玩", 3),
+        ("骗你的", 3),
+        ("才怪", 3),
+        ("猜猜看", 2),
+        ("调皮", 2),
+        ("捣蛋", 2),
+        ("偷笑", 2),
+        ("坏笑", 2),
+        ("嘻嘻", 1.5),
+        ("嘿嘿", 1.5),
+        ("猜猜", 1.5),
+        ("才不", 1),
     ],
     "curious": [
-        ("好好奇", 3), ("想知道", 3), ("详细说说", 3),
-        ("好奇", 2), ("真的吗", 2), ("然后呢", 2), ("后来呢", 2),
-        ("是什么", 1.5), ("什么意思", 1.5), ("讲讲", 1),
+        ("好好奇", 3),
+        ("想知道", 3),
+        ("详细说说", 3),
+        ("好奇", 2),
+        ("真的吗", 2),
+        ("然后呢", 2),
+        ("后来呢", 2),
+        ("是什么", 1.5),
+        ("什么意思", 1.5),
+        ("讲讲", 1),
     ],
     "worried": [
-        ("好担心", 3), ("没事吧", 3), ("还好吗", 3), ("别哭", 3), ("别难过", 3),
-        ("担心", 2), ("不要紧", 2), ("保重", 2), ("当心", 2),
-        ("小心", 1.5), ("注意", 1),
+        ("好担心", 3),
+        ("没事吧", 3),
+        ("还好吗", 3),
+        ("别哭", 3),
+        ("别难过", 3),
+        ("担心", 2),
+        ("不要紧", 2),
+        ("保重", 2),
+        ("当心", 2),
+        ("小心", 1.5),
+        ("注意", 1),
     ],
     "calm": [],
 }
@@ -147,21 +267,22 @@ _NEGATION_PREFIXES = ("别", "不要", "不用", "不必", "别再", "不会")
 
 # When a negative context is detected around a keyword, remap to this emotion
 _NEGATION_REMAP: dict[str, str] = {
-    "sad": "worried",      # "别难过" → character is comforting (worried about user)
-    "angry": "worried",    # "别生气" → character is calming
-    "scared": "worried",   # "别害怕" → character is reassuring
+    "sad": "worried",  # "别难过" → character is comforting (worried about user)
+    "angry": "worried",  # "别生气" → character is calming
+    "scared": "worried",  # "别害怕" → character is reassuring
 }
 
 # Legacy flat keyword list (for backward compat with existing tests)
 _EMOTION_KEYWORDS: dict[str, list[str]] = {
-    emotion: [kw for kw, _ in pairs]
-    for emotion, pairs in _EMOTION_KEYWORDS_WEIGHTED.items()
+    emotion: [kw for kw, _ in pairs] for emotion, pairs in _EMOTION_KEYWORDS_WEIGHTED.items()
 }
 
 _EMOTION_TTL = 1800  # 30 min
 
 # Regex to extract inline emotion tag from LLM output: [emotion:happy]
-_INLINE_EMOTION_RE = re.compile(r"\[emotion:\s*(happy|sad|shy|angry|playful|curious|worried|calm)\s*\]", re.IGNORECASE)
+_INLINE_EMOTION_RE = re.compile(
+    r"\[emotion:\s*(happy|sad|shy|angry|playful|curious|worried|calm)\s*\]", re.IGNORECASE
+)
 
 
 def extract_inline_emotion(text: str) -> tuple[str, str | None]:
@@ -174,7 +295,7 @@ def extract_inline_emotion(text: str) -> tuple[str, str | None]:
     match = _INLINE_EMOTION_RE.search(text)
     if match:
         emotion = match.group(1).lower()
-        cleaned = text[:match.start()].rstrip() + text[match.end():]
+        cleaned = text[: match.start()].rstrip() + text[match.end() :]
         return cleaned.strip(), emotion
     return text, None
 
@@ -234,7 +355,7 @@ class EmotionEngine:
 
                 # Check for negation prefix before the keyword
                 actual_emotion = emotion
-                prefix_region = text[max(0, pos - 4):pos]
+                prefix_region = text[max(0, pos - 4) : pos]
                 if any(prefix_region.endswith(neg) for neg in _NEGATION_PREFIXES):
                     actual_emotion = _NEGATION_REMAP.get(emotion, emotion)
 
@@ -244,9 +365,12 @@ class EmotionEngine:
             # No keywords matched — use user mood empathy as fallback
             if user_mood and user_mood != "neutral":
                 empathy_map = {
-                    "happy": "happy", "excited": "happy",
-                    "sad": "worried", "lonely": "worried",
-                    "angry": "worried", "worried": "worried",
+                    "happy": "happy",
+                    "excited": "happy",
+                    "sad": "worried",
+                    "lonely": "worried",
+                    "angry": "worried",
+                    "worried": "worried",
                     "tired": "calm",
                 }
                 return empathy_map.get(user_mood, previous)
@@ -400,10 +524,12 @@ class EmotionEngine:
         baseline = await self.pad.get_baseline(session_id)
         if baseline is None and personality:
             from ai_core.services.pad_model import personality_to_baseline
+
             baseline = personality_to_baseline(personality)
             await self.pad.set_baseline(session_id, baseline)
 
         from ai_core.services.pad_model import USER_MOOD_PAD, transition_pad
+
         touch_impulse = TOUCH_PAD_IMPULSE.get(touch_gesture) if touch_gesture else None
         mood_pad = USER_MOOD_PAD.get(user_mood) if user_mood and user_mood != "neutral" else None
 

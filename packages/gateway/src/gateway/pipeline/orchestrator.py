@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class StreamChunk:
     """A single sentence chunk from the streaming pipeline."""
+
     text: str
     audio_data: bytes | None
     index: int
@@ -184,7 +185,10 @@ class PipelineOrchestrator:
             headers["X-Brand-Id"] = session.brand_id
 
         async with self.stream_client.stream(
-            "POST", "/pipeline/chat/stream", json=payload, headers=headers,
+            "POST",
+            "/pipeline/chat/stream",
+            json=payload,
+            headers=headers,
         ) as resp:
             resp.raise_for_status()
             async for line in resp.aiter_lines():
@@ -213,9 +217,7 @@ class PipelineOrchestrator:
                         latency_ms=data.get("latency_ms", 0),
                     )
 
-    async def process_text_stream(
-        self, session: Session, text: str
-    ) -> AsyncIterator[StreamChunk]:
+    async def process_text_stream(self, session: Session, text: str) -> AsyncIterator[StreamChunk]:
         """Stream text through AI pipeline, yielding per-sentence chunks."""
         if not session.character_id:
             raise ValueError(f"No character assigned to device {session.device_id}")
@@ -233,7 +235,10 @@ class PipelineOrchestrator:
             headers["X-Brand-Id"] = session.brand_id
 
         async with self.stream_client.stream(
-            "POST", "/pipeline/chat/stream", json=payload, headers=headers,
+            "POST",
+            "/pipeline/chat/stream",
+            json=payload,
+            headers=headers,
         ) as resp:
             resp.raise_for_status()
             async for line in resp.aiter_lines():

@@ -6,8 +6,6 @@ Processes touch sensor data (e.g. MPR121 capacitive sensor arrays) into:
 3. Influence on character emotion and relationship affinity
 """
 
-import time
-
 import structlog
 
 from ai_core.services.cache import CacheService
@@ -89,7 +87,7 @@ ZONE_MODIFIERS: dict[str, str] = {
 TOUCH_EMOTION_MAP: dict[str, str] = {
     "pat": "happy",
     "stroke": "calm",
-    "hug": "worried",     # character senses user needs comfort → show concern
+    "hug": "worried",  # character senses user needs comfort → show concern
     "squeeze": "worried",
     "poke": "playful",
     "hold": "calm",
@@ -151,6 +149,7 @@ class TouchEngine:
 
         # Build touch prompt with zone modifier (archetype-adaptive)
         from ai_core.services.persona_context import PersonaContext
+
         pctx = PersonaContext.from_archetype(archetype)
 
         prompt_parts = []

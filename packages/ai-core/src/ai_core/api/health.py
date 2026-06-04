@@ -28,6 +28,7 @@ async def health():
     # Check Redis
     try:
         import redis.asyncio as aioredis
+
         from ai_core.config import settings
 
         r = aioredis.from_url(settings.redis_url)
@@ -51,5 +52,4 @@ async def health():
         checks["milvus"] = f"error: {e}"
 
     checks["status"] = overall
-    status_code = 200 if overall == "ok" else 503
     return checks

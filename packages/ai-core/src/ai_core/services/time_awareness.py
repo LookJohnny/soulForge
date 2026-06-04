@@ -4,7 +4,7 @@ Generates natural time-aware context for the system prompt.
 Uses PersonaContext for archetype-adaptive language.
 """
 
-from datetime import datetime, date
+from datetime import date, datetime
 
 from ai_core.services.persona_context import PersonaContext
 
@@ -44,7 +44,7 @@ def get_time_context(now: datetime | None = None, archetype: str = "ANIMAL") -> 
     hour = now.hour
     pctx = PersonaContext.from_archetype(archetype)
 
-    for start, end, period, desc in _TIME_PERIODS:
+    for start, end, _period, desc in _TIME_PERIODS:
         if start <= end:
             if start <= hour < end:
                 return desc.replace("{R}", pctx.user_ref)

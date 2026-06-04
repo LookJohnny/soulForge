@@ -13,8 +13,8 @@ Stages:
 
 from datetime import date, timedelta
 
-import structlog
 import asyncpg
+import structlog
 
 from ai_core.services.cache import CacheService
 
@@ -110,7 +110,9 @@ class RelationshipEngine:
             "affinity": row["affinity"],
             "stage": row["stage"],
             "streak_days": row["streak_days"],
-            "last_interaction_date": row["last_interaction_date"].isoformat() if row["last_interaction_date"] else None,
+            "last_interaction_date": row["last_interaction_date"].isoformat()
+            if row["last_interaction_date"]
+            else None,
             "turn_count_today": row["turn_count_today"],
         }
         await self.cache.set_json(key, state, ttl=_REL_CACHE_TTL)
@@ -136,7 +138,7 @@ class RelationshipEngine:
             except (ValueError, TypeError):
                 last_date = None
 
-        is_first_today = (last_date != today)
+        is_first_today = last_date != today
 
         # Update streak
         streak = state["streak_days"]

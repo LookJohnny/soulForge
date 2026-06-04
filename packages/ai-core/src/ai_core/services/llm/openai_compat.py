@@ -9,7 +9,7 @@ from collections.abc import AsyncIterator
 import httpx
 import structlog
 from openai import AsyncOpenAI
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from ai_core.config import settings
 from ai_core.services.llm.base import LLMProvider
@@ -17,7 +17,13 @@ from ai_core.services.llm.base import LLMProvider
 logger = structlog.get_logger()
 
 # Retryable exceptions (network/transient errors)
-_RETRYABLE = (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, TimeoutError, ConnectionError)
+_RETRYABLE = (
+    httpx.ConnectError,
+    httpx.ReadTimeout,
+    httpx.WriteTimeout,
+    TimeoutError,
+    ConnectionError,
+)
 
 
 class OpenAICompatProvider(LLMProvider):

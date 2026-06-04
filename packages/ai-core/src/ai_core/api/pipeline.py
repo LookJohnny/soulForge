@@ -1,4 +1,6 @@
-"""Full chat pipeline: (ASR) -> Filter -> Prompt(emotion+memory+relationship) -> LLM -> Filter -> (TTS).
+"""Full chat pipeline.
+
+(ASR) -> Filter -> Prompt(emotion+memory+relationship) -> LLM -> Filter -> (TTS).
 
 Integrates: emotion tracking, conversation memory, relationship evolution,
 personality drift, and proactive triggers.
@@ -17,15 +19,27 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from ai_core.dependencies import (
-    get_asr_client, get_llm_client, get_prompt_builder, get_tts_client,
-    get_emotion_engine, get_memory_service, get_cache,
-    get_relationship_engine, get_personality_drift, get_proactive_trigger,
+    get_asr_client,
+    get_cache,
+    get_emotion_engine,
+    get_llm_client,
+    get_memory_service,
+    get_personality_drift,
+    get_proactive_trigger,
+    get_prompt_builder,
+    get_relationship_engine,
     get_touch_engine,
+    get_tts_client,
 )
 from ai_core.middleware.rate_limit import limiter
-from ai_core.models.schemas import ChatRequest, ChatResponse, PADStateSchema, TouchEventRequest, TouchEventResponse
+from ai_core.models.schemas import (
+    ChatRequest,
+    ChatResponse,
+    PADStateSchema,
+    TouchEventRequest,
+    TouchEventResponse,
+)
 from ai_core.services.content_filter import ContentFilter
-from ai_core.services.text_splitter import split_sentences
 from ai_core.services.tts.context import prepare_for_character as _tts_prepare_for_character
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
@@ -141,13 +155,15 @@ async def chat(req: ChatRequest, request: Request):
 
     # 7. Time awareness
     from ai_core.services.time_awareness import build_time_prompt
+
     # Archetype for embodiment / time wording — need character row
     _char_row = await (await get_prompt_builder())._get_character(req.character_id, brand_id)
     _archetype = (_char_row or {}).get("archetype", "ANIMAL")
     time_context = build_time_prompt(rel_state.get("last_interaction_date"), archetype=_archetype)
 
     # 7b. Embodied sensations + mid-session inner thought
-    from ai_core.services.embodiment import build_sensations, build_mid_session_thought
+    from ai_core.services.embodiment import build_mid_session_thought, build_sensations
+
     sensations = build_sensations(
         pad=prev_pad,
         touch_gesture=touch_gesture,
@@ -161,7 +177,7 @@ async def chat(req: ChatRequest, request: Request):
         archetype=_archetype,
     )
 
-    # 8. Build prompt (personality with drift + emotion + user mood + memories + relationship + trigger + time + body)
+    # 8. Build prompt with emotion, memory, relationship, trigger, time, and body context.
     builder = await get_prompt_builder()
     try:
         prompt_result = await builder.build(
@@ -190,8 +206,9 @@ async def chat(req: ChatRequest, request: Request):
     )
 
     # 9. Parse structured output — dialogue/action/thought/pad/voice/stance
-    from ai_core.services.response_parser import parse_llm_response
     from ai_core.services.emotion import extract_inline_emotion
+    from ai_core.services.response_parser import parse_llm_response
+
     parsed = parse_llm_response(ai_raw)
     ai_text = parsed.dialogue if parsed.dialogue else ai_raw
     ai_text, inline_emotion = extract_inline_emotion(ai_text)
@@ -209,7 +226,9 @@ async def chat(req: ChatRequest, request: Request):
             relationship_stage=rel_state.get("stage"),
         )
     else:
-        text_emotion = inline_emotion or emotion_engine.detect_emotion(ai_text, previous=emotion_state, user_mood=user_mood)
+        text_emotion = inline_emotion or emotion_engine.detect_emotion(
+            ai_text, previous=emotion_state, user_mood=user_mood
+        )
         pad_state, new_emotion = await emotion_engine.update_with_pad(
             session_id=req.session_id,
             text_emotion=text_emotion,
@@ -224,7 +243,9 @@ async def chat(req: ChatRequest, request: Request):
     if prompt_result.get("voice_id"):
         ssml_pitch = prompt_result.get("ssml_pitch", 1.0)
         ssml_rate = prompt_result.get("ssml_rate", 1.0)
-        ssml_pitch, ssml_rate = emotion_engine.apply_tts_offsets_pad(pad_state, ssml_pitch, ssml_rate)
+        ssml_pitch, ssml_rate = emotion_engine.apply_tts_offsets_pad(
+            pad_state, ssml_pitch, ssml_rate
+        )
 
         tts = await get_tts_client()
         _tts_prepare_for_character(tts, prompt_result)
@@ -295,7 +316,11 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
             raise HTTPException(status_code=422, detail="Audio data exceeds 10MB limit")
         asr = await get_asr_client()
         user_text = await asr.recognize(audio_bytes, audio_format=req.audio_format)
-        logger.info("pipeline.asr_result text=%s bytes=%d", user_text[:50] if user_text else "(empty)", len(audio_bytes))
+        logger.info(
+            "pipeline.asr_result text=%s bytes=%d",
+            user_text[:50] if user_text else "(empty)",
+            len(audio_bytes),
+        )
 
     if not user_text:
         raise HTTPException(status_code=400, detail="No input provided (text or audio)")
@@ -373,8 +398,9 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
         )
 
     # 6. Time awareness + embodied sensations (needs archetype)
+    from ai_core.services.embodiment import build_mid_session_thought, build_sensations
     from ai_core.services.time_awareness import build_time_prompt
-    from ai_core.services.embodiment import build_sensations, build_mid_session_thought
+
     builder = await get_prompt_builder()
     _char_row = await builder._get_character(req.character_id, brand_id)
     _archetype = (_char_row or {}).get("archetype", "ANIMAL")
@@ -449,7 +475,9 @@ async def chat_stream(req: ChatRequest, request: Request):
 
         # Stream LLM tokens, split into sentences, TTS each immediately
         llm = await get_llm_client()
-        history = [{"role": m.role, "content": m.content} for m in req.history] if req.history else None
+        history = (
+            [{"role": m.role, "content": m.content} for m in req.history] if req.history else None
+        )
         async for chunk in llm.chat_stream(
             system_prompt=prompt_result["system_prompt"],
             user_input=user_text,
@@ -532,6 +560,7 @@ async def chat_stream(req: ChatRequest, request: Request):
 
         # Clean full text for emotion detection
         from ai_core.services.emotion import extract_inline_emotion
+
         ai_text, inline_emotion = extract_inline_emotion(full_text)
         ai_text = content_filter.filter_output(ai_text)
 
@@ -671,8 +700,11 @@ async def touch_event(req: TouchEventRequest, request: Request):
             builder = await get_prompt_builder()
             # Get archetype for PersonaContext
             from ai_core.services.persona_context import PersonaContext
+
             _char = await builder._get_character(req.character_id, brand_id)
-            pctx = PersonaContext.from_archetype(_char.get("archetype", "ANIMAL")) if _char else None
+            pctx = (
+                PersonaContext.from_archetype(_char.get("archetype", "ANIMAL")) if _char else None
+            )
             prompt_result = await builder.build(
                 character_id=req.character_id,
                 brand_id=brand_id,
@@ -685,7 +717,9 @@ async def touch_event(req: TouchEventRequest, request: Request):
             llm = await get_llm_client()
             text_response = await llm.chat(
                 system_prompt=prompt_result["system_prompt"],
-                user_input=pctx.touch_silent_input() if pctx else "（对方没有说话，只是通过触摸和你互动。用一句简短的话或声音回应。）",
+                user_input=pctx.touch_silent_input()
+                if pctx
+                else "（对方没有说话，只是通过触摸和你互动。用一句简短的话或声音回应。）",
             )
 
             text_response = content_filter.filter_output(text_response)

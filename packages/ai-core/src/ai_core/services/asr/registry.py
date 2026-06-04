@@ -18,5 +18,6 @@ def create_asr_provider(provider: str | None = None) -> ASRProvider:
 
     # Currently only DashScope is supported; extensible for Whisper, etc.
     from ai_core.services.asr.dashscope_asr import DashScopeASRProvider
+
     logger.info("asr.create_provider", provider=name)
     return DashScopeASRProvider()

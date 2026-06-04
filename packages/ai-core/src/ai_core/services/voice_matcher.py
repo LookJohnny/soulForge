@@ -12,7 +12,6 @@ as `<speak pitch="X" rate="Y" effect="Z">text</speak>`.
 
 import math
 
-
 # ─── Voice Library with Personality Vectors ──────
 # Each voice is profiled on 4 dimensions (0-100):
 #   warmth:   0=冷酷/机械  →  100=温暖/亲切
@@ -22,35 +21,42 @@ import math
 
 VOICES = {
     # ─── Child / cute (neutral gender — works for any small character) ─────
-    "longhuhu_v3":     {"w": 70, "e": 85, "m": 10, "g": 5,  "gender": "female",  "label": "活泼童声"},
-    "longjielidou_v3": {"w": 60, "e": 90, "m": 12, "g": 5,  "gender": "female",  "label": "元气童声"},
-    "longpaopao_v3":   {"w": 65, "e": 80, "m": 15, "g": 8,  "gender": "female",  "label": "俏皮童声"},
-    "longniuniu_v3":   {"w": 80, "e": 65, "m": 10, "g": 5,  "gender": "female",  "label": "软糯童声"},
+    "longhuhu_v3": {"w": 70, "e": 85, "m": 10, "g": 5, "gender": "female", "label": "活泼童声"},
+    "longjielidou_v3": {"w": 60, "e": 90, "m": 12, "g": 5, "gender": "female", "label": "元气童声"},
+    "longpaopao_v3": {"w": 65, "e": 80, "m": 15, "g": 8, "gender": "female", "label": "俏皮童声"},
+    "longniuniu_v3": {"w": 80, "e": 65, "m": 10, "g": 5, "gender": "female", "label": "软糯童声"},
     # ─── Young female ─────
-    "longxiaochun_v3": {"w": 75, "e": 60, "m": 25, "g": 10, "gender": "female",  "label": "甜美少女"},
-    "longmiao_v3":     {"w": 70, "e": 45, "m": 30, "g": 15, "gender": "female",  "label": "温柔少女"},
-    "longfeifei_v3":   {"w": 55, "e": 75, "m": 25, "g": 12, "gender": "female",  "label": "明亮少女"},
-    "longdaiyu_v3":    {"w": 50, "e": 20, "m": 35, "g": 40, "gender": "female",  "label": "文艺忧郁"},
+    "longxiaochun_v3": {
+        "w": 75,
+        "e": 60,
+        "m": 25,
+        "g": 10,
+        "gender": "female",
+        "label": "甜美少女",
+    },
+    "longmiao_v3": {"w": 70, "e": 45, "m": 30, "g": 15, "gender": "female", "label": "温柔少女"},
+    "longfeifei_v3": {"w": 55, "e": 75, "m": 25, "g": 12, "gender": "female", "label": "明亮少女"},
+    "longdaiyu_v3": {"w": 50, "e": 20, "m": 35, "g": 40, "gender": "female", "label": "文艺忧郁"},
     # ─── Mature female ────
-    "longyue_v3":      {"w": 55, "e": 25, "m": 55, "g": 50, "gender": "female",  "label": "优雅知性"},
-    "longshu_v3":      {"w": 45, "e": 20, "m": 55, "g": 45, "gender": "female",  "label": "沉稳女声"},
-    "longanrou_v3":    {"w": 75, "e": 35, "m": 45, "g": 20, "gender": "female",  "label": "温婉柔和"},
-    "longxiaoxia_v3":  {"w": 70, "e": 40, "m": 40, "g": 15, "gender": "female",  "label": "亲切姐姐"},
-    "longxiu_v3":      {"w": 35, "e": 18, "m": 60, "g": 55, "gender": "female",  "label": "冷静从容"},
+    "longyue_v3": {"w": 55, "e": 25, "m": 55, "g": 50, "gender": "female", "label": "优雅知性"},
+    "longshu_v3": {"w": 45, "e": 20, "m": 55, "g": 45, "gender": "female", "label": "沉稳女声"},
+    "longanrou_v3": {"w": 75, "e": 35, "m": 45, "g": 20, "gender": "female", "label": "温婉柔和"},
+    "longxiaoxia_v3": {"w": 70, "e": 40, "m": 40, "g": 15, "gender": "female", "label": "亲切姐姐"},
+    "longxiu_v3": {"w": 35, "e": 18, "m": 60, "g": 55, "gender": "female", "label": "冷静从容"},
     # ─── Young male ───────
-    "longshuo_v3":     {"w": 55, "e": 70, "m": 30, "g": 15, "gender": "male",    "label": "阳光少年"},
-    "longfei_v3":      {"w": 50, "e": 80, "m": 28, "g": 12, "gender": "male",    "label": "活力少年"},
-    "longhao_v3":      {"w": 80, "e": 50, "m": 38, "g": 25, "gender": "male",    "label": "温暖大哥"},
+    "longshuo_v3": {"w": 55, "e": 70, "m": 30, "g": 15, "gender": "male", "label": "阳光少年"},
+    "longfei_v3": {"w": 50, "e": 80, "m": 28, "g": 12, "gender": "male", "label": "活力少年"},
+    "longhao_v3": {"w": 80, "e": 50, "m": 38, "g": 25, "gender": "male", "label": "温暖大哥"},
     # ─── Mature male ──────
-    "longcheng_v3":    {"w": 25, "e": 15, "m": 75, "g": 85, "gender": "male",    "label": "深沉威严"},
-    "longze_v3":       {"w": 40, "e": 22, "m": 70, "g": 65, "gender": "male",    "label": "沉稳可靠"},
-    "longyan_v3":      {"w": 30, "e": 30, "m": 72, "g": 80, "gender": "male",    "label": "威严权威"},
-    "longlaotie_v3":   {"w": 75, "e": 75, "m": 50, "g": 10, "gender": "male",    "label": "豪爽热情"},
-    "longqiang_v3":    {"w": 45, "e": 45, "m": 60, "g": 50, "gender": "male",    "label": "粗犷质朴"},
+    "longcheng_v3": {"w": 25, "e": 15, "m": 75, "g": 85, "gender": "male", "label": "深沉威严"},
+    "longze_v3": {"w": 40, "e": 22, "m": 70, "g": 65, "gender": "male", "label": "沉稳可靠"},
+    "longyan_v3": {"w": 30, "e": 30, "m": 72, "g": 80, "gender": "male", "label": "威严权威"},
+    "longlaotie_v3": {"w": 75, "e": 75, "m": 50, "g": 10, "gender": "male", "label": "豪爽热情"},
+    "longqiang_v3": {"w": 45, "e": 45, "m": 60, "g": 50, "gender": "male", "label": "粗犷质朴"},
     # ─── Special ──────────
-    "longlaobo_v3":    {"w": 70, "e": 12, "m": 90, "g": 55, "gender": "male",    "label": "慈祥老者"},
-    "longlaoyi_v3":    {"w": 80, "e": 15, "m": 88, "g": 40, "gender": "female",  "label": "慈爱老奶奶"},
-    "longjiqi_v3":     {"w": 20, "e": 35, "m": 50, "g": 60, "gender": "neutral", "label": "机械冷静"},
+    "longlaobo_v3": {"w": 70, "e": 12, "m": 90, "g": 55, "gender": "male", "label": "慈祥老者"},
+    "longlaoyi_v3": {"w": 80, "e": 15, "m": 88, "g": 40, "gender": "female", "label": "慈爱老奶奶"},
+    "longjiqi_v3": {"w": 20, "e": 35, "m": 50, "g": 60, "gender": "neutral", "label": "机械冷静"},
 }
 
 
@@ -59,50 +65,193 @@ VOICES = {
 
 SPECIES_MODIFIERS = {
     # small animals: lower maturity, lower gravity, prefer female voices
-    "tiny":  {"m_offset": -15, "g_offset": -10, "gender_hint": "female",
-              "keywords": ["猫", "小猫", "猫咪", "兔", "兔子", "仓鼠", "松鼠", "刺猬",
-                           "小鸟", "小鸡", "小鸭", "虫", "毛毛虫", "蝴蝶", "蜜蜂",
-                           "瓢虫", "蚂蚁", "蜻蜓", "萤火虫",
-                           "老鼠", "小老鼠", "鼠"]},
+    "tiny": {
+        "m_offset": -15,
+        "g_offset": -10,
+        "gender_hint": "female",
+        "keywords": [
+            "猫",
+            "小猫",
+            "猫咪",
+            "兔",
+            "兔子",
+            "仓鼠",
+            "松鼠",
+            "刺猬",
+            "小鸟",
+            "小鸡",
+            "小鸭",
+            "虫",
+            "毛毛虫",
+            "蝴蝶",
+            "蜜蜂",
+            "瓢虫",
+            "蚂蚁",
+            "蜻蜓",
+            "萤火虫",
+            "老鼠",
+            "小老鼠",
+            "鼠",
+        ],
+    },
     # medium animals: neutral gender
-    "medium": {"m_offset": 0, "g_offset": 0, "gender_hint": None,
-               "keywords": ["狗", "小狗", "犬", "柯基", "柴犬", "企鹅", "狐", "狐狸",
-                            "猴", "猴子", "浣熊", "鹦鹉", "小鹿", "水獭"]},
+    "medium": {
+        "m_offset": 0,
+        "g_offset": 0,
+        "gender_hint": None,
+        "keywords": [
+            "狗",
+            "小狗",
+            "犬",
+            "柯基",
+            "柴犬",
+            "企鹅",
+            "狐",
+            "狐狸",
+            "猴",
+            "猴子",
+            "浣熊",
+            "鹦鹉",
+            "小鹿",
+            "水獭",
+        ],
+    },
     # large animals: prefer male voices
-    "large":  {"m_offset": 8, "g_offset": 5, "gender_hint": "male",
-               "keywords": ["熊", "大熊", "熊猫", "北极熊", "河马", "大象", "牛",
-                            "海豹", "海象", "树懒"]},
+    "large": {
+        "m_offset": 8,
+        "g_offset": 5,
+        "gender_hint": "male",
+        "keywords": ["熊", "大熊", "熊猫", "北极熊", "河马", "大象", "牛", "海豹", "海象", "树懒"],
+    },
     # powerful/mythical: push clearly into mature male range
-    "mythic": {"m_offset": 18, "g_offset": 25, "gender_hint": "male",
-               "keywords": ["龙", "恐龙", "老虎", "狮子", "狼", "鹰", "豹", "鲨鱼",
-                            "犀牛", "鳄鱼", "凤凰"]},
-    "ethereal": {"m_offset": 3, "g_offset": 5, "gender_hint": "female",
-                 "keywords": ["独角兽", "仙鹤", "天鹅", "仙女", "精灵", "小精灵",
-                              "花仙子", "天使", "孔雀", "探险家", "星际探险家", "旅行者"]},
-    "shadow": {"m_offset": 8, "g_offset": 10, "gender_hint": "female",
-               "keywords": ["蛇", "蜥蜴", "猫头鹰", "乌鸦", "蝙蝠", "蜘蛛", "黑猫"]},
-    "mech":   {"m_offset": 8, "g_offset": 15, "gender_hint": None,
-               "keywords": ["机器人", "机器", "AI", "人工智能", "外星", "外星人"]},
-    "elder":  {"m_offset": 30, "g_offset": 10, "gender_hint": None,
-               "keywords": ["老爷爷", "老奶奶", "智者", "长老", "仙人", "大师"]},
+    "mythic": {
+        "m_offset": 18,
+        "g_offset": 25,
+        "gender_hint": "male",
+        "keywords": [
+            "龙",
+            "恐龙",
+            "老虎",
+            "狮子",
+            "狼",
+            "鹰",
+            "豹",
+            "鲨鱼",
+            "犀牛",
+            "鳄鱼",
+            "凤凰",
+        ],
+    },
+    "ethereal": {
+        "m_offset": 3,
+        "g_offset": 5,
+        "gender_hint": "female",
+        "keywords": [
+            "独角兽",
+            "仙鹤",
+            "天鹅",
+            "仙女",
+            "精灵",
+            "小精灵",
+            "花仙子",
+            "天使",
+            "孔雀",
+            "探险家",
+            "星际探险家",
+            "旅行者",
+        ],
+    },
+    "shadow": {
+        "m_offset": 8,
+        "g_offset": 10,
+        "gender_hint": None,
+        "keywords": ["蛇", "蜥蜴", "猫头鹰", "乌鸦", "蝙蝠", "蜘蛛", "黑猫"],
+    },
+    "mech": {
+        "m_offset": 8,
+        "g_offset": 15,
+        "gender_hint": None,
+        "keywords": ["机器人", "机器", "AI", "人工智能", "外星", "外星人"],
+    },
+    "elder": {
+        "m_offset": 30,
+        "g_offset": 10,
+        "gender_hint": None,
+        "keywords": ["老爷爷", "老奶奶", "智者", "长老", "仙人", "大师"],
+    },
     # ─── Human archetypes (non-animal characters) ──────
-    "child_human":  {"m_offset": -20, "g_offset": -15, "gender_hint": None,
-                     "keywords": ["小男孩", "小女孩", "小朋友", "小学生"]},
-    "teen_female":  {"m_offset": -5, "g_offset": -5, "gender_hint": "female",
-                     "keywords": ["少女", "女生", "学妹", "女中学生", "傲娇少女",
-                                  "天然呆少女", "温柔少女", "元气少女", "高冷少女", "冷面少女",
-                                  "萝莉", "毒舌萝莉", "小恶魔", "妹妹"]},
-    "teen_male":    {"m_offset": -3, "g_offset": 0, "gender_hint": "male",
-                     "keywords": ["少年", "男生", "学弟", "阳光少年", "热血少年",
-                                  "中二少年", "中二"]},
-    "adult_female": {"m_offset": 5, "g_offset": 0, "gender_hint": "female",
-                     "keywords": ["姐姐", "老师", "妈妈", "阿姨", "女声助手", "温柔姐姐",
-                                  "学姐", "温柔学姐", "大姐姐"]},
-    "adult_male":   {"m_offset": 10, "g_offset": 5, "gender_hint": "male",
-                     "keywords": ["哥哥", "叔叔", "爸爸", "男声助手", "教练",
-                                  "学长", "腹黑学长", "王子", "腹黑王子", "学生会长"]},
-    "abstract_assistant": {"m_offset": 0, "g_offset": 0, "gender_hint": None,
-                           "keywords": ["助手", "语音助手", "AI助手", "智能助手"]},
+    "child_human": {
+        "m_offset": -20,
+        "g_offset": -15,
+        "gender_hint": None,
+        "keywords": ["小男孩", "小女孩", "小朋友", "小学生"],
+    },
+    "teen_female": {
+        "m_offset": -5,
+        "g_offset": -5,
+        "gender_hint": "female",
+        "keywords": [
+            "少女",
+            "女生",
+            "学妹",
+            "女中学生",
+            "傲娇少女",
+            "天然呆少女",
+            "温柔少女",
+            "元气少女",
+            "高冷少女",
+            "冷面少女",
+            "萝莉",
+            "毒舌萝莉",
+            "小恶魔",
+            "妹妹",
+        ],
+    },
+    "teen_male": {
+        "m_offset": -3,
+        "g_offset": 0,
+        "gender_hint": "male",
+        "keywords": ["少年", "男生", "学弟", "阳光少年", "热血少年", "中二少年", "中二"],
+    },
+    "adult_female": {
+        "m_offset": 5,
+        "g_offset": 0,
+        "gender_hint": "female",
+        "keywords": [
+            "姐姐",
+            "老师",
+            "妈妈",
+            "阿姨",
+            "女声助手",
+            "温柔姐姐",
+            "学姐",
+            "温柔学姐",
+            "大姐姐",
+        ],
+    },
+    "adult_male": {
+        "m_offset": 10,
+        "g_offset": 5,
+        "gender_hint": "male",
+        "keywords": [
+            "哥哥",
+            "叔叔",
+            "爸爸",
+            "男声助手",
+            "教练",
+            "学长",
+            "腹黑学长",
+            "王子",
+            "腹黑王子",
+            "学生会长",
+        ],
+    },
+    "abstract_assistant": {
+        "m_offset": 0,
+        "g_offset": 0,
+        "gender_hint": None,
+        "keywords": ["助手", "语音助手", "AI助手", "智能助手"],
+    },
 }
 
 
@@ -111,21 +260,21 @@ SPECIES_MODIFIERS = {
 # effect: "lolita" | "robot" | "echo" | "lowpass" | "" (none)
 
 SSML_PROFILES = {
-    "tiny":     {"pitch": 1.35, "rate": 1.1,  "effect": "lolita"},   # 奶声奶气，萌
-    "medium":   {"pitch": 1.2,  "rate": 1.15, "effect": "lolita"},   # 活泼元气萌
-    "large":    {"pitch": 0.7,  "rate": 0.85, "effect": ""},         # 低沉浑厚
-    "mythic":   {"pitch": 0.6,  "rate": 0.8,  "effect": ""},         # 威严深沉
-    "ethereal": {"pitch": 1.15, "rate": 0.9,  "effect": ""},         # 空灵优雅
-    "shadow":   {"pitch": 0.85, "rate": 0.8,  "effect": "echo"},     # 神秘回响
-    "mech":     {"pitch": 0.9,  "rate": 0.95, "effect": "robot"},    # 机械金属
-    "elder":    {"pitch": 0.8,  "rate": 0.75, "effect": ""},         # 苍老慈祥
+    "tiny": {"pitch": 1.35, "rate": 1.1, "effect": "lolita"},  # 奶声奶气，萌
+    "medium": {"pitch": 1.2, "rate": 1.15, "effect": "lolita"},  # 活泼元气萌
+    "large": {"pitch": 0.7, "rate": 0.85, "effect": ""},  # 低沉浑厚
+    "mythic": {"pitch": 0.6, "rate": 0.8, "effect": ""},  # 威严深沉
+    "ethereal": {"pitch": 1.15, "rate": 0.9, "effect": ""},  # 空灵优雅
+    "shadow": {"pitch": 0.85, "rate": 0.8, "effect": "echo"},  # 神秘回响
+    "mech": {"pitch": 0.9, "rate": 0.95, "effect": "robot"},  # 机械金属
+    "elder": {"pitch": 0.8, "rate": 0.75, "effect": ""},  # 苍老慈祥
     # Human archetypes
-    "child_human":  {"pitch": 1.25, "rate": 1.05, "effect": "lolita"},  # 童声
-    "teen_female":  {"pitch": 1.1,  "rate": 1.0,  "effect": ""},        # 少女
-    "teen_male":    {"pitch": 0.95, "rate": 0.95, "effect": ""},       # 少年
-    "adult_female": {"pitch": 1.0,  "rate": 0.95, "effect": ""},        # 温柔女声
-    "adult_male":   {"pitch": 0.85, "rate": 0.9,  "effect": ""},        # 沉稳男声
-    "abstract_assistant": {"pitch": 1.0, "rate": 1.0, "effect": ""},    # 中性标准
+    "child_human": {"pitch": 1.25, "rate": 1.05, "effect": "lolita"},  # 童声
+    "teen_female": {"pitch": 1.1, "rate": 1.0, "effect": ""},  # 少女
+    "teen_male": {"pitch": 0.95, "rate": 0.95, "effect": ""},  # 少年
+    "adult_female": {"pitch": 1.0, "rate": 0.95, "effect": ""},  # 温柔女声
+    "adult_male": {"pitch": 0.85, "rate": 0.9, "effect": ""},  # 沉稳男声
+    "abstract_assistant": {"pitch": 1.0, "rate": 1.0, "effect": ""},  # 中性标准
 }
 
 # Default SSML for unknown species
@@ -133,12 +282,12 @@ _DEFAULT_SSML = {"pitch": 1.0, "rate": 1.0, "effect": ""}
 
 # Relationship modifiers
 RELATIONSHIP_MODIFIERS = {
-    "守护者":   {"m_offset": 8, "g_offset": 5},
-    "导师":     {"m_offset": 10, "g_offset": 10},
-    "好朋友":   {"m_offset": 0, "g_offset": -5},
-    "小跟班":   {"m_offset": -8, "g_offset": -8},
+    "守护者": {"m_offset": 8, "g_offset": 5},
+    "导师": {"m_offset": 10, "g_offset": 10},
+    "好朋友": {"m_offset": 0, "g_offset": -5},
+    "小跟班": {"m_offset": -8, "g_offset": -8},
     "兄弟姐妹": {"m_offset": 0, "g_offset": -3},
-    "手足":     {"m_offset": 0, "g_offset": -3},
+    "手足": {"m_offset": 0, "g_offset": -3},
 }
 
 
@@ -174,7 +323,7 @@ def _build_character_vector(
     warmth = p.get("warmth", 50)
     energy = (p.get("energy", 50) + p.get("extrovert", 50)) / 2  # Combined energy
     maturity = 50.0  # Base
-    gravity = 30.0   # Base — slightly light
+    gravity = 30.0  # Base — slightly light
 
     # Age affects maturity
     if age_setting is not None:
@@ -227,7 +376,10 @@ def _build_character_vector(
     gravity = max(0, min(100, gravity))
 
     return {
-        "w": warmth, "e": energy, "m": maturity, "g": gravity,
+        "w": warmth,
+        "e": energy,
+        "m": maturity,
+        "g": gravity,
         "_humor": humor,  # raw value preserved for SSML micro-adjustments
     }
 
@@ -235,16 +387,14 @@ def _build_character_vector(
 def _distance(a: dict, b: dict) -> float:
     """Weighted Euclidean distance between two personality vectors."""
     # Warmth and energy matter most, maturity and gravity are secondary
-    dw = (a["w"] - b["w"]) * 1.2   # warmth weight: 1.2
-    de = (a["e"] - b["e"]) * 1.0   # energy weight: 1.0
-    dm = (a["m"] - b["m"]) * 0.8   # maturity weight: 0.8
-    dg = (a["g"] - b["g"]) * 0.7   # gravity weight: 0.7
-    return math.sqrt(dw*dw + de*de + dm*dm + dg*dg)
+    dw = (a["w"] - b["w"]) * 1.2  # warmth weight: 1.2
+    de = (a["e"] - b["e"]) * 1.0  # energy weight: 1.0
+    dm = (a["m"] - b["m"]) * 0.8  # maturity weight: 0.8
+    dg = (a["g"] - b["g"]) * 0.7  # gravity weight: 0.7
+    return math.sqrt(dw * dw + de * de + dm * dm + dg * dg)
 
 
-def _compute_ssml_params(
-    species: str, char_vec: dict, age_setting: int | None
-) -> dict:
+def _compute_ssml_params(species: str, char_vec: dict, age_setting: int | None) -> dict:
     """Compute SSML parameters from species archetype + personality/age micro-adjustments.
 
     Returns: {"ssml_pitch": float, "ssml_rate": float, "ssml_effect": str}
@@ -340,6 +490,15 @@ def match_voice(
     ssml = _compute_ssml_params(species, char_vec, age_setting)
 
     label = VOICES[best_vid]["label"]
+    char_summary = (
+        f"char=[w={char_vec['w']:.0f} e={char_vec['e']:.0f} "
+        f"m={char_vec['m']:.0f} g={char_vec['g']:.0f}]"
+    )
+    ssml_summary = (
+        f"ssml=[pitch={ssml['ssml_pitch']} rate={ssml['ssml_rate']} "
+        f"effect={ssml['ssml_effect'] or 'none'}]"
+    )
+    reason = f"{species} → {best_vid}({label}) dist={best_dist:.0f} {char_summary} {ssml_summary}"
 
     return {
         "voice_id": best_vid,
@@ -349,10 +508,5 @@ def match_voice(
         "speed": 1.0,
         "pitch_rate": 0,
         "speech_rate": 0,
-        "reason": (
-            f"{species} → {best_vid}({label}) "
-            f"dist={best_dist:.0f} "
-            f"char=[w={char_vec['w']:.0f} e={char_vec['e']:.0f} m={char_vec['m']:.0f} g={char_vec['g']:.0f}] "
-            f"ssml=[pitch={ssml['ssml_pitch']} rate={ssml['ssml_rate']} effect={ssml['ssml_effect'] or 'none'}]"
-        ),
+        "reason": reason,
     }

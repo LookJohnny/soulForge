@@ -90,9 +90,18 @@ def build_mid_session_thought(
 
     # Mood shift awareness is higher-priority than plain silence
     if prev_user_mood and user_mood and prev_user_mood != user_mood:
-        if user_mood in ("sad", "worried", "lonely") and prev_user_mood in ("happy", "excited", "neutral"):
+        if user_mood in ("sad", "worried", "lonely") and prev_user_mood in (
+            "happy",
+            "excited",
+            "neutral",
+        ):
             return f"你察觉到{ref}的语气变了，好像不太对劲——不要直接追问原因，用更温柔的方式靠近。"
-        if user_mood in ("happy", "excited") and prev_user_mood in ("sad", "worried", "lonely", "angry"):
+        if user_mood in ("happy", "excited") and prev_user_mood in (
+            "sad",
+            "worried",
+            "lonely",
+            "angry",
+        ):
             return f"{ref}的情绪好像好起来了，你可以不动声色地陪着这份轻松。"
 
     if silence_seconds > 180:
