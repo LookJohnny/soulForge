@@ -47,7 +47,10 @@ export default function ChatListPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(load, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(load, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   /* ── Skeleton card for loading state ─────── */
   const SkeletonCard = ({ i }: { i: number }) => (

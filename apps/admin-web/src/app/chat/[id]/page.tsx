@@ -21,6 +21,16 @@ interface Message {
   ts: number;
 }
 
+interface ChatHistoryItem {
+  id: string;
+  role: Message["role"];
+  content: string;
+  action?: string | null;
+  thought?: string | null;
+  emotion?: string | null;
+  createdAt: string;
+}
+
 /* ── ngrok-safe fetch ────────────────────────── */
 const safeFetch = (url: string, init?: RequestInit) =>
   fetch(url, {
@@ -315,7 +325,7 @@ export default function MobileChatPage() {
 
           // Restore chat history
           if (c.history?.length) {
-            const restored: Message[] = c.history.map((m: any) => ({
+            const restored: Message[] = c.history.map((m: ChatHistoryItem) => ({
               id: m.id,
               role: m.role,
               text: m.content,
