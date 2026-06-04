@@ -8,6 +8,8 @@
 }
 
 :root {
+  --font-geist-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  --font-geist-mono: "SF Mono", SFMono-Regular, ui-monospace, Menlo, Monaco, Consolas, monospace;
   --background: #f5f5f7;
   --foreground: #1d1d1f;
   --accent: #0071e3;

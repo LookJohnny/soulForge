@@ -111,7 +111,12 @@ async def chat(req: ChatRequest, request: Request):
     memory_service = await get_memory_service()
     memories = []
     if req.end_user_id:
-        memories = await memory_service.retrieve_memories(req.end_user_id, req.character_id)
+        memories = await memory_service.retrieve_memories(
+            req.end_user_id,
+            req.character_id,
+            query=user_text,
+            context={"user_mood": user_mood},
+        )
 
     # 5. Retrieve relationship state
     rel_engine = await get_relationship_engine()
@@ -341,7 +346,12 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
     memory_service = await get_memory_service()
     memories = []
     if req.end_user_id:
-        memories = await memory_service.retrieve_memories(req.end_user_id, req.character_id)
+        memories = await memory_service.retrieve_memories(
+            req.end_user_id,
+            req.character_id,
+            query=user_text,
+            context={"user_mood": user_mood},
+        )
 
     rel_engine = await get_relationship_engine()
     rel_state = {"stage": "STRANGER", "affinity": 0}

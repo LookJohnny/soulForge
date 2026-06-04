@@ -13,6 +13,12 @@ export no_proxy="localhost,127.0.0.1"
 export NO_PROXY="localhost,127.0.0.1"
 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
 
+# Keep Auth.js redirects same-origin in local development. If you need to
+# access the app from another device on LAN, override with:
+#   DEV_ORIGIN=http://192.168.x.x:3000 ./scripts/dev.sh
+export NEXTAUTH_URL="${DEV_ORIGIN:-http://127.0.0.1:3000}"
+export AUTH_TRUST_HOST=true
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -61,9 +67,14 @@ ok "Docker services running"
 # ─── 2. Database migration ───────────────────────
 log "Checking database migrations..."
 cd packages/database
-if pnpm prisma migrate status 2>&1 | grep -q "following migration"; then
+MIGRATE_STATUS="$(pnpm prisma migrate status 2>&1 || true)"
+if printf '%s' "$MIGRATE_STATUS" | grep -qi "following migration"; then
   warn "Pending migrations found, applying..."
   pnpm prisma migrate deploy
+elif ! printf '%s' "$MIGRATE_STATUS" | grep -qiE "database schema is up to date|no pending migrations|already in sync"; then
+  err "Unable to determine migration status."
+  printf '%s\n' "$MIGRATE_STATUS"
+  exit 1
 fi
 ok "Database schema up to date"
 

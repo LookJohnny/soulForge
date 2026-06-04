@@ -219,6 +219,9 @@ class PromptBuilder:
             _EVENT_FMTS = [f"{_ref}说过{{content}}", f"{_ref}之前提到{{content}}", f"好像{_ref}那次讲过{{content}}"]
             _BY_TYPE = {"TOPIC": _TOPIC_FMTS, "PREFERENCE": _PREF_FMTS, "EVENT": _EVENT_FMTS}
             for m in memories:
+                if m.get("prompt_text"):
+                    memory_context.append(_sanitize_user_field(str(m["prompt_text"]), max_length=300))
+                    continue
                 content = m.get("content", "")
                 fmts = _BY_TYPE.get(m.get("type", ""), _EVENT_FMTS)
                 fmt = fmts[hash(content) % len(fmts)]

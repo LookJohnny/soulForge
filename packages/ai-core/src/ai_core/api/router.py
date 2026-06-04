@@ -4,6 +4,7 @@ from ai_core.api.cache_admin import router as cache_admin_router
 from ai_core.api.chat import router as chat_router
 from ai_core.api.health import router as health_router
 from ai_core.api.idol import router as idol_router
+from ai_core.api.memory import router as memory_router
 from ai_core.api.pipeline import router as pipeline_router
 from ai_core.api.prompt import router as prompt_router
 from ai_core.api.rag import router as rag_router
@@ -16,6 +17,7 @@ api_router.include_router(health_router)
 api_router.include_router(cache_admin_router)
 api_router.include_router(prompt_router)
 api_router.include_router(rag_router)
+api_router.include_router(memory_router)
 api_router.include_router(pipeline_router)
 api_router.include_router(tts_router)
 api_router.include_router(chat_router)

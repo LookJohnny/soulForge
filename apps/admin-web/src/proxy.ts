@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-export default auth((req) => {
+const proxy = auth((req) => {
   const { pathname } = req.nextUrl;
 
   // Public routes that don't need auth
@@ -20,6 +20,17 @@ export default auth((req) => {
   return NextResponse.next();
 });
 
+export default proxy;
+
 export const config = {
-  matcher: ["/dashboard/:path*", "/api/characters/:path*", "/api/voices/:path*", "/api/preview/:path*", "/api/api-keys/:path*", "/api/soul-packs/:path*", "/api/chat-logs/:path*"],
+  matcher: [
+    "/dashboard/:path*",
+    "/api/characters/:path*",
+    "/api/voices/:path*",
+    "/api/preview/:path*",
+    "/api/api-keys/:path*",
+    "/api/soul-packs/:path*",
+    "/api/chat-logs/:path*",
+    "/api/memories/:path*",
+  ],
 };

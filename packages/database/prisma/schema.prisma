@@ -53,6 +53,41 @@ enum MemoryType {
   EVENT
 }
 
+enum MemoryLayer {
+  PROFILE
+  EPISODIC
+  SEMANTIC
+  RELATIONAL
+}
+
+enum SensitivityLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum MemoryPermissionLevel {
+  AUTO
+  CONFIRMED
+  PENDING_CONFIRMATION
+  DENIED
+}
+
+enum MemoryConflictStatus {
+  NONE
+  POTENTIAL
+  CONFIRMED_CONFLICT
+  SUPERSEDED
+}
+
+enum MemoryUseMode {
+  DIRECT_SURFACE
+  IMPLICIT_ONLY
+  REQUIRE_CONFIRMATION
+  BLOCKED
+}
+
 enum RelationshipStage {
   STRANGER
   ACQUAINTANCE
@@ -118,6 +153,14 @@ model EndUser {
   devices         Device[]
   memories        ConversationMemory[]
   relationships   RelationshipState[]
+  profileMemories ProfileMemory[]
+  episodicMemories EpisodicMemory[]
+  semanticMemories SemanticMemory[]
+  relationalMemories RelationalMemory[]
+  memoryPolicies MemoryPolicy[]
+  compiledBehaviorRules CompiledBehaviorRule[]
+  memoryUsageLogs MemoryUsageLog[]
+  memoryPendingConfirmations MemoryPendingConfirmation[]
 
   @@map("end_users")
 }
@@ -164,6 +207,13 @@ model Character {
   logs           ConversationLog[]
   memories       ConversationMemory[]
   relationships  RelationshipState[]
+  profileMemories ProfileMemory[]
+  episodicMemories EpisodicMemory[]
+  semanticMemories SemanticMemory[]
+  relationalMemories RelationalMemory[]
+  compiledBehaviorRules CompiledBehaviorRule[]
+  memoryUsageLogs MemoryUsageLog[]
+  memoryPendingConfirmations MemoryPendingConfirmation[]
 
   @@index([brandId])
   @@index([status])
@@ -232,6 +282,7 @@ model Device {
   endUser     EndUser?            @relation(fields: [endUserId], references: [id])
   logs        ConversationLog[]
   activations DeviceActivation[]
+  episodicMemories EpisodicMemory[]
 
   @@index([characterId])
   @@index([endUserId])
@@ -412,4 +463,272 @@ model RelationshipState {
   @@index([endUserId])
   @@index([characterId])
   @@map("relationship_states")
+}
+
+// ─── Five-layer Companion Memory MVP ─────────────
+
+model ProfileMemory {
+  id                   String                @id @default(uuid()) @db.Uuid
+  userId               String                @map("user_id") @db.Uuid
+  characterId          String?               @map("character_id") @db.Uuid
+  memoryType           MemoryLayer           @default(PROFILE) @map("memory_type")
+  key                  String                @db.Text
+  content              String                @db.Text
+  rawSource            Json                  @default("{}") @map("raw_source")
+  timestamp            DateTime              @default(now())
+  confidenceScore      Float                 @default(0.8) @map("confidence_score")
+  emotionalValence     Float?                @map("emotional_valence")
+  sensitivityLevel     SensitivityLevel      @default(LOW) @map("sensitivity_level")
+  permissionLevel      MemoryPermissionLevel @default(AUTO) @map("permission_level")
+  retrievalWeight      Float                 @default(1.0) @map("retrieval_weight")
+  decayRate            Float                 @default(0.01) @map("decay_rate")
+  lastUsedAt           DateTime?             @map("last_used_at")
+  usageCount           Int                   @default(0) @map("usage_count")
+  updateHistory        Json                  @default("[]") @map("update_history")
+  conflictStatus       MemoryConflictStatus  @default(NONE) @map("conflict_status")
+  canSurfaceDirectly   Boolean               @default(false) @map("can_surface_directly")
+  implicitOnly         Boolean               @default(true) @map("implicit_only")
+  requiresConfirmation Boolean               @default(false) @map("requires_confirmation")
+  frozenAt             DateTime?             @map("frozen_at")
+  deletedAt            DateTime?             @map("deleted_at")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+
+  user      EndUser    @relation(fields: [userId], references: [id])
+  character Character? @relation(fields: [characterId], references: [id])
+
+  @@unique([userId, characterId, key])
+  @@index([userId, characterId])
+  @@index([deletedAt])
+  @@map("profile_memories")
+}
+
+model EpisodicMemory {
+  id                   String                @id @default(uuid()) @db.Uuid
+  userId               String                @map("user_id") @db.Uuid
+  characterId          String?               @map("character_id") @db.Uuid
+  deviceId             String?               @map("device_id") @db.VarChar(100)
+  memoryType           MemoryLayer           @default(EPISODIC) @map("memory_type")
+  content              String                @db.Text
+  rawSource            Json                  @map("raw_source")
+  sourceLogId          String?               @map("source_log_id") @db.Uuid
+  rawTranscript        Json                  @default("{}") @map("raw_transcript")
+  timestamp            DateTime              @default(now())
+  contextWindow        Json                  @default("{}") @map("context_window")
+  detectedTopics       String[]              @default([]) @map("detected_topics")
+  confidenceScore      Float                 @default(0.7) @map("confidence_score")
+  emotionalValence     Float?                @map("emotional_valence")
+  padSnapshot          Json?                 @map("pad_snapshot")
+  sensitivityLevel     SensitivityLevel      @default(LOW) @map("sensitivity_level")
+  permissionLevel      MemoryPermissionLevel @default(AUTO) @map("permission_level")
+  retrievalWeight      Float                 @default(0.6) @map("retrieval_weight")
+  decayRate            Float                 @default(0.05) @map("decay_rate")
+  lastUsedAt           DateTime?             @map("last_used_at")
+  usageCount           Int                   @default(0) @map("usage_count")
+  updateHistory        Json                  @default("[]") @map("update_history")
+  conflictStatus       MemoryConflictStatus  @default(NONE) @map("conflict_status")
+  canSurfaceDirectly   Boolean               @default(false) @map("can_surface_directly")
+  implicitOnly         Boolean               @default(true) @map("implicit_only")
+  requiresConfirmation Boolean               @default(false) @map("requires_confirmation")
+  frozenAt             DateTime?             @map("frozen_at")
+  deletedAt            DateTime?             @map("deleted_at")
+  createdAt            DateTime              @default(now()) @map("created_at")
+
+  user      EndUser    @relation(fields: [userId], references: [id])
+  character Character? @relation(fields: [characterId], references: [id])
+  device    Device?    @relation(fields: [deviceId], references: [id])
+
+  @@index([userId, characterId])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("episodic_memories")
+}
+
+model SemanticMemory {
+  id                   String                @id @default(uuid()) @db.Uuid
+  userId               String                @map("user_id") @db.Uuid
+  characterId          String?               @map("character_id") @db.Uuid
+  memoryType           MemoryLayer           @default(SEMANTIC) @map("memory_type")
+  content              String                @db.Text
+  rawSource            Json                  @default("{}") @map("raw_source")
+  sourceMemoryIds      String[]              @default([]) @map("source_memory_ids") @db.Uuid
+  timestamp            DateTime              @default(now())
+  confidenceScore      Float                 @default(0.75) @map("confidence_score")
+  evidenceCount        Int                   @default(0) @map("evidence_count")
+  emotionalValence     Float?                @map("emotional_valence")
+  sensitivityLevel     SensitivityLevel      @default(LOW) @map("sensitivity_level")
+  permissionLevel      MemoryPermissionLevel @default(AUTO) @map("permission_level")
+  retrievalWeight      Float                 @default(0.9) @map("retrieval_weight")
+  decayRate            Float                 @default(0.02) @map("decay_rate")
+  lastUsedAt           DateTime?             @map("last_used_at")
+  usageCount           Int                   @default(0) @map("usage_count")
+  updateHistory        Json                  @default("[]") @map("update_history")
+  conflictStatus       MemoryConflictStatus  @default(NONE) @map("conflict_status")
+  canSurfaceDirectly   Boolean               @default(false) @map("can_surface_directly")
+  implicitOnly         Boolean               @default(true) @map("implicit_only")
+  requiresConfirmation Boolean               @default(false) @map("requires_confirmation")
+  frozenAt             DateTime?             @map("frozen_at")
+  deletedAt            DateTime?             @map("deleted_at")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+
+  user      EndUser    @relation(fields: [userId], references: [id])
+  character Character? @relation(fields: [characterId], references: [id])
+
+  @@index([userId, characterId])
+  @@index([deletedAt])
+  @@map("semantic_memories")
+}
+
+model RelationalMemory {
+  id                   String                @id @default(uuid()) @db.Uuid
+  userId               String                @map("user_id") @db.Uuid
+  characterId          String?               @map("character_id") @db.Uuid
+  memoryType           MemoryLayer           @default(RELATIONAL) @map("memory_type")
+  content              String                @db.Text
+  relationAxis         String                @map("relation_axis") @db.Text
+  rawSource            Json                  @default("{}") @map("raw_source")
+  sourceMemoryIds      String[]              @default([]) @map("source_memory_ids") @db.Uuid
+  timestamp            DateTime              @default(now())
+  confidenceScore      Float                 @default(0.8) @map("confidence_score")
+  emotionalValence     Float?                @map("emotional_valence")
+  sensitivityLevel     SensitivityLevel      @default(LOW) @map("sensitivity_level")
+  permissionLevel      MemoryPermissionLevel @default(AUTO) @map("permission_level")
+  retrievalWeight      Float                 @default(1.0) @map("retrieval_weight")
+  decayRate            Float                 @default(0.01) @map("decay_rate")
+  lastUsedAt           DateTime?             @map("last_used_at")
+  usageCount           Int                   @default(0) @map("usage_count")
+  updateHistory        Json                  @default("[]") @map("update_history")
+  conflictStatus       MemoryConflictStatus  @default(NONE) @map("conflict_status")
+  canSurfaceDirectly   Boolean               @default(false) @map("can_surface_directly")
+  implicitOnly         Boolean               @default(true) @map("implicit_only")
+  requiresConfirmation Boolean               @default(false) @map("requires_confirmation")
+  frozenAt             DateTime?             @map("frozen_at")
+  deletedAt            DateTime?             @map("deleted_at")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+
+  user      EndUser    @relation(fields: [userId], references: [id])
+  character Character? @relation(fields: [characterId], references: [id])
+
+  @@index([userId, characterId])
+  @@index([relationAxis])
+  @@index([deletedAt])
+  @@map("relational_memories")
+}
+
+model MemoryPolicy {
+  id                   String                @id @default(uuid()) @db.Uuid
+  userId               String                @map("user_id") @db.Uuid
+  memoryId             String                @map("memory_id") @db.Uuid
+  memoryTable          String                @map("memory_table") @db.Text
+  memoryType           MemoryLayer           @map("memory_type")
+  content              String                @db.Text
+  rawSource            Json                  @default("{}") @map("raw_source")
+  timestamp            DateTime              @default(now())
+  confidenceScore      Float                 @default(1.0) @map("confidence_score")
+  emotionalValence     Float?                @map("emotional_valence")
+  sensitivityLevel     SensitivityLevel      @default(LOW) @map("sensitivity_level")
+  permissionLevel      MemoryPermissionLevel @default(AUTO) @map("permission_level")
+  retrievalWeight      Float                 @default(1.0) @map("retrieval_weight")
+  decayRate            Float                 @default(0.0) @map("decay_rate")
+  lastUsedAt           DateTime?             @map("last_used_at")
+  usageCount           Int                   @default(0) @map("usage_count")
+  updateHistory        Json                  @default("[]") @map("update_history")
+  conflictStatus       MemoryConflictStatus  @default(NONE) @map("conflict_status")
+  canSurfaceDirectly   Boolean               @default(false) @map("can_surface_directly")
+  implicitOnly         Boolean               @default(true) @map("implicit_only")
+  requiresConfirmation Boolean               @default(false) @map("requires_confirmation")
+  useMode              MemoryUseMode         @default(IMPLICIT_ONLY) @map("use_mode")
+  allowedChannels      String[]              @default(["response_style"]) @map("allowed_channels")
+  forbiddenContexts    String[]              @default([]) @map("forbidden_contexts")
+  expiresAt            DateTime?             @map("expires_at")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+
+  user EndUser @relation(fields: [userId], references: [id])
+
+  @@index([userId, memoryId])
+  @@index([useMode])
+  @@map("memory_policies")
+}
+
+model CompiledBehaviorRule {
+  id                   String                @id @default(uuid()) @db.Uuid
+  userId               String                @map("user_id") @db.Uuid
+  characterId          String?               @map("character_id") @db.Uuid
+  memoryType           String                @default("COMPILED_BEHAVIOR_RULE") @map("memory_type") @db.Text
+  ruleType             String                @map("rule_type") @db.Text
+  trigger              Json                  @default("{}")
+  content              String                @db.Text
+  rawSource            Json                  @default("{}") @map("raw_source")
+  sourceMemoryIds      String[]              @default([]) @map("source_memory_ids") @db.Uuid
+  timestamp            DateTime              @default(now())
+  confidenceScore      Float                 @default(0.8) @map("confidence_score")
+  emotionalValence     Float?                @map("emotional_valence")
+  sensitivityLevel     SensitivityLevel      @default(LOW) @map("sensitivity_level")
+  permissionLevel      MemoryPermissionLevel @default(AUTO) @map("permission_level")
+  retrievalWeight      Float                 @default(1.0) @map("retrieval_weight")
+  decayRate            Float                 @default(0.01) @map("decay_rate")
+  lastUsedAt           DateTime?             @map("last_used_at")
+  usageCount           Int                   @default(0) @map("usage_count")
+  updateHistory        Json                  @default("[]") @map("update_history")
+  conflictStatus       MemoryConflictStatus  @default(NONE) @map("conflict_status")
+  canSurfaceDirectly   Boolean               @default(false) @map("can_surface_directly")
+  implicitOnly         Boolean               @default(true) @map("implicit_only")
+  requiresConfirmation Boolean               @default(false) @map("requires_confirmation")
+  version              Int                   @default(1)
+  enabled              Boolean               @default(true)
+  rollbackOf           String?               @map("rollback_of") @db.Uuid
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+
+  user      EndUser    @relation(fields: [userId], references: [id])
+  character Character? @relation(fields: [characterId], references: [id])
+
+  @@index([userId, characterId])
+  @@index([ruleType])
+  @@index([enabled])
+  @@map("compiled_behavior_rules")
+}
+
+model MemoryUsageLog {
+  id            String        @id @default(uuid()) @db.Uuid
+  responseId    String?       @map("response_id") @db.VarChar(100)
+  userId        String        @map("user_id") @db.Uuid
+  characterId   String?       @map("character_id") @db.Uuid
+  memoryId      String        @map("memory_id") @db.Uuid
+  memoryTable   String        @map("memory_table") @db.Text
+  useMode       MemoryUseMode @map("use_mode")
+  channel       String        @db.Text
+  promptTokens  Int?          @map("prompt_tokens")
+  surfacedText  String?       @map("surfaced_text") @db.Text
+  policyReason  String?       @map("policy_reason") @db.Text
+  userFeedback  String?       @map("user_feedback") @db.Text
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  user      EndUser    @relation(fields: [userId], references: [id])
+  character Character? @relation(fields: [characterId], references: [id])
+
+  @@index([responseId])
+  @@index([userId, characterId])
+  @@index([memoryId])
+  @@map("memory_usage_logs")
+}
+
+model MemoryPendingConfirmation {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  characterId    String?   @map("character_id") @db.Uuid
+  proposedMemory Json      @map("proposed_memory")
+  reason         String    @db.Text
+  expiresAt      DateTime  @map("expires_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  user      EndUser    @relation(fields: [userId], references: [id])
+  character Character? @relation(fields: [characterId], references: [id])
+
+  @@index([userId, characterId])
+  @@index([expiresAt])
+  @@map("memory_pending_confirmations")
 }

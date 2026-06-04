@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Flame, Music, Cpu, Package, Settings, Sparkles, MessageCircle, Mic } from "lucide-react";
+import { Brain, Flame, Music, Cpu, Package, Settings, Sparkles, MessageCircle, Mic } from "lucide-react";
 
 const navItems = [
   { href: "/dashboard/characters", label: "角色", icon: Flame },
   { href: "/dashboard/idol", label: "虚拟偶像", icon: Sparkles },
   { href: "/dashboard/chat-logs", label: "聊天记录", icon: MessageCircle },
+  { href: "/dashboard/memories", label: "记忆", icon: Brain },
   { href: "/dashboard/voices", label: "音色", icon: Music },
   { href: "/dashboard/voices/clone", label: "声音克隆", icon: Mic },
   { href: "/dashboard/devices", label: "设备", icon: Cpu },
