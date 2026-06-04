@@ -132,6 +132,7 @@ LLM 直接输出 PAD 值，驱动一切下游系统：
   "stance": "excited"
 }
 // → motor.action = "waddle"（企鹅专属）
+```
 
 ### PersonaContext 通用称呼系统
 
@@ -177,12 +178,25 @@ PAD 情绪值直接驱动物理硬件：
 外向、幽默、温暖、好奇、活力，每个 0-100 可调。
 3 层融合：设计师基础 → 用户偏移 → 互动微漂移。
 
-### 对话记忆
+### 五层陪伴记忆
 
-- **LLM 自动提取** — topic / preference / event 三类记忆
-- **长期持久化** — PostgreSQL 存储，跨会话保留
-- **主动回忆** — "上次你说喜欢恐龙，今天想聊什么？"
-- **异步非阻塞** — 记忆提取在响应发送后后台执行
+从简单的 topic/preference/event 记忆升级为可审计的 companion memory：
+
+- **五层模型** — identity / preference / event / relationship / private_state 分层存储
+- **隐式/显式区分** — `source=IMPLICIT|EXPLICIT|SYSTEM`，敏感记忆默认需要确认
+- **儿童安全读取策略** — child profile 下自动屏蔽高敏感 private_state
+- **Prompt 注入** — pipeline 检索角色+用户相关记忆，压缩成 `memory_context` 注入系统提示
+- **管理后台** — `/dashboard/memories` 可按角色、用户、layer、敏感级别检索和停用记忆
+- **API** — AI Core `/memory` 负责写入/检索；Admin Web `/api/memories` 负责后台查询和软删除
+- **持久化** — PostgreSQL 新增 companion memory 表和 schema，支持审计字段、置信度、过期时间
+
+实现入口：
+
+- `packages/ai-core/src/ai_core/services/memory.py`
+- `packages/ai-core/src/ai_core/services/memory_policy.py`
+- `packages/ai-core/src/ai_core/api/memory.py`
+- `apps/admin-web/src/app/dashboard/memories/page.tsx`
+- `packages/database/prisma/migrations/20260603090000_companion_memory_mvp/migration.sql`
 
 ### 关系进化
 
@@ -247,7 +261,8 @@ soulForge/
 │   │   └── src/app/
 │   │       ├── chat/           # 手机端聊天 (角色列表 + 聊天页)
 │   │       ├── api/chat/       # 公开聊天 API (角色列表 + 流式对话)
-│   │       └── dashboard/      # 设计师管理面板
+│   │       ├── api/memories/   # 后台记忆查询/停用 API
+│   │       └── dashboard/      # 设计师管理面板 (含 /dashboard/memories)
 │   └── mini-program/           # 微信小程序 (WIP)
 ├── packages/
 │   ├── ai-core/                # Python FastAPI 灵魂引擎
@@ -268,7 +283,9 @@ soulForge/
 │   │       │   │   ├── fish_audio_tts.py # Fish Audio S1 (克隆 refId + audio_clips)
 │   │       │   │   ├── dashscope_tts.py  # CosyVoice (备选)
 │   │       │   │   └── edge_tts_provider.py # Edge TTS (免费降级)
-│   │       │   └── ...                   # memory/content-filter/cache/rag
+│   │       │   ├── memory.py             # 五层陪伴记忆服务
+│   │       │   ├── memory_policy.py      # 敏感度/读写策略
+│   │       │   └── ...                   # content-filter/cache/rag
 │   │       └── templates/      # Jinja2 系统 Prompt 模板
 │   │           ├── system_prompt.jinja2       # 通用角色 (第二人称代入)
 │   │           ├── idol_prompt.jinja2         # 偶像/恋爱角色
@@ -342,6 +359,15 @@ pnpm install      # Node.js
 ```bash
 curl http://localhost:8100/health       # 健康检查
 uv run pytest packages/ai-core/tests/  # 测试
+pnpm --dir apps/admin-web build         # 管理后台构建
+```
+
+记忆功能专项验证：
+
+```bash
+cd packages/ai-core
+uv run pytest tests/test_memory_policy.py
+ruff check src tests/test_memory_policy.py
 ```
 
 ## SSE 流式事件
