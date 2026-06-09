@@ -2,6 +2,7 @@
 
 import contextlib
 import re
+from typing import Any
 
 import structlog
 
@@ -50,6 +51,14 @@ def _clean_for_tts(text: str) -> str:
     return text
 
 
+def _coerce_float(value: Any, default: float, lo: float, hi: float) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        number = default
+    return max(lo, min(hi, number))
+
+
 class TTSClient:
     def __init__(self, provider: str | None = None):
         self._provider = create_tts_provider(provider=provider)
@@ -71,6 +80,9 @@ class TTSClient:
         ssml_effect: str = "",
     ) -> bytes:
         text = _clean_for_tts(text)
+        speed = _coerce_float(speed, 1.0, 0.5, 2.0)
+        ssml_pitch = _coerce_float(ssml_pitch, 1.0, 0.5, 2.0)
+        ssml_rate = _coerce_float(ssml_rate, 1.0, 0.5, 2.0)
         try:
             return await self._provider.synthesize(
                 text,
@@ -109,6 +121,9 @@ class TTSClient:
         ssml_effect: str = "",
     ) -> bytes:
         text = _clean_for_tts(text)
+        speed = _coerce_float(speed, 1.0, 0.5, 2.0)
+        ssml_pitch = _coerce_float(ssml_pitch, 1.0, 0.5, 2.0)
+        ssml_rate = _coerce_float(ssml_rate, 1.0, 0.5, 2.0)
         try:
             return await self._provider.synthesize_to_wav(
                 text,

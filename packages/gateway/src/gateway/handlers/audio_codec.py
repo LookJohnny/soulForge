@@ -9,11 +9,63 @@ Uses ffmpeg subprocess for reliability across all platforms.
 
 import asyncio
 import logging
+import sys
+from array import array
 
 logger = logging.getLogger(__name__)
 
 # ffmpeg timeout in seconds
 _FFMPEG_TIMEOUT = 10
+
+
+def apply_pcm_gain(pcm_data: bytes, gain: float) -> bytes:
+    """Amplify signed 16-bit little-endian PCM with clipping protection."""
+    if gain <= 1.0 or not pcm_data:
+        return pcm_data
+
+    even_len = len(pcm_data) - (len(pcm_data) % 2)
+    samples = array("h")
+    samples.frombytes(pcm_data[:even_len])
+    if sys.byteorder != "little":
+        samples.byteswap()
+
+    clipped = 0
+    peak_in = 0
+    peak_out = 0
+    for idx, sample in enumerate(samples):
+        peak_in = max(peak_in, abs(sample))
+        boosted = int(sample * gain)
+        if boosted > 32767:
+            boosted = 32767
+            clipped += 1
+        elif boosted < -32768:
+            boosted = -32768
+            clipped += 1
+        peak_out = max(peak_out, abs(boosted))
+        samples[idx] = boosted
+
+    if sys.byteorder != "little":
+        samples.byteswap()
+
+    if clipped:
+        logger.warning(
+            "pcm_gain.clipped gain=%.2f clipped=%d samples=%d peak_in=%d peak_out=%d",
+            gain,
+            clipped,
+            len(samples),
+            peak_in,
+            peak_out,
+        )
+    else:
+        logger.info(
+            "pcm_gain.applied gain=%.2f samples=%d peak_in=%d peak_out=%d",
+            gain,
+            len(samples),
+            peak_in,
+            peak_out,
+        )
+
+    return samples.tobytes() + pcm_data[even_len:]
 
 
 async def opus_to_pcm(opus_data: bytes) -> bytes:
@@ -205,6 +257,8 @@ async def mp3_to_pcm(mp3_data: bytes) -> bytes:
 
 async def mp3_to_pcm_24k(mp3_data: bytes) -> bytes:
     """Decode MP3 to raw PCM at 24kHz 16-bit mono (xiaozhi TTS standard)."""
+    from gateway.config import settings
+
     proc = await asyncio.create_subprocess_exec(
         "ffmpeg",
         "-hide_banner",
@@ -230,6 +284,8 @@ async def mp3_to_pcm_24k(mp3_data: bytes) -> bytes:
     if proc.returncode != 0:
         logger.error("mp3_to_pcm_24k failed: %s", stderr.decode(errors="replace").strip())
         return b""
+    gain = max(0.2, min(settings.output_audio_gain, 8.0))
+    stdout = apply_pcm_gain(stdout, gain)
     return stdout
 
 

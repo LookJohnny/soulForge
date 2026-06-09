@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     # Gateway
     gateway_port: int = 8080
+    output_audio_gain: float = 1.0
 
     # Session
     session_ttl_seconds: int = 3600  # 1 hour
