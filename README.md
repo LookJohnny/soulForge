@@ -178,11 +178,19 @@ PAD 情绪值直接驱动物理硬件：
 外向、幽默、温暖、好奇、活力，每个 0-100 可调。
 3 层融合：设计师基础 → 用户偏移 → 互动微漂移。
 
-### 五层陪伴记忆
+### 五层记忆系统（Companion Memory）
 
-从简单的 topic/preference/event 记忆升级为可审计的 companion memory：
+从简单的 topic/preference/event 记忆升级为可审计、可管理、可安全过滤的五层记忆系统：
 
-- **五层模型** — identity / preference / event / relationship / private_state 分层存储
+| Layer | 记什么 | 用途 |
+|-------|--------|------|
+| `identity` | 用户身份、长期稳定背景 | 保持角色对用户的长期认识 |
+| `preference` | 喜好、厌恶、习惯 | 个性化回复和主动关怀 |
+| `event` | 重要事件、约定、共同经历 | 后续对话可自然回忆 |
+| `relationship` | 关系阶段、称呼、互动模式 | 关系进化和语气调整 |
+| `private_state` | 敏感状态、情绪低谷、隐私信息 | 受策略保护，只在安全场景读取 |
+
+- **五层模型** — `identity` / `preference` / `event` / `relationship` / `private_state` 分层存储
 - **隐式/显式区分** — `source=IMPLICIT|EXPLICIT|SYSTEM`，敏感记忆默认需要确认
 - **儿童安全读取策略** — child profile 下自动屏蔽高敏感 private_state
 - **Prompt 注入** — pipeline 检索角色+用户相关记忆，压缩成 `memory_context` 注入系统提示
