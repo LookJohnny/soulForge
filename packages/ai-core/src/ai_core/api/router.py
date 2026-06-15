@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from ai_core.api.actions import router as actions_router
 from ai_core.api.cache_admin import router as cache_admin_router
 from ai_core.api.chat import router as chat_router
 from ai_core.api.health import router as health_router
@@ -14,6 +15,7 @@ from ai_core.api.voice_clone import router as voice_clone_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
+api_router.include_router(actions_router)
 api_router.include_router(cache_admin_router)
 api_router.include_router(prompt_router)
 api_router.include_router(rag_router)

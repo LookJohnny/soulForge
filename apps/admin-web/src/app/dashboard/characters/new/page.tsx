@@ -10,6 +10,7 @@ import {
   Check,
   Volume2,
   Loader2,
+  Upload,
 } from "lucide-react";
 import type { PersonalityTraits } from "@soulforge/shared";
 
@@ -61,6 +62,12 @@ const speciesOptions = [
 
 const humanRoles = ["温柔姐姐", "老师", "朋友", "少年", "学长", "偶像"];
 const fantasyRoles = ["精灵", "机器人", "天使", "仙女", "恶魔", "吸血鬼"];
+const supportedCloneAudioMime = new Set(["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave"]);
+
+function isSupportedCloneAudioFile(file: File) {
+  const name = file.name.toLowerCase();
+  return supportedCloneAudioMime.has(file.type) || name.endsWith(".mp3") || name.endsWith(".wav");
+}
 
 export default function NewCharacterPage() {
   const router = useRouter();
@@ -85,10 +92,11 @@ export default function NewCharacterPage() {
     // Vocalized mode: 咕咕嘎嘎 / doro-style non-verbal characters
     languageMode: "VERBAL" as "VERBAL" | "VOCALIZED",
     vocalizationPalette: [""],
-    voiceCloneUrl: "",
+    voiceId: "",
     voiceCloneRefId: "",
     audioClipsRaw: [{ phrase: "", url: "" }],
   });
+  const [voiceCloneFile, setVoiceCloneFile] = useState<File | null>(null);
   const [cloning, setCloning] = useState(false);
   const [cloneError, setCloneError] = useState<string | null>(null);
 
@@ -117,7 +125,8 @@ export default function NewCharacterPage() {
       topics: form.topics.filter(Boolean),
       forbidden: form.forbidden.filter(Boolean),
       vocalizationPalette: form.languageMode === "VOCALIZED" ? form.vocalizationPalette.filter(Boolean) : [],
-      voiceCloneUrl: form.voiceCloneUrl || null,
+      voiceId: form.voiceId || null,
+      voiceCloneUrl: null,
       voiceCloneRefId: form.voiceCloneRefId || null,
       audioClips: audioClipsFinal,
     };
@@ -136,23 +145,18 @@ export default function NewCharacterPage() {
   };
 
   const triggerVoiceClone = async () => {
-    const url = form.voiceCloneUrl.trim();
-    if (!url) {
-      setCloneError("请先填写音频 URL");
+    if (!voiceCloneFile) {
+      setCloneError("请先选择 MP3 或 WAV 音频文件");
       return;
     }
     setCloning(true);
     setCloneError(null);
     try {
-      const res = await fetch("/api/voice-clone/from-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          audioUrl: url,
-          title: form.name || "未命名角色",
-          description: `${form.archetype} ${form.species || form.customSpecies || ""}`.trim(),
-        }),
-      });
+      const cloneForm = new FormData();
+      cloneForm.append("audio", voiceCloneFile);
+      cloneForm.append("title", form.name || voiceCloneFile.name.replace(/\.[^.]+$/, "") || "未命名角色");
+
+      const res = await fetch("/api/voices/clone", { method: "POST", body: cloneForm });
       const data = await res.json();
       if (!res.ok) {
         setCloneError(data.error || `克隆失败 (HTTP ${res.status})`);
@@ -162,7 +166,11 @@ export default function NewCharacterPage() {
         setCloneError("返回内容缺少 fishAudioId");
         return;
       }
-      setForm((prev) => ({ ...prev, voiceCloneRefId: data.fishAudioId }));
+      setForm((prev) => ({
+        ...prev,
+        voiceId: data.voiceId || "",
+        voiceCloneRefId: data.fishAudioId,
+      }));
     } catch (e) {
       setCloneError(e instanceof Error ? e.message : "网络错误");
     } finally {
@@ -583,27 +591,42 @@ export default function NewCharacterPage() {
                   </div>
                 )}
 
-                {/* Voice clone URL */}
+                {/* Voice clone file */}
                 <div className="glass rounded-2xl p-5">
                   <label className="block text-[11px] text-white/35 mb-2 font-medium tracking-wide uppercase">声音克隆样本（可选）</label>
                   <p className="text-[10px] text-white/15 mb-3">
-                    Fish Audio 声音克隆：粘贴 10 秒以上清晰原声的 URL，点&ldquo;立即克隆&rdquo;生成专属音色 ID。留空则系统按性格自动匹配预设音色。
+                    Fish Audio 声音克隆：上传 10 秒以上清晰原声的 MP3/WAV 文件，点&ldquo;立即克隆&rdquo;生成专属音色 ID。留空则系统按性格自动匹配预设音色。
                   </p>
-                  <div className="flex gap-2">
-                    <input
-                      value={form.voiceCloneUrl}
-                      onChange={(e) => {
-                        setForm({ ...form, voiceCloneUrl: e.target.value, voiceCloneRefId: "" });
-                        setCloneError(null);
-                      }}
-                      className="input-dark flex-1"
-                      placeholder="https://.../voice-sample.mp3"
-                      type="url"
-                    />
+                  <div className="grid grid-cols-[1fr_auto] gap-2">
+                    <label className="input-dark flex min-h-10 cursor-pointer items-center gap-2 overflow-hidden">
+                      <Upload className="h-4 w-4 shrink-0 text-white/25" />
+                      <span className={`truncate text-[13px] ${voiceCloneFile ? "text-white/60" : "text-white/25"}`}>
+                        {voiceCloneFile
+                          ? `${voiceCloneFile.name} (${Math.round(voiceCloneFile.size / 1024)} KB)`
+                          : "选择 MP3 或 WAV 文件"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,.mp3,.wav"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null;
+                          if (file && !isSupportedCloneAudioFile(file)) {
+                            setVoiceCloneFile(null);
+                            setCloneError("仅支持 MP3 或 WAV 音频文件");
+                            setForm((prev) => ({ ...prev, voiceId: "", voiceCloneRefId: "" }));
+                            return;
+                          }
+                          setVoiceCloneFile(file);
+                          setCloneError(null);
+                          setForm((prev) => ({ ...prev, voiceId: "", voiceCloneRefId: "" }));
+                        }}
+                      />
+                    </label>
                     <button
                       type="button"
                       onClick={triggerVoiceClone}
-                      disabled={cloning || !form.voiceCloneUrl.trim()}
+                      disabled={cloning || !voiceCloneFile}
                       className="px-4 py-2 rounded-xl text-[12px] bg-violet-500/12 text-violet-300/80 border border-violet-500/20 hover:bg-violet-500/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap"
                     >
                       {cloning ? (

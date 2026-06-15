@@ -1,0 +1,138 @@
+{
+  "output": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/output/SoulForge_AI潮玩_天使轮路演修正版.pptx",
+  "outputBytes": 63058,
+  "slideCount": 12,
+  "slideSize": {
+    "width": 1280,
+    "height": 720
+  },
+  "previewDir": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/preview-v2",
+  "previewPaths": [
+    "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/preview-v2/slide-01.png",
+    "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/preview-v2/slide-02.png",
+    "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/preview-v2/slide-03.png",
+    "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/preview-v2/slide-04.png",
+    "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/preview-v2/slide-05.png",
+    "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/preview-v2/slide-06.png",
+    "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/preview-v2/slide-07.png",
+    "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/preview-v2/slide-08.png",
+    "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/preview-v2/slide-09.png",
+    "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/preview-v2/slide-10.png",
+    "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/preview-v2/slide-11.png",
+    "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/preview-v2/slide-12.png"
+  ],
+  "layoutDir": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/layout/final-v2",
+  "layoutResults": [
+    {
+      "layoutPath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/layout/final-v2/slide-01.layout.json"
+    },
+    {
+      "layoutPath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/layout/final-v2/slide-02.layout.json"
+    },
+    {
+      "layoutPath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/layout/final-v2/slide-03.layout.json"
+    },
+    {
+      "layoutPath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/layout/final-v2/slide-04.layout.json"
+    },
+    {
+      "layoutPath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/layout/final-v2/slide-05.layout.json"
+    },
+    {
+      "layoutPath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/layout/final-v2/slide-06.layout.json"
+    },
+    {
+      "layoutPath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/layout/final-v2/slide-07.layout.json"
+    },
+    {
+      "layoutPath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/layout/final-v2/slide-08.layout.json"
+    },
+    {
+      "layoutPath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/layout/final-v2/slide-09.layout.json"
+    },
+    {
+      "layoutPath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/layout/final-v2/slide-10.layout.json"
+    },
+    {
+      "layoutPath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/layout/final-v2/slide-11.layout.json"
+    },
+    {
+      "layoutPath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/layout/final-v2/slide-12.layout.json"
+    }
+  ],
+  "contactSheet": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/preview-v2/contact-sheet.png",
+  "slides": [
+    {
+      "index": 1,
+      "requestedSlideNumber": 1,
+      "modulePath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/slides/slide-01.mjs",
+      "exportName": "slide01"
+    },
+    {
+      "index": 2,
+      "requestedSlideNumber": 2,
+      "modulePath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/slides/slide-02.mjs",
+      "exportName": "slide02"
+    },
+    {
+      "index": 3,
+      "requestedSlideNumber": 3,
+      "modulePath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/slides/slide-03.mjs",
+      "exportName": "slide03"
+    },
+    {
+      "index": 4,
+      "requestedSlideNumber": 4,
+      "modulePath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/slides/slide-04.mjs",
+      "exportName": "slide04"
+    },
+    {
+      "index": 5,
+      "requestedSlideNumber": 5,
+      "modulePath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/slides/slide-05.mjs",
+      "exportName": "slide05"
+    },
+    {
+      "index": 6,
+      "requestedSlideNumber": 6,
+      "modulePath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/slides/slide-06.mjs",
+      "exportName": "slide06"
+    },
+    {
+      "index": 7,
+      "requestedSlideNumber": 7,
+      "modulePath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/slides/slide-07.mjs",
+      "exportName": "slide07"
+    },
+    {
+      "index": 8,
+      "requestedSlideNumber": 8,
+      "modulePath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/slides/slide-08.mjs",
+      "exportName": "slide08"
+    },
+    {
+      "index": 9,
+      "requestedSlideNumber": 9,
+      "modulePath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/slides/slide-09.mjs",
+      "exportName": "slide09"
+    },
+    {
+      "index": 10,
+      "requestedSlideNumber": 10,
+      "modulePath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/slides/slide-10.mjs",
+      "exportName": "slide10"
+    },
+    {
+      "index": 11,
+      "requestedSlideNumber": 11,
+      "modulePath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/slides/slide-11.mjs",
+      "exportName": "slide11"
+    },
+    {
+      "index": 12,
+      "requestedSlideNumber": 12,
+      "modulePath": "/Users/lovelyjoy/Desktop/soulForge/outputs/manual-20260610-ai-toy-roadshow/presentations/ai-toy-roadshow/slides/slide-12.mjs",
+      "exportName": "slide12"
+    }
+  ]
+}

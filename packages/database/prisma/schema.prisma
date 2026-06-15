@@ -157,7 +157,9 @@ model EndUser {
   episodicMemories EpisodicMemory[]
   semanticMemories SemanticMemory[]
   relationalMemories RelationalMemory[]
+  rawEventLogs RawEventLog[]
   memoryPolicies MemoryPolicy[]
+  memoryReflections MemoryReflection[]
   compiledBehaviorRules CompiledBehaviorRule[]
   memoryUsageLogs MemoryUsageLog[]
   memoryPendingConfirmations MemoryPendingConfirmation[]
@@ -211,6 +213,8 @@ model Character {
   episodicMemories EpisodicMemory[]
   semanticMemories SemanticMemory[]
   relationalMemories RelationalMemory[]
+  rawEventLogs RawEventLog[]
+  memoryReflections MemoryReflection[]
   compiledBehaviorRules CompiledBehaviorRule[]
   memoryUsageLogs MemoryUsageLog[]
   memoryPendingConfirmations MemoryPendingConfirmation[]
@@ -283,6 +287,7 @@ model Device {
   logs        ConversationLog[]
   activations DeviceActivation[]
   episodicMemories EpisodicMemory[]
+  rawEventLogs RawEventLog[]
 
   @@index([characterId])
   @@index([endUserId])
@@ -467,6 +472,32 @@ model RelationshipState {
 
 // ─── Five-layer Companion Memory MVP ─────────────
 
+model RawEventLog {
+  id               String           @id @default(uuid()) @db.Uuid
+  userId           String           @map("user_id") @db.Uuid
+  characterId      String?          @map("character_id") @db.Uuid
+  deviceId         String?          @map("device_id") @db.VarChar(100)
+  sessionId        String?          @map("session_id") @db.VarChar(100)
+  eventType        String           @map("event_type") @db.VarChar(80)
+  source           String           @default("api") @db.VarChar(50)
+  content          String           @db.Text
+  payload          Json             @default("{}")
+  context          Json             @default("{}")
+  importanceScore  Int              @default(5) @map("importance_score")
+  sensitivityLevel SensitivityLevel @default(LOW) @map("sensitivity_level")
+  observedAt       DateTime         @default(now()) @map("observed_at")
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  user      EndUser    @relation(fields: [userId], references: [id])
+  character Character? @relation(fields: [characterId], references: [id])
+  device    Device?    @relation(fields: [deviceId], references: [id])
+
+  @@index([userId, characterId, observedAt])
+  @@index([eventType])
+  @@index([importanceScore])
+  @@map("raw_event_logs")
+}
+
 model ProfileMemory {
   id                   String                @id @default(uuid()) @db.Uuid
   userId               String                @map("user_id") @db.Uuid
@@ -481,6 +512,7 @@ model ProfileMemory {
   sensitivityLevel     SensitivityLevel      @default(LOW) @map("sensitivity_level")
   permissionLevel      MemoryPermissionLevel @default(AUTO) @map("permission_level")
   retrievalWeight      Float                 @default(1.0) @map("retrieval_weight")
+  importanceScore      Int                   @default(5) @map("importance_score")
   decayRate            Float                 @default(0.01) @map("decay_rate")
   lastUsedAt           DateTime?             @map("last_used_at")
   usageCount           Int                   @default(0) @map("usage_count")
@@ -522,6 +554,7 @@ model EpisodicMemory {
   sensitivityLevel     SensitivityLevel      @default(LOW) @map("sensitivity_level")
   permissionLevel      MemoryPermissionLevel @default(AUTO) @map("permission_level")
   retrievalWeight      Float                 @default(0.6) @map("retrieval_weight")
+  importanceScore      Int                   @default(5) @map("importance_score")
   decayRate            Float                 @default(0.05) @map("decay_rate")
   lastUsedAt           DateTime?             @map("last_used_at")
   usageCount           Int                   @default(0) @map("usage_count")
@@ -559,6 +592,7 @@ model SemanticMemory {
   sensitivityLevel     SensitivityLevel      @default(LOW) @map("sensitivity_level")
   permissionLevel      MemoryPermissionLevel @default(AUTO) @map("permission_level")
   retrievalWeight      Float                 @default(0.9) @map("retrieval_weight")
+  importanceScore      Int                   @default(5) @map("importance_score")
   decayRate            Float                 @default(0.02) @map("decay_rate")
   lastUsedAt           DateTime?             @map("last_used_at")
   usageCount           Int                   @default(0) @map("usage_count")
@@ -595,6 +629,7 @@ model RelationalMemory {
   sensitivityLevel     SensitivityLevel      @default(LOW) @map("sensitivity_level")
   permissionLevel      MemoryPermissionLevel @default(AUTO) @map("permission_level")
   retrievalWeight      Float                 @default(1.0) @map("retrieval_weight")
+  importanceScore      Int                   @default(5) @map("importance_score")
   decayRate            Float                 @default(0.01) @map("decay_rate")
   lastUsedAt           DateTime?             @map("last_used_at")
   usageCount           Int                   @default(0) @map("usage_count")
@@ -631,6 +666,7 @@ model MemoryPolicy {
   sensitivityLevel     SensitivityLevel      @default(LOW) @map("sensitivity_level")
   permissionLevel      MemoryPermissionLevel @default(AUTO) @map("permission_level")
   retrievalWeight      Float                 @default(1.0) @map("retrieval_weight")
+  importanceScore      Int                   @default(5) @map("importance_score")
   decayRate            Float                 @default(0.0) @map("decay_rate")
   lastUsedAt           DateTime?             @map("last_used_at")
   usageCount           Int                   @default(0) @map("usage_count")
@@ -653,6 +689,31 @@ model MemoryPolicy {
   @@map("memory_policies")
 }
 
+model MemoryReflection {
+  id               String           @id @default(uuid()) @db.Uuid
+  userId           String           @map("user_id") @db.Uuid
+  characterId      String?          @map("character_id") @db.Uuid
+  question         String           @db.Text
+  insight          String           @db.Text
+  evidenceRefs     String[]         @default([]) @map("evidence_refs") @db.Uuid
+  targetLayer      String           @map("target_layer") @db.Text
+  policyAction     String           @default("pass") @map("policy_action") @db.Text
+  status           String           @default("pending_apply") @db.Text
+  confidenceScore  Float            @default(0.75) @map("confidence_score")
+  sensitivityLevel SensitivityLevel @default(LOW) @map("sensitivity_level")
+  rawSource        Json             @default("{}") @map("raw_source")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  user      EndUser    @relation(fields: [userId], references: [id])
+  character Character? @relation(fields: [characterId], references: [id])
+
+  @@index([userId, characterId])
+  @@index([targetLayer])
+  @@index([status])
+  @@map("memory_reflections")
+}
+
 model CompiledBehaviorRule {
   id                   String                @id @default(uuid()) @db.Uuid
   userId               String                @map("user_id") @db.Uuid
@@ -669,6 +730,7 @@ model CompiledBehaviorRule {
   sensitivityLevel     SensitivityLevel      @default(LOW) @map("sensitivity_level")
   permissionLevel      MemoryPermissionLevel @default(AUTO) @map("permission_level")
   retrievalWeight      Float                 @default(1.0) @map("retrieval_weight")
+  importanceScore      Int                   @default(5) @map("importance_score")
   decayRate            Float                 @default(0.01) @map("decay_rate")
   lastUsedAt           DateTime?             @map("last_used_at")
   usageCount           Int                   @default(0) @map("usage_count")

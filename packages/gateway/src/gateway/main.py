@@ -82,6 +82,14 @@ async def health():
     return {"status": "ok", "service": "gateway", "protocols": protocols}
 
 
+@app.get("/metrics/latency")
+async def latency_metrics():
+    """Voice-turn latency: speech-end → first Opus frame, plus ai-core stage breakdown."""
+    from gateway.latency import latency_tracker
+
+    return latency_tracker.snapshot()
+
+
 # ─── Xiaozhi OTA compatibility endpoint ────────────────
 # Xiaozhi firmware calls /ota/ on boot to get server config.
 # We return the SoulForge gateway's WebSocket URL so the device connects here.

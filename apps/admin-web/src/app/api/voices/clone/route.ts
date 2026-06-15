@@ -4,6 +4,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 const AI_CORE_URL = process.env.AI_CORE_URL || "http://127.0.0.1:8100";
+const SUPPORTED_AUDIO_MIME = new Set([
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/wave",
+]);
+
+function isSupportedAudioFile(file: File) {
+  const name = file.name.toLowerCase();
+  return SUPPORTED_AUDIO_MIME.has(file.type) || name.endsWith(".mp3") || name.endsWith(".wav");
+}
 
 /**
  * POST /api/voices/clone — upload audio → create cloned voice → save to DB.
@@ -21,7 +33,10 @@ export async function POST(req: NextRequest) {
   const characterId = formData.get("characterId") as string | null;
 
   if (!audio || !title) {
-    return NextResponse.json({ error: "Missing audio or title" }, { status: 400 });
+    return NextResponse.json({ error: "缺少音频文件或音色名称" }, { status: 400 });
+  }
+  if (!isSupportedAudioFile(audio)) {
+    return NextResponse.json({ error: "仅支持 MP3 或 WAV 音频文件" }, { status: 400 });
   }
   if (characterId) {
     const character = await prisma.character.findFirst({
@@ -68,7 +83,11 @@ export async function POST(req: NextRequest) {
   if (characterId) {
     await prisma.character.update({
       where: { id: characterId },
-      data: { voiceId: voice.id },
+      data: {
+        voiceId: voice.id,
+        voiceCloneRefId: fishAudioId,
+        voiceCloneUrl: null,
+      },
     });
     await invalidateCharacterCache(session.user.brandId, characterId);
   }

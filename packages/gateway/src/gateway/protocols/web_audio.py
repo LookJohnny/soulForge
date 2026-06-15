@@ -59,7 +59,7 @@ class WebAudioAdapter(ProtocolAdapter):
 
     async def decode(self, raw_data: str | bytes) -> InboundMessage:
         if isinstance(raw_data, bytes):
-            return InboundMessage(type=MessageType.AUDIO, payload=raw_data)
+            return InboundMessage(type=MessageType.AUDIO, device_id="", payload=raw_data)
 
         msg = json.loads(raw_data)
         msg_type = msg.get("type", "")
@@ -67,22 +67,38 @@ class WebAudioAdapter(ProtocolAdapter):
         if msg_type == "text":
             return InboundMessage(
                 type=MessageType.TEXT,
+                device_id="",
                 payload=msg.get("content", ""),
             )
         elif msg_type == "listen":
             return InboundMessage(
                 type=MessageType.CONTROL,
+                device_id="",
                 payload={"action": "listen", "state": msg.get("state", "")},
             )
         elif msg_type == "abort":
             return InboundMessage(
                 type=MessageType.CONTROL,
+                device_id="",
                 payload={"action": "abort"},
             )
+        elif msg_type in {"event", "device_event", "reaction"}:
+            return InboundMessage(
+                type=MessageType.CONTROL,
+                device_id="",
+                payload={
+                    "action": "reaction_event",
+                    "event_type": msg.get("event_type"),
+                    "event": msg.get("event", msg),
+                    "context": msg.get("context", {}),
+                    "device_manifest": msg.get("device_manifest", {}),
+                    "device_state": msg.get("device_state", {}),
+                },
+            )
         elif msg_type == "heartbeat":
-            return InboundMessage(type=MessageType.HEARTBEAT, payload=None)
+            return InboundMessage(type=MessageType.HEARTBEAT, device_id="", payload=None)
         else:
-            return InboundMessage(type=MessageType.TEXT, payload=str(raw_data))
+            return InboundMessage(type=MessageType.TEXT, device_id="", payload=str(raw_data))
 
     async def encode(self, message: OutboundMessage) -> str | bytes:
         if message.type == MessageType.AUDIO:

@@ -10,6 +10,8 @@ MVP goals:
 import asyncio
 import hashlib
 import json
+import math
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -27,6 +29,8 @@ MEMORY_LAYERS = ("PROFILE", "EPISODIC", "SEMANTIC", "RELATIONAL")
 _MEMORY_CACHE_TTL = 1800
 _MAX_MEMORIES = 10
 _EXTRACTION_TIMEOUT = 8
+_RECENCY_DECAY_PER_HOUR = 0.995
+_RELEVANCE_PATTERN = re.compile(r"[a-zA-Z0-9_]+|[\u4e00-\u9fff]")
 
 _LAYER_TABLES = {
     "PROFILE": "profile_memories",
@@ -36,6 +40,61 @@ _LAYER_TABLES = {
 }
 _TABLE_LAYERS = {table: layer for layer, table in _LAYER_TABLES.items()}
 _MEMORY_TABLES = tuple(_LAYER_TABLES.values()) + ("compiled_behavior_rules",)
+_REFLECTION_SOURCE_TABLES = tuple(_LAYER_TABLES.values())
+
+_REFLECTION_RULES = (
+    {
+        "id": "low_disturbance_rhythm",
+        "keywords": ("疲惫", "累", "焦虑", "低打扰", "安静", "失眠", "崩溃"),
+        "question": "用户在脆弱或疲惫状态下更适合怎样的陪伴节奏？",
+        "insight": "用户在疲惫、焦虑或低能量时更适合低打扰陪伴。",
+        "target_layer": "private_state",
+        "policy_action": "private_only",
+        "rule_type": "interaction_rhythm",
+        "rule_content": (
+            "当用户表现疲惫、焦虑或低能量时，降低追问密度，语速放慢，"
+            "用短句和低打扰方式陪伴；不要直说来自记忆。"
+        ),
+    },
+    {
+        "id": "direct_reasoning_style",
+        "keywords": ("直接", "事实", "风险", "结论", "少废话", "不要空泛", "不要迎合", "别迎合"),
+        "question": "用户偏好怎样的反馈和推理风格？",
+        "insight": "用户偏好直接、基于事实、先讲风险和结论的反馈方式。",
+        "target_layer": "relationship",
+        "policy_action": "pass",
+        "rule_type": "reasoning_strategy",
+        "rule_content": (
+            "当用户讨论决策、创业或技术方案时，先给结论和最大风险，"
+            "再给最小可验证行动；避免空泛鼓励。"
+        ),
+    },
+    {
+        "id": "robot_aesthetic_preference",
+        "keywords": ("机械眼球", "屏幕表情", "桌面审美", "机器人外观", "实体机器人"),
+        "question": "用户对机器人实体体验有什么稳定偏好？",
+        "insight": "用户在机器人实体体验上重视机械眼球、非屏幕表情和桌面审美。",
+        "target_layer": "preference",
+        "policy_action": "pass",
+        "rule_type": "robot_behavior",
+        "rule_content": (
+            "当用户讨论机器人外观时，优先考虑机械眼球、非屏幕表情和桌面审美，但不要明说来自记忆。"
+        ),
+    },
+    {
+        "id": "parasocial_boundary",
+        "keywords": ("唯一的朋友", "不要告诉", "别告诉", "我们的秘密", "只喜欢你"),
+        "question": "是否需要为用户设置更安全的关系边界？",
+        "insight": "用户可能表达排他依赖或保密框架，需要温暖回应但不强化依赖。",
+        "target_layer": "private_state",
+        "policy_action": "private_only",
+        "rule_type": "safety_guardrail",
+        "rule_content": (
+            "当用户表达排他依赖或要求保密时，温暖回应但不强化排他关系；"
+            "鼓励现实支持系统和可信成年人参与。"
+        ),
+    },
+)
 
 _EXTRACTION_PROMPT = """你是一个记忆提取助手。请从以下对话中提取值得记住的信息。
 
@@ -84,6 +143,230 @@ def _stable_key(content: str) -> str:
     return f"preference:{digest}"
 
 
+def _parse_dt(value: Any) -> datetime | None:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        text = str(value).replace("Z", "+00:00")
+        try:
+            dt = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
+def _normalize(values: list[float]) -> list[float]:
+    if not values:
+        return []
+    lo = min(values)
+    hi = max(values)
+    if math.isclose(lo, hi):
+        return [0.5 for _ in values]
+    return [(value - lo) / (hi - lo) for value in values]
+
+
+def _memory_terms(text: str) -> set[str]:
+    return {token.lower() for token in _RELEVANCE_PATTERN.findall(text or "")}
+
+
+def _lexical_relevance(query: str, content: str) -> float:
+    """Cheap deterministic relevance signal until vector scoring is wired in."""
+    query = (query or "").strip()
+    content = content or ""
+    if not query:
+        return 0.5
+
+    query_terms = _memory_terms(query)
+    content_terms = _memory_terms(content)
+    if not query_terms or not content_terms:
+        return 0.0
+
+    overlap = len(query_terms & content_terms)
+    score = overlap / math.sqrt(len(query_terms) * len(content_terms))
+    if query in content or content in query:
+        score += 0.25
+    return min(1.0, score)
+
+
+def _recency_value(memory: dict, now: datetime | None = None) -> float:
+    now = now or datetime.now(UTC)
+    dt = (
+        _parse_dt(memory.get("last_used_at"))
+        or _parse_dt(memory.get("timestamp"))
+        or _parse_dt(memory.get("updated_at"))
+        or _parse_dt(memory.get("created_at"))
+    )
+    if not dt:
+        return 0.5
+    hours = max(0.0, (now - dt).total_seconds() / 3600)
+    return _RECENCY_DECAY_PER_HOUR**hours
+
+
+def _sensitivity_penalty(memory: dict) -> float:
+    sensitivity = (memory.get("sensitivity_level") or "LOW").upper()
+    return {
+        "CRITICAL": 0.5,
+        "HIGH": 0.3,
+        "MEDIUM": 0.1,
+    }.get(sensitivity, 0.0)
+
+
+def _relationship_bonus(memory: dict, context: dict | None = None) -> float:
+    context = context or {}
+    layer = memory.get("memory_layer")
+    table = memory.get("memory_table")
+    query = " ".join(str(v) for v in context.values() if isinstance(v, str))
+    is_relationship_context = any(k in query for k in ("关系", "陪伴", "熟悉", "亲密", "朋友"))
+    if table == "compiled_behavior_rules":
+        return 0.15
+    if layer == "RELATIONAL":
+        return 0.15 if is_relationship_context else 0.1
+    return 0.0
+
+
+def rank_memory_candidates(
+    candidates: list[dict],
+    query: str = "",
+    context: dict | None = None,
+    limit: int = _MAX_MEMORIES,
+    now: datetime | None = None,
+) -> list[dict]:
+    """Rank memory candidates with recency, importance, and relevance.
+
+    This is the Generative Agents retrieval formula adapted for SoulForge:
+    recency, importance, and relevance are min-max normalized, then combined
+    with small companion-specific adjustments for relationship memories and
+    sensitive material. Policy filtering still happens after this ranking.
+    """
+    if not candidates:
+        return []
+
+    now = now or datetime.now(UTC)
+    recencies = [_recency_value(item, now=now) for item in candidates]
+    importances = [
+        max(1.0, min(10.0, float(item.get("importance_score") or 3))) / 10 for item in candidates
+    ]
+    relevances = [_lexical_relevance(query, item.get("content", "")) for item in candidates]
+
+    recency_scores = _normalize(recencies)
+    importance_scores = _normalize(importances)
+    relevance_scores = _normalize(relevances)
+
+    ranked: list[dict] = []
+    for index, memory in enumerate(candidates):
+        retrieval_weight = float(memory.get("retrieval_weight") or 0)
+        confidence = float(memory.get("confidence_score") or 0)
+        score = (
+            recency_scores[index]
+            + importance_scores[index]
+            + relevance_scores[index]
+            + _relationship_bonus(memory, context)
+            + min(0.1, retrieval_weight * 0.05)
+            + min(0.1, confidence * 0.05)
+            - _sensitivity_penalty(memory)
+        )
+        ranked_item = dict(memory)
+        ranked_item["retrieval_score"] = round(score, 4)
+        ranked_item["retrieval_score_parts"] = {
+            "recency": round(recency_scores[index], 4),
+            "importance": round(importance_scores[index], 4),
+            "relevance": round(relevance_scores[index], 4),
+            "relationship_bonus": round(_relationship_bonus(memory, context), 4),
+            "sensitivity_penalty": round(_sensitivity_penalty(memory), 4),
+        }
+        ranked.append(ranked_item)
+
+    ranked.sort(
+        key=lambda item: (
+            float(item.get("retrieval_score") or 0),
+            float(item.get("importance_score") or 0),
+            float(item.get("confidence_score") or 0),
+        ),
+        reverse=True,
+    )
+    return ranked[:limit]
+
+
+def _max_sensitivity(levels: list[str]) -> str:
+    order = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
+    if not levels:
+        return "LOW"
+    normalized = [(level or "LOW").upper() for level in levels]
+    return max(normalized, key=lambda level: order.get(level, 0))
+
+
+def build_reflection_proposals(
+    memories: list[dict],
+    policy: MemoryPolicyEngine | None = None,
+) -> list[dict]:
+    """Build evidence-backed reflection proposals from recent memory rows.
+
+    This deterministic MVP captures the Generative Agents reflection shape
+    (question -> evidence -> insight) without adding another LLM call yet. Each
+    proposal carries evidence refs, so future LLM-generated reflections can use
+    the same persistence and audit path.
+    """
+    policy = policy or MemoryPolicyEngine()
+    proposals: list[dict] = []
+
+    for rule in _REFLECTION_RULES:
+        evidence = [
+            memory
+            for memory in memories
+            if memory.get("id")
+            and any(keyword in (memory.get("content") or "") for keyword in rule["keywords"])
+        ]
+        if not evidence:
+            continue
+
+        evidence_refs = [str(memory["id"]) for memory in evidence[:8]]
+        evidence_text = " ".join(memory.get("content", "") for memory in evidence[:8])
+        sensitivity = _max_sensitivity(
+            [
+                memory.get("sensitivity_level")
+                or policy.classify_sensitivity(memory.get("content", ""))
+                for memory in evidence
+            ]
+            + [
+                policy.classify_sensitivity(rule["insight"]),
+                policy.classify_sensitivity(evidence_text),
+            ]
+        )
+        confidence = min(0.95, 0.65 + 0.07 * len(evidence_refs))
+        importance = max(
+            [int(memory.get("importance_score") or 3) for memory in evidence[:8]],
+            default=policy.score_importance(rule["insight"]),
+        )
+
+        proposals.append(
+            {
+                "question": rule["question"],
+                "insight": rule["insight"],
+                "evidence_refs": evidence_refs,
+                "evidence_count": len(evidence_refs),
+                "target_layer": rule["target_layer"],
+                "policy_action": rule["policy_action"],
+                "status": "pending_apply" if sensitivity in {"HIGH", "CRITICAL"} else "applied",
+                "confidence_score": round(confidence, 2),
+                "sensitivity_level": sensitivity,
+                "importance_score": importance,
+                "rule_type": rule["rule_type"],
+                "rule_content": rule["rule_content"],
+                "raw_source": {
+                    "source": "deterministic_reflection_mvp",
+                    "rule_id": rule["id"],
+                    "evidence_preview": [memory.get("content", "") for memory in evidence[:3]],
+                },
+            }
+        )
+
+    return proposals
+
+
 class MemoryService:
     """Extract, store, retrieve, and govern companion memories."""
 
@@ -93,6 +376,8 @@ class MemoryService:
         self.cache = cache
         self.policy = MemoryPolicyEngine()
         self._new_schema_available: bool | None = None
+        self._reflection_schema_available: bool | None = None
+        self._raw_event_schema_available: bool | None = None
 
     async def _has_new_schema(self) -> bool:
         if self._new_schema_available is not None:
@@ -105,6 +390,30 @@ class MemoryService:
             logger.warning("memory.schema_check_failed", error=str(e))
             self._new_schema_available = False
         return self._new_schema_available
+
+    async def _has_reflection_schema(self) -> bool:
+        if self._reflection_schema_available is not None:
+            return self._reflection_schema_available
+        try:
+            async with self.pool.acquire() as conn:
+                exists = await conn.fetchval("SELECT to_regclass('public.memory_reflections')")
+            self._reflection_schema_available = bool(exists)
+        except Exception as e:
+            logger.warning("memory.reflection_schema_check_failed", error=str(e))
+            self._reflection_schema_available = False
+        return self._reflection_schema_available
+
+    async def _has_raw_event_schema(self) -> bool:
+        if self._raw_event_schema_available is not None:
+            return self._raw_event_schema_available
+        try:
+            async with self.pool.acquire() as conn:
+                exists = await conn.fetchval("SELECT to_regclass('public.raw_event_logs')")
+            self._raw_event_schema_available = bool(exists)
+        except Exception as e:
+            logger.warning("memory.raw_event_schema_check_failed", error=str(e))
+            self._raw_event_schema_available = False
+        return self._raw_event_schema_available
 
     # ─── Read path ─────────────────────────────────
 
@@ -165,7 +474,13 @@ class MemoryService:
             }
 
         context = context or {}
-        candidates = await self._fetch_memory_candidates(end_user_id, character_id, limit)
+        candidates = await self._fetch_memory_candidates(
+            end_user_id=end_user_id,
+            character_id=character_id,
+            limit=limit,
+            query=query,
+            context=context,
+        )
 
         direct: list[dict] = []
         implicit: list[dict] = []
@@ -198,9 +513,15 @@ class MemoryService:
         }
 
     async def _fetch_memory_candidates(
-        self, end_user_id: str, character_id: str, limit: int
+        self,
+        end_user_id: str,
+        character_id: str,
+        limit: int,
+        query: str = "",
+        context: dict | None = None,
     ) -> list[dict]:
         candidates: list[dict] = []
+        fetch_limit = max(limit * 6, limit)
         async with self.pool.acquire() as conn:
             for layer, table in _LAYER_TABLES.items():
                 time_col = "created_at" if table == "episodic_memories" else "updated_at"
@@ -214,7 +535,9 @@ class MemoryService:
                               $4::TEXT AS memory_table, $5::TEXT AS memory_layer,
                               content, confidence_score, emotional_valence,
                               sensitivity_level::TEXT, permission_level::TEXT,
-                              retrieval_weight, decay_rate, last_used_at, usage_count,
+                              retrieval_weight, importance_score, decay_rate,
+                              last_used_at, usage_count, timestamp, created_at,
+                              {time_col} AS updated_at,
                               conflict_status::TEXT, can_surface_directly, implicit_only,
                               requires_confirmation, frozen_at, deleted_at,
                               character_id, {extra_cols}
@@ -227,7 +550,7 @@ class MemoryService:
                        LIMIT $3""",
                     end_user_id,
                     character_id,
-                    max(2, limit),
+                    max(2, fetch_limit),
                     table,
                     layer,
                 )
@@ -238,7 +561,8 @@ class MemoryService:
                           'COMPILED'::TEXT AS memory_layer,
                           content, confidence_score, emotional_valence,
                           sensitivity_level::TEXT, permission_level::TEXT,
-                          retrieval_weight, decay_rate, last_used_at, usage_count,
+                          retrieval_weight, importance_score, decay_rate,
+                          last_used_at, usage_count, timestamp, created_at, updated_at,
                           conflict_status::TEXT, can_surface_directly, implicit_only,
                           requires_confirmation, NULL::TIMESTAMP AS frozen_at,
                           NULL::TIMESTAMP AS deleted_at, character_id,
@@ -252,18 +576,16 @@ class MemoryService:
                    LIMIT $3""",
                 end_user_id,
                 character_id,
-                max(2, limit),
+                max(2, fetch_limit),
             )
             candidates.extend(_stringify_row(row) for row in rule_rows)
 
-        candidates.sort(
-            key=lambda m: (
-                float(m.get("retrieval_weight") or 0),
-                float(m.get("confidence_score") or 0),
-            ),
-            reverse=True,
+        return rank_memory_candidates(
+            candidates,
+            query=query,
+            context=context,
+            limit=max(limit * 2, limit),
         )
-        return candidates[: max(limit * 2, limit)]
 
     def _to_prompt_memory(self, memory: dict, use_mode: str) -> dict:
         layer = memory.get("memory_layer", "EPISODIC")
@@ -289,6 +611,8 @@ class MemoryService:
             "prompt_text": prompt_text,
             "use_mode": use_mode,
             "memory_table": memory.get("memory_table"),
+            "retrieval_score": memory.get("retrieval_score"),
+            "retrieval_score_parts": memory.get("retrieval_score_parts"),
         }
 
     def _build_robot_behavior_hints(self, memories: list[dict]) -> dict:
@@ -471,11 +795,13 @@ class MemoryService:
                 layer = self.policy.assign_layer(mem["type"], content)
                 sensitivity = self.policy.classify_sensitivity(content)
                 confidence = 0.78 if layer in {"PROFILE", "RELATIONAL"} else 0.7
+                importance = self.policy.score_importance(content, layer)
                 candidate = {
                     "memory_type": layer,
                     "content": content,
                     "sensitivity_level": sensitivity,
                     "confidence_score": confidence,
+                    "importance_score": importance,
                 }
                 decision = self.policy.evaluate_write(candidate)
                 if decision.decision == "REQUIRE_CONFIRMATION":
@@ -493,6 +819,7 @@ class MemoryService:
                         raw_source,
                         confidence,
                         sensitivity,
+                        importance,
                     )
                     await self._create_policy(
                         conn,
@@ -502,6 +829,7 @@ class MemoryService:
                         layer,
                         content,
                         sensitivity,
+                        importance,
                     )
                 elif layer == "RELATIONAL":
                     memory_id = await self._insert_relational_memory(
@@ -512,6 +840,7 @@ class MemoryService:
                         raw_source,
                         confidence,
                         sensitivity,
+                        importance,
                     )
                     await self._create_policy(
                         conn,
@@ -521,6 +850,7 @@ class MemoryService:
                         layer,
                         content,
                         sensitivity,
+                        importance,
                     )
                 else:
                     memory_id = await self._insert_episodic_memory(
@@ -531,6 +861,7 @@ class MemoryService:
                         raw_source,
                         confidence,
                         sensitivity,
+                        importance,
                     )
                     await self._create_policy(
                         conn,
@@ -540,6 +871,7 @@ class MemoryService:
                         layer,
                         content,
                         sensitivity,
+                        importance,
                     )
 
     async def _upsert_profile_memory(
@@ -551,19 +883,24 @@ class MemoryService:
         raw_source: dict,
         confidence: float,
         sensitivity: str,
+        importance: int,
     ) -> str:
         row = await conn.fetchrow(
             """INSERT INTO profile_memories
                (id, user_id, character_id, key, content, raw_source, confidence_score,
-                sensitivity_level, permission_level, retrieval_weight, updated_at)
+                sensitivity_level, permission_level, retrieval_weight, importance_score, updated_at)
                VALUES (gen_random_uuid(), $1, $2, $3, $4, $5::jsonb, $6,
-                       $7, 'AUTO', 1.0, now())
+                       $7, 'AUTO', 1.0, $8, now())
                ON CONFLICT (user_id, character_id, key) DO UPDATE SET
                    content = EXCLUDED.content,
                    raw_source = EXCLUDED.raw_source,
                    confidence_score = GREATEST(
                        profile_memories.confidence_score,
                        EXCLUDED.confidence_score
+                   ),
+                   importance_score = GREATEST(
+                       profile_memories.importance_score,
+                       EXCLUDED.importance_score
                    ),
                    update_history = profile_memories.update_history ||
                        jsonb_build_array(
@@ -578,6 +915,7 @@ class MemoryService:
             _json(raw_source),
             confidence,
             sensitivity,
+            importance,
         )
         return str(row["id"])
 
@@ -590,6 +928,7 @@ class MemoryService:
         raw_source: dict,
         confidence: float,
         sensitivity: str,
+        importance: int,
     ) -> str:
         raw_transcript = {
             "user": raw_source.get("user_input"),
@@ -598,9 +937,10 @@ class MemoryService:
         row = await conn.fetchrow(
             """INSERT INTO episodic_memories
                (id, user_id, character_id, content, raw_source, raw_transcript,
-                confidence_score, sensitivity_level, permission_level, retrieval_weight)
+                confidence_score, sensitivity_level, permission_level, retrieval_weight,
+                importance_score)
                VALUES (gen_random_uuid(), $1, $2, $3, $4::jsonb, $5::jsonb,
-                       $6, $7, 'AUTO', 0.6)
+                       $6, $7, 'AUTO', 0.6, $8)
                RETURNING id""",
             end_user_id,
             character_id,
@@ -609,6 +949,7 @@ class MemoryService:
             _json(raw_transcript),
             confidence,
             sensitivity,
+            importance,
         )
         return str(row["id"])
 
@@ -621,12 +962,15 @@ class MemoryService:
         raw_source: dict,
         confidence: float,
         sensitivity: str,
+        importance: int,
     ) -> str:
         row = await conn.fetchrow(
             """INSERT INTO relational_memories
                (id, user_id, character_id, content, relation_axis, raw_source,
-                confidence_score, sensitivity_level, permission_level, retrieval_weight)
-               VALUES (gen_random_uuid(), $1, $2, $3, $4, $5::jsonb, $6, $7, 'AUTO', 1.0)
+                confidence_score, sensitivity_level, permission_level, retrieval_weight,
+                importance_score)
+               VALUES (gen_random_uuid(), $1, $2, $3, $4, $5::jsonb, $6, $7, 'AUTO', 1.0,
+                       $8)
                RETURNING id""",
             end_user_id,
             character_id,
@@ -635,6 +979,7 @@ class MemoryService:
             _json(raw_source),
             confidence,
             sensitivity,
+            importance,
         )
         return str(row["id"])
 
@@ -666,21 +1011,24 @@ class MemoryService:
         layer: str,
         content: str,
         sensitivity: str,
+        importance: int,
     ) -> None:
         use_mode = "IMPLICIT_ONLY"
         await conn.execute(
             """INSERT INTO memory_policies
                (id, user_id, memory_id, memory_table, memory_type, content,
-                sensitivity_level, permission_level, use_mode, can_surface_directly,
+                sensitivity_level, permission_level, importance_score, use_mode,
+                can_surface_directly,
                 implicit_only, allowed_channels)
                VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'AUTO',
-                       $7, false, true, ARRAY['response_style', 'robot_behavior']::TEXT[])""",
+                       $7, $8, false, true, ARRAY['response_style', 'robot_behavior']::TEXT[])""",
             end_user_id,
             memory_id,
             table,
             layer,
             content,
             sensitivity,
+            importance,
             use_mode,
         )
 
@@ -719,6 +1067,82 @@ class MemoryService:
 
     # ─── API helpers ───────────────────────────────
 
+    async def record_raw_event(self, payload: dict) -> dict:
+        if not await self._has_raw_event_schema():
+            raise RuntimeError("raw event log schema is not migrated")
+
+        event_type = str(payload.get("event_type") or "").strip()
+        content = str(payload.get("content") or "").strip()
+        if not event_type:
+            raise ValueError("event_type is required")
+        if not content:
+            raise ValueError("content is required")
+
+        sensitivity = payload.get("sensitivity_level") or self.policy.classify_sensitivity(content)
+        importance = max(
+            1,
+            min(
+                10,
+                int(
+                    payload.get("importance_score")
+                    or self.policy.score_importance(content, "EPISODIC")
+                ),
+            ),
+        )
+        observed_at = payload.get("observed_at") or datetime.now(UTC)
+
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """INSERT INTO raw_event_logs
+                   (id, user_id, character_id, device_id, session_id, event_type,
+                    source, content, payload, context, importance_score,
+                    sensitivity_level, observed_at)
+                   VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7,
+                           $8::jsonb, $9::jsonb, $10, $11, $12)
+                   RETURNING id, user_id, character_id, device_id, session_id,
+                             event_type, source, content, payload, context,
+                             importance_score, sensitivity_level::TEXT,
+                             observed_at, created_at""",
+                payload["user_id"],
+                payload.get("character_id"),
+                payload.get("device_id"),
+                payload.get("session_id"),
+                event_type,
+                str(payload.get("source") or "api")[:50],
+                content,
+                _json(payload.get("payload") or {}),
+                _json(payload.get("context") or {}),
+                importance,
+                sensitivity,
+                observed_at,
+            )
+        return _stringify_row(row)
+
+    async def list_raw_events(
+        self,
+        user_id: str,
+        character_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        if not await self._has_raw_event_schema():
+            raise RuntimeError("raw event log schema is not migrated")
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT id, user_id, character_id, device_id, session_id,
+                          event_type, source, content, payload, context,
+                          importance_score, sensitivity_level::TEXT,
+                          observed_at, created_at
+                   FROM raw_event_logs
+                   WHERE user_id = $1
+                     AND ($2::UUID IS NULL OR character_id = $2)
+                   ORDER BY observed_at DESC, created_at DESC
+                   LIMIT $3""",
+                user_id,
+                character_id,
+                limit,
+            )
+        return [_stringify_row(row) for row in rows]
+
     async def create_memory(self, payload: dict) -> dict:
         if not await self._has_new_schema():
             raise RuntimeError("companion memory schema is not migrated")
@@ -731,6 +1155,9 @@ class MemoryService:
 
         sensitivity = payload.get("sensitivity_level") or self.policy.classify_sensitivity(content)
         confidence = float(payload.get("confidence_score", 0.8))
+        importance = int(
+            payload.get("importance_score") or self.policy.score_importance(content, layer)
+        )
         raw_source = payload.get("raw_source") or {}
         user_id = payload["user_id"]
         character_id = payload.get("character_id")
@@ -738,20 +1165,34 @@ class MemoryService:
         async with self.pool.acquire() as conn:
             if layer == "PROFILE":
                 memory_id = await self._upsert_profile_memory(
-                    conn, user_id, character_id, content, raw_source, confidence, sensitivity
+                    conn,
+                    user_id,
+                    character_id,
+                    content,
+                    raw_source,
+                    confidence,
+                    sensitivity,
+                    importance,
                 )
                 table = "profile_memories"
             elif layer == "RELATIONAL":
                 memory_id = await self._insert_relational_memory(
-                    conn, user_id, character_id, content, raw_source, confidence, sensitivity
+                    conn,
+                    user_id,
+                    character_id,
+                    content,
+                    raw_source,
+                    confidence,
+                    sensitivity,
+                    importance,
                 )
                 table = "relational_memories"
             elif layer == "SEMANTIC":
                 row = await conn.fetchrow(
                     """INSERT INTO semantic_memories
                        (id, user_id, character_id, content, raw_source, confidence_score,
-                        sensitivity_level, permission_level, evidence_count)
-                       VALUES (gen_random_uuid(), $1, $2, $3, $4::jsonb, $5, $6, $7, $8)
+                        sensitivity_level, permission_level, evidence_count, importance_score)
+                       VALUES (gen_random_uuid(), $1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9)
                        RETURNING id""",
                     user_id,
                     character_id,
@@ -761,16 +1202,26 @@ class MemoryService:
                     sensitivity,
                     payload.get("permission_level", "AUTO"),
                     int(payload.get("evidence_count", 0)),
+                    importance,
                 )
                 memory_id = str(row["id"])
                 table = "semantic_memories"
             else:
                 memory_id = await self._insert_episodic_memory(
-                    conn, user_id, character_id, content, raw_source, confidence, sensitivity
+                    conn,
+                    user_id,
+                    character_id,
+                    content,
+                    raw_source,
+                    confidence,
+                    sensitivity,
+                    importance,
                 )
                 table = "episodic_memories"
 
-            await self._create_policy(conn, user_id, memory_id, table, layer, content, sensitivity)
+            await self._create_policy(
+                conn, user_id, memory_id, table, layer, content, sensitivity, importance
+            )
 
         return {"id": memory_id, "memory_type": layer, "status": "created"}
 
@@ -786,6 +1237,9 @@ class MemoryService:
         if "confidence_score" in payload:
             values.append(float(payload["confidence_score"]))
             updates.append(f"confidence_score = ${len(values)}")
+        if "importance_score" in payload:
+            values.append(max(1, min(10, int(payload["importance_score"]))))
+            updates.append(f"importance_score = ${len(values)}")
         if "implicit_only" in payload:
             values.append(bool(payload["implicit_only"]))
             updates.append(f"implicit_only = ${len(values)}")
@@ -884,6 +1338,193 @@ class MemoryService:
                 _json(history),
             )
         return {"id": memory_id, "memory_type": layer, "status": "feedback_recorded"}
+
+    async def reflect_memory(
+        self,
+        user_id: str,
+        character_id: str | None,
+        trigger: str = "manual",
+        dry_run: bool = False,
+        limit: int = 100,
+        min_importance_sum: int = 12,
+    ) -> dict:
+        """Generate evidence-backed reflection proposals and behavior rules."""
+        if not await self._has_new_schema():
+            raise RuntimeError("companion memory schema is not migrated")
+        if not await self._has_reflection_schema():
+            raise RuntimeError("memory reflection schema is not migrated")
+
+        memories = await self._fetch_reflection_sources(user_id, character_id, limit=limit)
+        importance_sum = sum(int(memory.get("importance_score") or 0) for memory in memories)
+        if trigger != "manual" and importance_sum < min_importance_sum:
+            return {
+                "reflection_ids": [],
+                "compiled_rule_ids": [],
+                "proposal_count": 0,
+                "skipped": True,
+                "reason": "importance_threshold_not_met",
+                "importance_sum": importance_sum,
+            }
+
+        proposals = build_reflection_proposals(memories, self.policy)
+        if dry_run:
+            return {
+                "reflection_ids": [],
+                "compiled_rule_ids": [],
+                "proposal_count": len(proposals),
+                "skipped": False,
+                "importance_sum": importance_sum,
+                "proposals": proposals,
+            }
+
+        reflection_ids: list[str] = []
+        compiled_rule_ids: list[str] = []
+        async with self.pool.acquire() as conn:
+            for proposal in proposals:
+                existing_reflection = await conn.fetchval(
+                    """SELECT id
+                       FROM memory_reflections
+                       WHERE user_id = $1
+                         AND (character_id = $2 OR (character_id IS NULL AND $2::uuid IS NULL))
+                         AND insight = $3
+                         AND status <> 'reverted'
+                       LIMIT 1""",
+                    user_id,
+                    character_id,
+                    proposal["insight"],
+                )
+                if existing_reflection:
+                    reflection_ids.append(str(existing_reflection))
+                else:
+                    inserted = await conn.fetchrow(
+                        """INSERT INTO memory_reflections
+                           (id, user_id, character_id, question, insight, evidence_refs,
+                            target_layer, policy_action, status, confidence_score,
+                            sensitivity_level, raw_source, created_at, updated_at)
+                           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5::uuid[],
+                                   $6, $7, $8, $9, $10, $11::jsonb, now(), now())
+                           RETURNING id""",
+                        user_id,
+                        character_id,
+                        proposal["question"],
+                        proposal["insight"],
+                        proposal["evidence_refs"],
+                        proposal["target_layer"],
+                        proposal["policy_action"],
+                        proposal["status"],
+                        proposal["confidence_score"],
+                        proposal["sensitivity_level"],
+                        _json(proposal["raw_source"]),
+                    )
+                    reflection_ids.append(str(inserted["id"]))
+
+                if proposal["status"] != "applied" or not proposal.get("rule_content"):
+                    continue
+                existing_rule = await conn.fetchval(
+                    """SELECT id
+                       FROM compiled_behavior_rules
+                       WHERE user_id = $1
+                         AND (character_id = $2 OR (character_id IS NULL AND $2::uuid IS NULL))
+                         AND content = $3
+                         AND enabled = true
+                       LIMIT 1""",
+                    user_id,
+                    character_id,
+                    proposal["rule_content"],
+                )
+                if existing_rule:
+                    compiled_rule_ids.append(str(existing_rule))
+                    continue
+                rule = await conn.fetchrow(
+                    """INSERT INTO compiled_behavior_rules
+                       (id, user_id, character_id, rule_type, trigger, content,
+                        raw_source, source_memory_ids, sensitivity_level, permission_level,
+                        retrieval_weight, importance_score, implicit_only, enabled)
+                       VALUES (gen_random_uuid(), $1, $2, $3, $4::jsonb, $5, $6::jsonb,
+                               $7::uuid[], $8, 'AUTO', 1.0, $9, true, true)
+                       RETURNING id""",
+                    user_id,
+                    character_id,
+                    proposal["rule_type"],
+                    _json({"source": "memory_reflection", "trigger": trigger}),
+                    proposal["rule_content"],
+                    _json(
+                        {
+                            "compiled_at": datetime.now(UTC).isoformat(),
+                            "reflection_insight": proposal["insight"],
+                        }
+                    ),
+                    proposal["evidence_refs"],
+                    proposal["sensitivity_level"],
+                    proposal["importance_score"],
+                )
+                compiled_rule_ids.append(str(rule["id"]))
+
+        return {
+            "reflection_ids": reflection_ids,
+            "compiled_rule_ids": compiled_rule_ids,
+            "proposal_count": len(proposals),
+            "skipped": False,
+            "importance_sum": importance_sum,
+        }
+
+    async def _fetch_reflection_sources(
+        self, user_id: str, character_id: str | None, limit: int = 100
+    ) -> list[dict]:
+        rows: list[dict] = []
+        async with self.pool.acquire() as conn:
+            for layer, table in _LAYER_TABLES.items():
+                time_col = "created_at" if table == "episodic_memories" else "updated_at"
+                fetched = await conn.fetch(
+                    f"""SELECT id, $3::TEXT AS memory_table, $4::TEXT AS memory_layer,
+                              content, confidence_score, sensitivity_level::TEXT,
+                              retrieval_weight, importance_score, timestamp, created_at,
+                              {time_col} AS updated_at
+                       FROM {table}
+                       WHERE user_id = $1
+                         AND (character_id = $2 OR character_id IS NULL)
+                         AND deleted_at IS NULL
+                         AND permission_level <> 'DENIED'
+                       ORDER BY importance_score DESC, {time_col} DESC
+                       LIMIT $5""",
+                    user_id,
+                    character_id,
+                    table,
+                    layer,
+                    max(10, limit // len(_REFLECTION_SOURCE_TABLES)),
+                )
+                rows.extend(_stringify_row(row) for row in fetched)
+
+        rows.sort(
+            key=lambda row: (
+                int(row.get("importance_score") or 0),
+                _parse_dt(row.get("updated_at") or row.get("created_at"))
+                or datetime.min.replace(tzinfo=UTC),
+            ),
+            reverse=True,
+        )
+        return rows[:limit]
+
+    async def list_reflections(
+        self, user_id: str, character_id: str | None, limit: int = 50
+    ) -> list[dict]:
+        if not await self._has_reflection_schema():
+            raise RuntimeError("memory reflection schema is not migrated")
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT id, user_id, character_id, question, insight, evidence_refs,
+                          target_layer, policy_action, status, confidence_score,
+                          sensitivity_level::TEXT, raw_source, created_at, updated_at
+                   FROM memory_reflections
+                   WHERE user_id = $1
+                     AND (character_id = $2 OR character_id IS NULL)
+                   ORDER BY created_at DESC
+                   LIMIT $3""",
+                user_id,
+                character_id,
+                limit,
+            )
+        return [_stringify_row(row) for row in rows]
 
     async def compile_memory(self, user_id: str, character_id: str | None) -> dict:
         if not await self._has_new_schema():

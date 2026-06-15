@@ -1,0 +1,1394 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/p7d5gv",
+    "id": "p7d5gv",
+    "slide": 5,
+    "layoutId": "447d218e-6f76-48fd-a840-83baf51d3271",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "8b035b6f-08ab-4e0d-8c98-78e2d2b7889a",
+    "masterLayoutName": "Master",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Aptos",
+      "PingFang SC"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "447d218e-6f76-48fd-a840-83baf51d3271",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "8b035b6f-08ab-4e0d-8c98-78e2d2b7889a",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "8b035b6f-08ab-4e0d-8c98-78e2d2b7889a",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/fepkzupw",
+      "id": "1",
+      "bbox": [
+        0,
+        0,
+        1280,
+        720
+      ],
+      "geometry": "rect",
+      "fillColor": "#121110",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/4zidonyd",
+      "id": "2",
+      "bbox": [
+        56,
+        50,
+        26,
+        3
+      ],
+      "geometry": "rect",
+      "fillColor": "#FF5A47",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/xkf6dcbu",
+      "id": "3",
+      "bbox": [
+        96,
+        42,
+        520,
+        22
+      ],
+      "geometry": "rect",
+      "text": "TECHNICAL MOAT",
+      "textPreview": "TECHNICAL MOAT",
+      "resolvedFontSize": 11,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 11,
+        "typeface": "Aptos",
+        "color": "#F7F1E6",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "TECHNICAL MOAT"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "TECHNICAL MOAT",
+          "resolvedTextStyle": {
+            "fontSize": 11,
+            "typeface": "Aptos",
+            "color": "#F7F1E6",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "TECHNICAL MOAT",
+              "fontSize": 11,
+              "typeface": "Aptos",
+              "color": "#F7F1E6",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/mlkjm1cf",
+      "id": "4",
+      "bbox": [
+        56,
+        82,
+        880,
+        80.5
+      ],
+      "geometry": "rect",
+      "text": "护城河不是“会聊天”，而是角色一致性的全链路控制。",
+      "textPreview": "护城河不是“会聊天”，而是角色一致性的全链路控制。",
+      "resolvedFontSize": 35,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 35,
+        "typeface": "PingFang SC",
+        "color": "#FFF9EE",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "护城河不是“会聊天”，而是角色一致性的全链路控制。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "护城河不是“会聊天”，而是角色一致性的全链路控制。",
+          "resolvedTextStyle": {
+            "fontSize": 35,
+            "typeface": "PingFang SC",
+            "color": "#FFF9EE",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "护城河不是“会聊天”，而是角色一致性的全链路控制。",
+              "fontSize": 35,
+              "typeface": "PingFang SC",
+              "color": "#FFF9EE",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/f6dcbulw",
+      "id": "5",
+      "bbox": [
+        58,
+        172,
+        820,
+        72
+      ],
+      "geometry": "rect",
+      "text": "原稿里的五层记忆、PAD 情绪、音色克隆和硬件映射，应该合并成一张可解释的技术壁垒图。",
+      "textPreview": "原稿里的五层记忆、PAD 情绪、音色克隆和硬件映射，应该合并成一张可解释的技术壁垒图。",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15,
+        "typeface": "PingFang SC",
+        "color": "#D9D1C7",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "原稿里的五层记忆、PAD 情绪、音色克隆和硬件映射，应该合并成一张可解释的技术壁垒图。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "原稿里的五层记忆、PAD 情绪、音色克隆和硬件映射，应该合并成一张可解释的技术壁垒图。",
+          "resolvedTextStyle": {
+            "fontSize": 15,
+            "typeface": "PingFang SC",
+            "color": "#D9D1C7",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "原稿里的五层记忆、PAD 情绪、音色克隆和硬件映射，应该合并成一张可解释的技术壁垒图。",
+              "fontSize": 15,
+              "typeface": "PingFang SC",
+              "color": "#D9D1C7"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/4r65wjud",
+      "id": "6",
+      "bbox": [
+        112,
+        392,
+        164,
+        118
+      ],
+      "geometry": "rect",
+      "fillColor": "#24221F",
+      "lineColor": "#3A342F",
+      "lineWidth": 1
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/xc3ylc7u",
+      "id": "7",
+      "bbox": [
+        112,
+        392,
+        164,
+        7
+      ],
+      "geometry": "rect",
+      "fillColor": "#FF5A47",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/m94fu18j",
+      "id": "8",
+      "bbox": [
+        128,
+        416,
+        132,
+        18
+      ],
+      "geometry": "rect",
+      "text": "五层记忆系统",
+      "textPreview": "五层记忆系统",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15,
+        "typeface": "PingFang SC",
+        "color": "#FFF9EE",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "五层记忆系统"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "五层记忆系统",
+          "resolvedTextStyle": {
+            "fontSize": 15,
+            "typeface": "PingFang SC",
+            "color": "#FFF9EE",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "五层记忆系统",
+              "fontSize": 15,
+              "typeface": "PingFang SC",
+              "color": "#FFF9EE",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/fu18jqh0",
+      "id": "9",
+      "bbox": [
+        128,
+        450,
+        132,
+        52
+      ],
+      "geometry": "rect",
+      "text": "identity / preference / event / relationship / private_state：让角色自然记得人、事和关系边界。",
+      "textPreview": "identity / preference / event / relationship / private_state：让角色自然记得人、事和关系边界。",
+      "resolvedFontSize": 10.51,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 10.51,
+        "typeface": "PingFang SC",
+        "color": "#D6CEC2",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 4,
+        "lines": [
+          {
+            "index": 1,
+            "text": "identity / preference /"
+          },
+          {
+            "index": 2,
+            "text": "event / relationship /"
+          },
+          {
+            "index": 3,
+            "text": "private_state：让角色自然"
+          },
+          {
+            "index": 4,
+            "text": "记得人、事和关系边界。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "identity / preference / event / relationship / private_state：让角色自然记得人、事和关系边界。",
+          "resolvedTextStyle": {
+            "fontSize": 10.51,
+            "typeface": "PingFang SC",
+            "color": "#D6CEC2",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "identity / preference / event / relationship / private_state：让角色自然记得人、事和关系边界。",
+              "fontSize": 10.51,
+              "typeface": "PingFang SC",
+              "color": "#D6CEC2"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/r65wjudg",
+      "id": "10",
+      "bbox": [
+        322,
+        370,
+        164,
+        140
+      ],
+      "geometry": "rect",
+      "fillColor": "#24221F",
+      "lineColor": "#3A342F",
+      "lineWidth": 1
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ylc7u54z",
+      "id": "11",
+      "bbox": [
+        322,
+        370,
+        164,
+        7
+      ],
+      "geometry": "rect",
+      "fillColor": "#20C9B8",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/9cvixcze",
+      "id": "12",
+      "bbox": [
+        338,
+        394,
+        132,
+        18
+      ],
+      "geometry": "rect",
+      "text": "Memory Policy",
+      "textPreview": "Memory Policy",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15,
+        "typeface": "PingFang SC",
+        "color": "#FFF9EE",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Memory Policy"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Memory Policy",
+          "resolvedTextStyle": {
+            "fontSize": 15,
+            "typeface": "PingFang SC",
+            "color": "#FFF9EE",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Memory Policy",
+              "fontSize": 15,
+              "typeface": "PingFang SC",
+              "color": "#FFF9EE",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/gr2p8nqx",
+      "id": "13",
+      "bbox": [
+        338,
+        428,
+        132,
+        74
+      ],
+      "geometry": "rect",
+      "text": "敏感度、确认、儿童安全、审计和软删除，解决情感陪伴里的隐私与信任问题。",
+      "textPreview": "敏感度、确认、儿童安全、审计和软删除，解决情感陪伴里的隐私与信任问题。",
+      "resolvedFontSize": 10.51,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 10.51,
+        "typeface": "PingFang SC",
+        "color": "#D6CEC2",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "敏感度、确认、儿童安全、"
+          },
+          {
+            "index": 2,
+            "text": "审计和软删除，解决情感陪"
+          },
+          {
+            "index": 3,
+            "text": "伴里的隐私与信任问题。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "敏感度、确认、儿童安全、审计和软删除，解决情感陪伴里的隐私与信任问题。",
+          "resolvedTextStyle": {
+            "fontSize": 10.51,
+            "typeface": "PingFang SC",
+            "color": "#D6CEC2",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "敏感度、确认、儿童安全、审计和软删除，解决情感陪伴里的隐私与信任问题。",
+              "fontSize": 10.51,
+              "typeface": "PingFang SC",
+              "color": "#D6CEC2"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/nih4byhg",
+      "id": "14",
+      "bbox": [
+        532,
+        348,
+        164,
+        162
+      ],
+      "geometry": "rect",
+      "fillColor": "#24221F",
+      "lineColor": "#3A342F",
+      "lineWidth": 1
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/yxobm58z",
+      "id": "15",
+      "bbox": [
+        532,
+        348,
+        164,
+        7
+      ],
+      "geometry": "rect",
+      "fillColor": "#FFD166",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 16,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/5o7qpg3e",
+      "id": "16",
+      "bbox": [
+        548,
+        372,
+        132,
+        18
+      ],
+      "geometry": "rect",
+      "text": "PAD 连续情绪",
+      "textPreview": "PAD 连续情绪",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15,
+        "typeface": "PingFang SC",
+        "color": "#FFF9EE",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "PAD 连续情绪"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "PAD 连续情绪",
+          "resolvedTextStyle": {
+            "fontSize": 15,
+            "typeface": "PingFang SC",
+            "color": "#FFF9EE",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "PAD 连续情绪",
+              "fontSize": 15,
+              "typeface": "PingFang SC",
+              "color": "#FFF9EE",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 17,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/g3ex0nux",
+      "id": "17",
+      "bbox": [
+        548,
+        406,
+        132,
+        96
+      ],
+      "geometry": "rect",
+      "text": "把开心/难过等标签变成三维连续坐标，控制声音、表情、动作的平滑过渡。",
+      "textPreview": "把开心/难过等标签变成三维连续坐标，控制声音、表情、动作的平滑过渡。",
+      "resolvedFontSize": 10.51,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 10.51,
+        "typeface": "PingFang SC",
+        "color": "#D6CEC2",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "把开心/难过等标签变成三维"
+          },
+          {
+            "index": 2,
+            "text": "连续坐标，控制声音、表情"
+          },
+          {
+            "index": 3,
+            "text": "、动作的平滑过渡。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "把开心/难过等标签变成三维连续坐标，控制声音、表情、动作的平滑过渡。",
+          "resolvedTextStyle": {
+            "fontSize": 10.51,
+            "typeface": "PingFang SC",
+            "color": "#D6CEC2",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "把开心/难过等标签变成三维连续坐标，控制声音、表情、动作的平滑过渡。",
+              "fontSize": 10.51,
+              "typeface": "PingFang SC",
+              "color": "#D6CEC2"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 18,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/rmhk3q5o",
+      "id": "18",
+      "bbox": [
+        742,
+        326,
+        164,
+        184
+      ],
+      "geometry": "rect",
+      "fillColor": "#24221F",
+      "lineColor": "#3A342F",
+      "lineWidth": 1
+    },
+    {
+      "order": 19,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/y1kre1w7",
+      "id": "19",
+      "bbox": [
+        742,
+        326,
+        164,
+        7
+      ],
+      "geometry": "rect",
+      "fillColor": "#8D7CFF",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 20,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/6dcbulwv",
+      "id": "20",
+      "bbox": [
+        758,
+        350,
+        132,
+        18
+      ],
+      "geometry": "rect",
+      "text": "TTS + 音色克隆",
+      "textPreview": "TTS + 音色克隆",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15,
+        "typeface": "PingFang SC",
+        "color": "#FFF9EE",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "TTS + 音色克隆"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "TTS + 音色克隆",
+          "resolvedTextStyle": {
+            "fontSize": 15,
+            "typeface": "PingFang SC",
+            "color": "#FFF9EE",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "TTS + 音色克隆",
+              "fontSize": 15,
+              "typeface": "PingFang SC",
+              "color": "#FFF9EE",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 21,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vy90je9c",
+      "id": "21",
+      "bbox": [
+        758,
+        384,
+        132,
+        118
+      ],
+      "geometry": "rect",
+      "text": "角色专属声音、语气、呼吸感和语速变化，让 IP 不是“读台词”。",
+      "textPreview": "角色专属声音、语气、呼吸感和语速变化，让 IP 不是“读台词”。",
+      "resolvedFontSize": 10.51,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 10.51,
+        "typeface": "PingFang SC",
+        "color": "#D6CEC2",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "角色专属声音、语气、呼吸"
+          },
+          {
+            "index": 2,
+            "text": "感和语速变化，让 IP"
+          },
+          {
+            "index": 3,
+            "text": "不是“读台词”。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "角色专属声音、语气、呼吸感和语速变化，让 IP 不是“读台词”。",
+          "resolvedTextStyle": {
+            "fontSize": 10.51,
+            "typeface": "PingFang SC",
+            "color": "#D6CEC2",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "角色专属声音、语气、呼吸感和语速变化，让 IP 不是“读台词”。",
+              "fontSize": 10.51,
+              "typeface": "PingFang SC",
+              "color": "#D6CEC2"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 22,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/oj2t83it",
+      "id": "22",
+      "bbox": [
+        952,
+        304,
+        164,
+        206
+      ],
+      "geometry": "rect",
+      "fillColor": "#24221F",
+      "lineColor": "#3A342F",
+      "lineWidth": 1
+    },
+    {
+      "order": 23,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/d4vmtwra",
+      "id": "23",
+      "bbox": [
+        952,
+        304,
+        164,
+        7
+      ],
+      "geometry": "rect",
+      "fillColor": "#65D46E",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 24,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/61032lsz",
+      "id": "24",
+      "bbox": [
+        968,
+        328,
+        132,
+        18
+      ],
+      "geometry": "rect",
+      "text": "硬件动作映射",
+      "textPreview": "硬件动作映射",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15,
+        "typeface": "PingFang SC",
+        "color": "#FFF9EE",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "硬件动作映射"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "硬件动作映射",
+          "resolvedTextStyle": {
+            "fontSize": 15,
+            "typeface": "PingFang SC",
+            "color": "#FFF9EE",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "硬件动作映射",
+              "fontSize": 15,
+              "typeface": "PingFang SC",
+              "color": "#FFF9EE",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 25,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vmtwra5g",
+      "id": "25",
+      "bbox": [
+        968,
+        362,
+        132,
+        140
+      ],
+      "geometry": "rect",
+      "text": "眼神、眨眼、头部、LED、震动和物种动作由同一情绪状态驱动。",
+      "textPreview": "眼神、眨眼、头部、LED、震动和物种动作由同一情绪状态驱动。",
+      "resolvedFontSize": 10.51,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 10.51,
+        "typeface": "PingFang SC",
+        "color": "#D6CEC2",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "眼神、眨眼、头部、LED、"
+          },
+          {
+            "index": 2,
+            "text": "震动和物种动作由同一情绪"
+          },
+          {
+            "index": 3,
+            "text": "状态驱动。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "眼神、眨眼、头部、LED、震动和物种动作由同一情绪状态驱动。",
+          "resolvedTextStyle": {
+            "fontSize": 10.51,
+            "typeface": "PingFang SC",
+            "color": "#D6CEC2",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "眼神、眨眼、头部、LED、震动和物种动作由同一情绪状态驱动。",
+              "fontSize": 10.51,
+              "typeface": "PingFang SC",
+              "color": "#D6CEC2"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 26,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/o7qpg3ex",
+      "id": "26",
+      "bbox": [
+        112,
+        532,
+        1000,
+        2
+      ],
+      "geometry": "rect",
+      "fillColor": "#57504A",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 27,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/dsji5sne",
+      "id": "27",
+      "bbox": [
+        160,
+        580,
+        960,
+        44
+      ],
+      "geometry": "rect",
+      "text": "投资人表达方式：这是一个可迁移到多角色、多 IP、多设备的“角色操作系统”，不是单款玩具功能清单。",
+      "textPreview": "投资人表达方式：这是一个可迁移到多角色、多 IP、多设备的“角色操作系统”，不是单款玩具功能清单。",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 16,
+        "typeface": "PingFang SC",
+        "color": "#FFF9EE",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "投资人表达方式：这是一个可迁移到多角色、多 IP、多设备的“角色操作系统”，不是单款玩具功能清单。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "投资人表达方式：这是一个可迁移到多角色、多 IP、多设备的“角色操作系统”，不是单款玩具功能清单。",
+          "resolvedTextStyle": {
+            "fontSize": 16,
+            "typeface": "PingFang SC",
+            "color": "#FFF9EE",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "投资人表达方式：这是一个可迁移到多角色、多 IP、多设备的“角色操作系统”，不是单款玩具功能清单。",
+              "fontSize": 16,
+              "typeface": "PingFang SC",
+              "color": "#FFF9EE",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 28,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/6tovahoz",
+      "id": "28",
+      "bbox": [
+        56,
+        674,
+        980,
+        20
+      ],
+      "geometry": "rect",
+      "text": "SoulForge shipped context: companion memory, policy engine, PAD and hardware mapping",
+      "textPreview": "SoulForge shipped context: companion memory, policy engine, PAD and hardware mapping",
+      "resolvedFontSize": 10,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 10,
+        "typeface": "PingFang SC",
+        "color": "#AFA79D",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "SoulForge shipped context: companion memory, policy engine, PAD and hardware mapping"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "SoulForge shipped context: companion memory, policy engine, PAD and hardware mapping",
+          "resolvedTextStyle": {
+            "fontSize": 10,
+            "typeface": "PingFang SC",
+            "color": "#AFA79D",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "SoulForge shipped context: companion memory, policy engine, PAD and hardware mapping",
+              "fontSize": 10,
+              "typeface": "PingFang SC",
+              "color": "#AFA79D"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 29,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vahoza1g",
+      "id": "29",
+      "bbox": [
+        1188,
+        668,
+        38,
+        24
+      ],
+      "geometry": "rect",
+      "text": "05",
+      "textPreview": "05",
+      "resolvedFontSize": 12,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 12,
+        "typeface": "Aptos",
+        "color": "#AFA79D",
+        "alignment": "right",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "05"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "05",
+          "resolvedTextStyle": {
+            "fontSize": 12,
+            "typeface": "Aptos",
+            "color": "#AFA79D",
+            "alignment": "right"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "05",
+              "fontSize": 12,
+              "typeface": "Aptos",
+              "color": "#AFA79D"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

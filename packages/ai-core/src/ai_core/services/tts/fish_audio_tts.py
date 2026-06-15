@@ -13,6 +13,7 @@ asyncio ContextVar so concurrent requests don't clobber each other.
 """
 
 import math
+from collections.abc import AsyncIterator
 from contextvars import ContextVar
 
 import httpx
@@ -330,14 +331,12 @@ class FishAudioTTSProvider(TTSProvider):
             # S2-Pro uses [bracket] syntax
             return f"[{emotion_tag}] {text}"
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=8),
-        retry=retry_if_exception_type(_RETRYABLE),
-        reraise=True,
-    )
-    async def _call_api(self, text: str, voice: str | None, prosody: dict) -> bytes:
-        """Call Fish Audio TTS API and return audio bytes."""
+    def _build_body(self, text: str, voice: str | None, prosody: dict) -> tuple[dict, str]:
+        """Build the Fish TTS request body and resolve the voice id.
+
+        Returns (body, resolved_voice) so both the blocking and streaming
+        call paths share identical request construction.
+        """
         body: dict = {
             "text": text,
             "format": "mp3",
@@ -346,7 +345,7 @@ class FishAudioTTSProvider(TTSProvider):
             "temperature": 0.7,
             "top_p": 0.8,
             "chunk_length": 200,
-            "latency": "balanced",
+            "latency": "balanced",  # Fish's low-latency mode (~300ms first packet)
         }
 
         # Voice resolution order: character-level clone > explicit voice_id arg >
@@ -364,9 +363,19 @@ class FishAudioTTSProvider(TTSProvider):
             )
         if resolved:
             body["reference_id"] = resolved
-
         if prosody:
             body["prosody"] = prosody
+        return body, resolved or "none"
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=8),
+        retry=retry_if_exception_type(_RETRYABLE),
+        reraise=True,
+    )
+    async def _call_api(self, text: str, voice: str | None, prosody: dict) -> bytes:
+        """Call Fish Audio TTS API and return audio bytes."""
+        body, resolved = self._build_body(text, voice, prosody)
 
         resp = await self._client.post(
             _TTS_ENDPOINT,
@@ -389,11 +398,51 @@ class FishAudioTTSProvider(TTSProvider):
             "tts.fish_audio_synthesize",
             text_len=len(text),
             voice_input=voice or "none",
-            voice_resolved=resolved or "none",
+            voice_resolved=resolved,
             audio_bytes=len(audio),
             speed=prosody.get("speed", 1.0),
         )
         return audio
+
+    async def _call_api_stream(
+        self, text: str, voice: str | None, prosody: dict
+    ) -> AsyncIterator[bytes]:
+        """Stream Fish Audio TTS output, yielding MP3 byte chunks as generated.
+
+        No tenacity retry here: once bytes have been yielded a retry would
+        duplicate audio. Connection failures before the first chunk surface
+        as an exception so the caller can fall back to a different provider.
+        """
+        body, resolved = self._build_body(text, voice, prosody)
+
+        total = 0
+        async with self._client.stream(
+            "POST",
+            _TTS_ENDPOINT,
+            json=body,
+            headers={"model": self.model},
+        ) as resp:
+            if resp.status_code == 401:
+                raise RuntimeError("Fish Audio: authentication failed")
+            if resp.status_code == 402:
+                raise RuntimeError("Fish Audio: insufficient credits")
+            if resp.status_code != 200:
+                detail = (await resp.aread())[:200]
+                raise RuntimeError(f"Fish Audio: HTTP {resp.status_code} - {detail!r}")
+            async for chunk in resp.aiter_bytes():
+                if chunk:
+                    total += len(chunk)
+                    yield chunk
+
+        if total < 100:
+            raise RuntimeError("Fish Audio: empty audio response")
+        logger.info(
+            "tts.fish_audio_stream",
+            text_len=len(text),
+            voice_resolved=resolved,
+            audio_bytes=total,
+            speed=prosody.get("speed", 1.0),
+        )
 
     async def synthesize(
         self,
@@ -428,6 +477,33 @@ class FishAudioTTSProvider(TTSProvider):
         prosody = {"speed": round(fish_speed, 2), "volume": 0}
 
         return await self._call_api(text_with_emotion, voice, prosody)
+
+    async def synthesize_stream(
+        self,
+        text: str,
+        voice: str | None = None,
+        speed: float = 1.0,
+        ssml_pitch: float = 1.0,
+        ssml_rate: float = 1.0,
+        ssml_effect: str = "",
+    ) -> AsyncIterator[bytes]:
+        """Stream MP3 audio bytes as Fish generates them (lower first-audio).
+
+        Mirrors ``synthesize`` but yields progressive MP3 chunks. A matched
+        pre-recorded clip is yielded verbatim as a single chunk.
+        """
+        clip = await self._resolve_audio_clip(text)
+        if clip is not None:
+            yield clip
+            return
+
+        fish_speed = max(0.5, min(2.0, ssml_rate * speed))
+        emotion_tag = EMOTION_TAGS.get(ssml_effect, "")
+        text_with_emotion = self._wrap_emotion(text, emotion_tag)
+        prosody = {"speed": round(fish_speed, 2), "volume": 0}
+
+        async for chunk in self._call_api_stream(text_with_emotion, voice, prosody):
+            yield chunk
 
     async def _resolve_audio_clip(self, text: str) -> bytes | None:
         """Return pre-recorded audio bytes if text exactly matches a clip key.

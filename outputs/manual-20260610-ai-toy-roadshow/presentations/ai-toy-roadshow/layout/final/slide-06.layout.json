@@ -1,0 +1,1351 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/1ojinr",
+    "id": "1ojinr",
+    "slide": 6,
+    "layoutId": "447d218e-6f76-48fd-a840-83baf51d3271",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "8b035b6f-08ab-4e0d-8c98-78e2d2b7889a",
+    "masterLayoutName": "Master",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Aptos",
+      "PingFang SC"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "447d218e-6f76-48fd-a840-83baf51d3271",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "8b035b6f-08ab-4e0d-8c98-78e2d2b7889a",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "8b035b6f-08ab-4e0d-8c98-78e2d2b7889a",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/1gvy90je",
+      "id": "1",
+      "bbox": [
+        0,
+        0,
+        1280,
+        720
+      ],
+      "geometry": "rect",
+      "fillColor": "#F7F1E6",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/qtcj6tov",
+      "id": "2",
+      "bbox": [
+        56,
+        50,
+        26,
+        3
+      ],
+      "geometry": "rect",
+      "fillColor": "#121110",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/je9cvixc",
+      "id": "3",
+      "bbox": [
+        96,
+        42,
+        520,
+        22
+      ],
+      "geometry": "rect",
+      "text": "HARDWARE PATH",
+      "textPreview": "HARDWARE PATH",
+      "resolvedFontSize": 11,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 11,
+        "typeface": "Aptos",
+        "color": "#121110",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "HARDWARE PATH"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "HARDWARE PATH",
+          "resolvedTextStyle": {
+            "fontSize": 11,
+            "typeface": "Aptos",
+            "color": "#121110",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "HARDWARE PATH",
+              "fontSize": 11,
+              "typeface": "Aptos",
+              "color": "#121110",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/87ed8bat",
+      "id": "4",
+      "bbox": [
+        56,
+        82,
+        860,
+        78.2
+      ],
+      "geometry": "rect",
+      "text": "硬件路线要从“舵机清单”升级成量产风险图。",
+      "textPreview": "硬件路线要从“舵机清单”升级成量产风险图。",
+      "resolvedFontSize": 34,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 34,
+        "typeface": "PingFang SC",
+        "color": "#121110",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "硬件路线要从“舵机清单”升级成量产风险图。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "硬件路线要从“舵机清单”升级成量产风险图。",
+          "resolvedTextStyle": {
+            "fontSize": 34,
+            "typeface": "PingFang SC",
+            "color": "#121110",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "硬件路线要从“舵机清单”升级成量产风险图。",
+              "fontSize": 34,
+              "typeface": "PingFang SC",
+              "color": "#121110",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/xs72x4na",
+      "id": "5",
+      "bbox": [
+        58,
+        172,
+        730,
+        72
+      ],
+      "geometry": "rect",
+      "text": "投资人不只问能不能动，还会问成本、可靠性、售后和供应链。",
+      "textPreview": "投资人不只问能不能动，还会问成本、可靠性、售后和供应链。",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 16,
+        "typeface": "PingFang SC",
+        "color": "#433F3A",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "投资人不只问能不能动，还会问成本、可靠性、售后和供应链。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "投资人不只问能不能动，还会问成本、可靠性、售后和供应链。",
+          "resolvedTextStyle": {
+            "fontSize": 16,
+            "typeface": "PingFang SC",
+            "color": "#433F3A",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "投资人不只问能不能动，还会问成本、可靠性、售后和供应链。",
+              "fontSize": 16,
+              "typeface": "PingFang SC",
+              "color": "#433F3A"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/q1orytsv",
+      "id": "6",
+      "bbox": [
+        66,
+        284,
+        160,
+        58
+      ],
+      "geometry": "rect",
+      "fillColor": "#FF5A47",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/fmlkjm1c",
+      "id": "7",
+      "bbox": [
+        78,
+        296,
+        136,
+        38
+      ],
+      "geometry": "rect",
+      "text": "输入",
+      "textPreview": "输入",
+      "resolvedFontSize": 17,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 17,
+        "typeface": "PingFang SC",
+        "color": "#121110",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "输入"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "输入",
+          "resolvedTextStyle": {
+            "fontSize": 17,
+            "typeface": "PingFang SC",
+            "color": "#121110",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "输入",
+              "fontSize": 17,
+              "typeface": "PingFang SC",
+              "color": "#121110",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/8jqh0fep",
+      "id": "8",
+      "bbox": [
+        42,
+        372,
+        210,
+        86
+      ],
+      "geometry": "rect",
+      "text": "摄像头/触摸/麦克风\n识别用户、接近、情绪线索",
+      "textPreview": "摄像头/触摸/麦克风 | 识别用户、接近、情绪线索",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 13,
+        "typeface": "PingFang SC",
+        "color": "#443F39",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "摄像头/触摸/麦克风"
+          },
+          {
+            "index": 2,
+            "text": "识别用户、接近、情绪线索"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "摄像头/触摸/麦克风",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "typeface": "PingFang SC",
+            "color": "#443F39",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "摄像头/触摸/麦克风",
+              "fontSize": 13,
+              "typeface": "PingFang SC",
+              "color": "#443F39"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "识别用户、接近、情绪线索",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "typeface": "PingFang SC",
+            "color": "#443F39",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "识别用户、接近、情绪线索",
+              "fontSize": 13,
+              "typeface": "PingFang SC",
+              "color": "#443F39"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/x4nap4r6",
+      "id": "9",
+      "bbox": [
+        244,
+        312,
+        94,
+        4
+      ],
+      "geometry": "rect",
+      "fillColor": "#BFB6AA",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/1w7mp0bi",
+      "id": "10",
+      "bbox": [
+        366,
+        284,
+        160,
+        58
+      ],
+      "geometry": "rect",
+      "fillColor": "#20C9B8",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/8bat47y1",
+      "id": "11",
+      "bbox": [
+        378,
+        296,
+        136,
+        38
+      ],
+      "geometry": "rect",
+      "text": "AI Core",
+      "textPreview": "AI Core",
+      "resolvedFontSize": 17,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 17,
+        "typeface": "PingFang SC",
+        "color": "#121110",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "AI Core"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "AI Core",
+          "resolvedTextStyle": {
+            "fontSize": 17,
+            "typeface": "PingFang SC",
+            "color": "#121110",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "AI Core",
+              "fontSize": 17,
+              "typeface": "PingFang SC",
+              "color": "#121110",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/jqh0fepk",
+      "id": "12",
+      "bbox": [
+        342,
+        372,
+        210,
+        86
+      ],
+      "geometry": "rect",
+      "text": "记忆检索\nPAD 情绪\n语音与动作决策",
+      "textPreview": "记忆检索 | PAD 情绪 | 语音与动作决策",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 13,
+        "typeface": "PingFang SC",
+        "color": "#443F39",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "记忆检索"
+          },
+          {
+            "index": 2,
+            "text": "PAD 情绪"
+          },
+          {
+            "index": 3,
+            "text": "语音与动作决策"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "记忆检索",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "typeface": "PingFang SC",
+            "color": "#443F39",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "记忆检索",
+              "fontSize": 13,
+              "typeface": "PingFang SC",
+              "color": "#443F39"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "PAD 情绪",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "typeface": "PingFang SC",
+            "color": "#443F39",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "PAD 情绪",
+              "fontSize": 13,
+              "typeface": "PingFang SC",
+              "color": "#443F39"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 3,
+          "text": "语音与动作决策",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "typeface": "PingFang SC",
+            "color": "#443F39",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "语音与动作决策",
+              "fontSize": 13,
+              "typeface": "PingFang SC",
+              "color": "#443F39"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/q5o7qpg3",
+      "id": "13",
+      "bbox": [
+        544,
+        312,
+        94,
+        4
+      ],
+      "geometry": "rect",
+      "fillColor": "#BFB6AA",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/18jqh0fe",
+      "id": "14",
+      "bbox": [
+        666,
+        284,
+        160,
+        58
+      ],
+      "geometry": "rect",
+      "fillColor": "#FFD166",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/8nqxs72x",
+      "id": "15",
+      "bbox": [
+        678,
+        296,
+        136,
+        38
+      ],
+      "geometry": "rect",
+      "text": "输出",
+      "textPreview": "输出",
+      "resolvedFontSize": 17,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 17,
+        "typeface": "PingFang SC",
+        "color": "#121110",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "输出"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "输出",
+          "resolvedTextStyle": {
+            "fontSize": 17,
+            "typeface": "PingFang SC",
+            "color": "#121110",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "输出",
+              "fontSize": 17,
+              "typeface": "PingFang SC",
+              "color": "#121110",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 16,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/j2t83itg",
+      "id": "16",
+      "bbox": [
+        642,
+        372,
+        210,
+        86
+      ],
+      "geometry": "rect",
+      "text": "眼球/眼睑/眉毛/嘴巴\n头部云台/LED/震动",
+      "textPreview": "眼球/眼睑/眉毛/嘴巴 | 头部云台/LED/震动",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 13,
+        "typeface": "PingFang SC",
+        "color": "#443F39",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "眼球/眼睑/眉毛/嘴巴"
+          },
+          {
+            "index": 2,
+            "text": "头部云台/LED/震动"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "眼球/眼睑/眉毛/嘴巴",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "typeface": "PingFang SC",
+            "color": "#443F39",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "眼球/眼睑/眉毛/嘴巴",
+              "fontSize": 13,
+              "typeface": "PingFang SC",
+              "color": "#443F39"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "头部云台/LED/震动",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "typeface": "PingFang SC",
+            "color": "#443F39",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "头部云台/LED/震动",
+              "fontSize": 13,
+              "typeface": "PingFang SC",
+              "color": "#443F39"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 17,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/qh0fepkz",
+      "id": "17",
+      "bbox": [
+        844,
+        312,
+        94,
+        4
+      ],
+      "geometry": "rect",
+      "fillColor": "#BFB6AA",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 18,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/1cfa9w3m",
+      "id": "18",
+      "bbox": [
+        966,
+        284,
+        160,
+        58
+      ],
+      "geometry": "rect",
+      "fillColor": "#121110",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 19,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/crmhk3q5",
+      "id": "19",
+      "bbox": [
+        978,
+        296,
+        136,
+        38
+      ],
+      "geometry": "rect",
+      "text": "量产门槛",
+      "textPreview": "量产门槛",
+      "resolvedFontSize": 17,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 17,
+        "typeface": "PingFang SC",
+        "color": "#FFF9EE",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "量产门槛"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "量产门槛",
+          "resolvedTextStyle": {
+            "fontSize": 17,
+            "typeface": "PingFang SC",
+            "color": "#FFF9EE",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "量产门槛",
+              "fontSize": 17,
+              "typeface": "PingFang SC",
+              "color": "#FFF9EE",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 20,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/sfil0rqd",
+      "id": "20",
+      "bbox": [
+        942,
+        372,
+        210,
+        86
+      ],
+      "geometry": "rect",
+      "text": "BOM / 装配良率\n续航 / 故障率 / 安规",
+      "textPreview": "BOM / 装配良率 | 续航 / 故障率 / 安规",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 13,
+        "typeface": "PingFang SC",
+        "color": "#443F39",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "BOM / 装配良率"
+          },
+          {
+            "index": 2,
+            "text": "续航 / 故障率 / 安规"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "BOM / 装配良率",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "typeface": "PingFang SC",
+            "color": "#443F39",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "BOM / 装配良率",
+              "fontSize": 13,
+              "typeface": "PingFang SC",
+              "color": "#443F39"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "续航 / 故障率 / 安规",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "typeface": "PingFang SC",
+            "color": "#443F39",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "续航 / 故障率 / 安规",
+              "fontSize": 13,
+              "typeface": "PingFang SC",
+              "color": "#443F39"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 21,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/h0fepkzu",
+      "id": "21",
+      "bbox": [
+        104,
+        526,
+        1072,
+        64
+      ],
+      "geometry": "rect",
+      "fillColor": "#121110",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 22,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/a9w3m94f",
+      "id": "22",
+      "bbox": [
+        132,
+        546,
+        1010,
+        30
+      ],
+      "geometry": "rect",
+      "text": "融资前必须补：1) 第一版样机视频；2) 目标 BOM 区间；3) 核心表情机构寿命测试；4) 小批量装配方案。",
+      "textPreview": "融资前必须补：1) 第一版样机视频；2) 目标 BOM 区间；3) 核心表情机构寿命测试；4) 小批量装配方案。",
+      "resolvedFontSize": 17,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 17,
+        "typeface": "PingFang SC",
+        "color": "#FFF9EE",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "融资前必须补：1) 第一版样机视频；2) 目标 BOM 区间；3) 核心表情机构寿命测试；4) 小批量装配方案。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "融资前必须补：1) 第一版样机视频；2) 目标 BOM 区间；3) 核心表情机构寿命测试；4) 小批量装配方案。",
+          "resolvedTextStyle": {
+            "fontSize": 17,
+            "typeface": "PingFang SC",
+            "color": "#FFF9EE",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "融资前必须补：1) 第一版样机视频；2) 目标 BOM 区间；3) 核心表情机构寿命测试；4) 小批量装配方案。",
+              "fontSize": 17,
+              "typeface": "PingFang SC",
+              "color": "#FFF9EE",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 23,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/zupwb2hw",
+      "id": "23",
+      "bbox": [
+        104,
+        616,
+        900,
+        18
+      ],
+      "geometry": "rect",
+      "text": "原稿中的舵机、RGB LED、两轴云台、耳朵/头饰小动作保留为输出组件，但不再作为主叙事。",
+      "textPreview": "原稿中的舵机、RGB LED、两轴云台、耳朵/头饰小动作保留为输出组件，但不再作为主叙事。",
+      "resolvedFontSize": 11,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 11,
+        "typeface": "PingFang SC",
+        "color": "#625B54",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "原稿中的舵机、RGB LED、两轴云台、耳朵/头饰小动作保留为输出组件，但不再作为主叙事。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "原稿中的舵机、RGB LED、两轴云台、耳朵/头饰小动作保留为输出组件，但不再作为主叙事。",
+          "resolvedTextStyle": {
+            "fontSize": 11,
+            "typeface": "PingFang SC",
+            "color": "#625B54",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "原稿中的舵机、RGB LED、两轴云台、耳朵/头饰小动作保留为输出组件，但不再作为主叙事。",
+              "fontSize": 11,
+              "typeface": "PingFang SC",
+              "color": "#625B54"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 24,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/orytsvu9",
+      "id": "24",
+      "bbox": [
+        56,
+        674,
+        980,
+        20
+      ],
+      "geometry": "rect",
+      "text": "Hardware diligence page",
+      "textPreview": "Hardware diligence page",
+      "resolvedFontSize": 10,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 10,
+        "typeface": "PingFang SC",
+        "color": "#AFA79D",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Hardware diligence page"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Hardware diligence page",
+          "resolvedTextStyle": {
+            "fontSize": 10,
+            "typeface": "PingFang SC",
+            "color": "#AFA79D",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Hardware diligence page",
+              "fontSize": 10,
+              "typeface": "PingFang SC",
+              "color": "#AFA79D"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 25,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/hcrmhk3q",
+      "id": "25",
+      "bbox": [
+        1188,
+        668,
+        38,
+        24
+      ],
+      "geometry": "rect",
+      "text": "06",
+      "textPreview": "06",
+      "resolvedFontSize": 12,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 12,
+        "typeface": "Aptos",
+        "color": "#AFA79D",
+        "alignment": "right",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "06"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "06",
+          "resolvedTextStyle": {
+            "fontSize": 12,
+            "typeface": "Aptos",
+            "color": "#AFA79D",
+            "alignment": "right"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "06",
+              "fontSize": 12,
+              "typeface": "Aptos",
+              "color": "#AFA79D"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

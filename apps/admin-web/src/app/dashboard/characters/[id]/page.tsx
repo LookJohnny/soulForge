@@ -33,6 +33,10 @@ export default async function CharacterDetailPage({
   const personalityDesc = personalityToText(personality);
   const emoji = getCharacterEmoji(character.species);
   const gradient = getCharacterGradient(character.id);
+  const hasClonedVoice = Boolean(
+    (character as { voiceCloneRefId?: string }).voiceCloneRefId ||
+    (character.voice as { fishAudioId?: string | null } | null)?.fishAudioId
+  );
   const values = Object.values(personality);
   const soulPower = values.length > 0
     ? Math.round(values.reduce((a, b) => a + b, 0) / values.length)
@@ -186,7 +190,7 @@ export default async function CharacterDetailPage({
           )}
           <div>
             <span className="text-[10px] text-white/20">音色</span>
-            {(character as { voiceCloneRefId?: string; voiceCloneUrl?: string }).voiceCloneRefId ? (
+            {hasClonedVoice ? (
               <p className="text-[13px] text-violet-300/70 mt-1">&#9835; 声音克隆 (Fish Audio) · {character.voiceSpeed}x</p>
             ) : (character as { voiceCloneUrl?: string }).voiceCloneUrl ? (
               <p className="text-[13px] text-amber-300/70 mt-1">&#9835; 克隆样本已上传，待生成 · {character.voiceSpeed}x</p>

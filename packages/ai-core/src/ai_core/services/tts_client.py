@@ -2,6 +2,7 @@
 
 import contextlib
 import re
+from collections.abc import AsyncIterator
 from typing import Any
 
 import structlog
@@ -148,6 +149,71 @@ class TTSClient:
                     ssml_rate,
                     ssml_effect,
                 )
+            raise
+
+    def supports_streaming(self) -> bool:
+        """True when the active provider can stream audio chunk-by-chunk."""
+        return hasattr(self._provider, "synthesize_stream")
+
+    async def synthesize_stream(
+        self,
+        text: str,
+        voice: str | None = None,
+        speed: float = 1.0,
+        pitch_rate: int = 0,
+        speech_rate: int = 0,
+        ssml_pitch: float = 1.0,
+        ssml_rate: float = 1.0,
+        ssml_effect: str = "",
+    ) -> AsyncIterator[bytes]:
+        """Stream synthesized audio as byte chunks.
+
+        Falls back to a single full-clip chunk when the active provider can't
+        stream, or to the fallback provider if streaming fails before any
+        bytes are produced. Once chunks have been emitted a mid-stream error
+        cannot be recovered (retrying would duplicate audio), so it is logged
+        and the stream ends.
+        """
+        text = _clean_for_tts(text)
+        if not text:
+            return
+        speed = _coerce_float(speed, 1.0, 0.5, 2.0)
+        ssml_pitch = _coerce_float(ssml_pitch, 1.0, 0.5, 2.0)
+        ssml_rate = _coerce_float(ssml_rate, 1.0, 0.5, 2.0)
+
+        if not hasattr(self._provider, "synthesize_stream"):
+            audio = await self.synthesize(
+                text, voice, speed, pitch_rate, speech_rate, ssml_pitch, ssml_rate, ssml_effect
+            )
+            if audio:
+                yield audio
+            return
+
+        emitted = False
+        try:
+            async for chunk in self._provider.synthesize_stream(
+                text=text,
+                voice=voice,
+                speed=speed,
+                ssml_pitch=ssml_pitch,
+                ssml_rate=ssml_rate,
+                ssml_effect=ssml_effect,
+            ):
+                if chunk:
+                    emitted = True
+                    yield chunk
+        except Exception as e:
+            if emitted:
+                logger.warning("tts.stream_failed_midway", error=str(e))
+                return
+            if self._fallback:
+                logger.warning("tts.stream_primary_failed_using_fallback", error=str(e))
+                audio = await self._fallback.synthesize(
+                    text, voice, speed, pitch_rate, speech_rate, ssml_pitch, ssml_rate, ssml_effect
+                )
+                if audio:
+                    yield audio
+                return
             raise
 
     def get_preset_voices(self) -> dict[str, str]:

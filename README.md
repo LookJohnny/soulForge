@@ -182,6 +182,8 @@ PAD 情绪值直接驱动物理硬件：
 
 从简单的 topic/preference/event 记忆升级为可审计、可管理、可安全过滤的五层记忆系统：
 
+底层保留不可变 `raw_event_logs` 事件流；五层记忆、反思和行为规则是可回滚、可审计的派生层。
+
 | Layer | 记什么 | 用途 |
 |-------|--------|------|
 | `identity` | 用户身份、长期稳定背景 | 保持角色对用户的长期认识 |
@@ -191,20 +193,39 @@ PAD 情绪值直接驱动物理硬件：
 | `private_state` | 敏感状态、情绪低谷、隐私信息 | 受策略保护，只在安全场景读取 |
 
 - **五层模型** — `identity` / `preference` / `event` / `relationship` / `private_state` 分层存储
+- **原始事件流** — `/memory/events` 记录对话、触摸、设备状态等 raw event，派生记忆通过 id 溯源
 - **隐式/显式区分** — `source=IMPLICIT|EXPLICIT|SYSTEM`，敏感记忆默认需要确认
 - **儿童安全读取策略** — child profile 下自动屏蔽高敏感 private_state
+- **三因子检索** — Generative Agents 风格 `recency × importance × relevance` 精排，返回 score 分解
+- **反思编译** — `/memory/reflect` 从高重要度事件生成带 `evidence_refs` 的 relationship/private_state 行为规则
+- **事件反应** — `/memory/reaction` 对低电量、硬件失败、打断、触摸、静默、定时器做低成本 react/ignore 决策
+- **人格适配** — reaction 自动读取 `personality`、`language_mode`、`vocalization_palette`；非语言角色输出拟声词并保留 `semantic_text`
 - **Prompt 注入** — pipeline 检索角色+用户相关记忆，压缩成 `memory_context` 注入系统提示
 - **管理后台** — `/dashboard/memories` 可按角色、用户、layer、敏感级别检索和停用记忆
 - **API** — AI Core `/memory` 负责写入/检索；Admin Web `/api/memories` 负责后台查询和软删除
 - **持久化** — PostgreSQL 新增 companion memory 表和 schema，支持审计字段、置信度、过期时间
 
+### ActionPlan DSL 与硬件安全门
+
+- **DSL Preview API** — AI Core `/actions/preview` 预览 plan/react 输出的 `speech` + `actions`
+- **能力降级** — 根据 `device_manifest` 判断通道可用性，缺 motor/haptic 时按 fallback 链降级到 LED/静默
+- **物理安全** — 音量、LED 亮度、频闪、motor speed/intensity/angle、haptic 强度和时长确定性裁剪
+- **状态安全** — 低电量、过温、夜间/安静模式自动禁止或弱化高功耗/高打扰动作
+- **审计输出** — 每次裁剪、替换、拒绝都返回 `audit` 与 `safety_flags`，可用于 digital twin 和硬件验收
+
 实现入口：
 
 - `packages/ai-core/src/ai_core/services/memory.py`
 - `packages/ai-core/src/ai_core/services/memory_policy.py`
+- `packages/ai-core/src/ai_core/services/companion_reaction.py`
+- `packages/ai-core/src/ai_core/services/action_plan.py`
 - `packages/ai-core/src/ai_core/api/memory.py`
+- `packages/ai-core/src/ai_core/api/actions.py`
 - `apps/admin-web/src/app/dashboard/memories/page.tsx`
 - `packages/database/prisma/migrations/20260603090000_companion_memory_mvp/migration.sql`
+- `packages/database/prisma/migrations/20260612090000_memory_importance_scoring/migration.sql`
+- `packages/database/prisma/migrations/20260612100000_memory_reflections/migration.sql`
+- `packages/database/prisma/migrations/20260612110000_raw_event_log/migration.sql`
 
 ### 关系进化
 
@@ -222,8 +243,11 @@ PAD 情绪值直接驱动物理硬件：
 - **Opus 双向编解码** — 入站: opuslib 逐帧解码 Opus→PCM；出站: MP3→PCM 24kHz→裸 Opus 帧，前5帧预缓冲+60ms帧率控制
 - **Silero VAD 神经网络降噪** — 精准区分人声与环境噪音，只在说话时触发处理
 - **流式 ASR** — 边听边识别（DashScope Recognition 流式模式），说完即出结果，降级到批量 ASR 兜底
-- **流式语音响应** — LLM 流式输出 → 逐句断句 → 每句即时 TTS → Opus 帧推送，首句延迟 ~2 秒
+- **流式语音响应** — LLM 流式输出 → 逐句断句 → 每句即时 TTS → Opus 帧推送
+- **流式 TTS（边合成边播）** — Fish Audio 逐块吐 MP3，Gateway 用 `StreamingMp3OpusEncoder` 滚动窗口增量解码（复用 ffmpeg+opuslib，留 1 帧 overlap 余量防边界抖动），首个 Opus 帧在第一个窗口即推送，不再等整句合成完。由 `TTS_STREAMING` 总开关 + 请求级 `audio_streaming` 双重门控，失败自动回退整段路径
+- **低延迟管道** — ai-core `_prepare_context` 把记忆检索/关系/角色/Redis 读 collapse 成单个 `asyncio.gather`（连接池安全），从 LLM 前的关键路径上削掉数次串行网络往返；分阶段延迟见 `GET /metrics/latency`
 - **语音中断 (Barge-in)** — TTS 播放时检测用户说话，立即停止播放恢复监听
+- **设备事件反应桥接** — Generic/WebAudio 设备可上报 `event/device_event`，Gateway 调用 `/memory/reaction` + `/actions/preview` 返回安全后的 reaction commands
 - **多轮对话记忆** — 会话内最近 10 轮历史传给 LLM，支持上下文连续对话
 - **插件系统** — 关键词匹配跳过 LLM（"几点了""今天星期几""3加5"秒回），插件自动发现
 - **播放/监听状态机** — TTS 播放时抑制回声，420ms 延迟发 stop 信号（匹配官方协议时序）
@@ -241,9 +265,9 @@ PAD 情绪值直接驱动物理硬件：
                               │ 未命中
                           DeepSeek LLM (带10轮历史)
                               │ 流式输出逐句断句
-                          Fish Audio TTS → MP3
+                          Fish Audio TTS → MP3 (流式逐块)
                               │
-                          ffmpeg 24kHz PCM → opuslib Opus帧
+                          滚动窗口增量解码 ffmpeg 24kHz PCM → opuslib Opus帧
                               │ 前5帧预缓冲 + 60ms帧率控制
  扬声器 ◄── Opus帧 ◄────── 逐帧发送 (支持中途打断)
 ```
@@ -275,7 +299,7 @@ soulForge/
 ├── packages/
 │   ├── ai-core/                # Python FastAPI 灵魂引擎
 │   │   └── src/ai_core/
-│   │       ├── api/            # REST 端点 (chat/pipeline/tts/rag/idol/voice_clone)
+│   │       ├── api/            # REST 端点 (chat/pipeline/memory/actions/tts/rag/idol/voice_clone)
 │   │       ├── services/
 │   │       │   ├── response_parser.py    # 结构化 JSON 回复解析
 │   │       │   ├── persona_context.py    # 通用称呼系统
@@ -293,6 +317,8 @@ soulForge/
 │   │       │   │   └── edge_tts_provider.py # Edge TTS (免费降级)
 │   │       │   ├── memory.py             # 五层陪伴记忆服务
 │   │       │   ├── memory_policy.py      # 敏感度/读写策略
+│   │       │   ├── companion_reaction.py # 事件 → react/ignore 决策
+│   │       │   ├── action_plan.py        # ActionPlan DSL 预览 + Safety Gate
 │   │       │   └── ...                   # content-filter/cache/rag
 │   │       └── templates/      # Jinja2 系统 Prompt 模板
 │   │           ├── system_prompt.jinja2       # 通用角色 (第二人称代入)
@@ -378,6 +404,20 @@ uv run pytest tests/test_memory_policy.py
 ruff check src tests/test_memory_policy.py
 ```
 
+Reaction / ActionPlan Safety Gate 验收：
+
+```bash
+cd packages/ai-core
+uv run pytest tests/test_acceptance_reaction_safety.py
+```
+
+Gateway 设备事件桥接验证：
+
+```bash
+cd packages/gateway
+PYTHONPATH=src uv run pytest tests/test_reaction_event.py
+```
+
 ## SSE 流式事件
 
 ### 设备管道 `POST /pipeline/chat/stream`
@@ -386,14 +426,20 @@ ruff check src tests/test_memory_policy.py
 
 | 事件类型 | 时机 | 内容 |
 |---------|------|------|
-| `sentence` | 每句完成 | `{text, audio_data (base64), index}` |
-| `done` | 全部完成 | `{full_text, emotion, pad, relationship_stage, latency_ms}` |
+| `sentence` | 每句完成 | `{text, audio_data (base64\|null), index}` |
+| `audio_chunk` | 流式 TTS 边合成边推 | `{index, audio_data (base64)}` — 仅当请求带 `audio_streaming:true` |
+| `audio_end` | 某句音频结束 | `{index}` — 流式 TTS 的收尾标记 |
+| `done` | 全部完成 | `{full_text, emotion, pad, relationship_stage, latency_ms, stages}` |
 
-示例响应流：
+请求带 `audio_streaming:true`（且 `TTS_STREAMING` 开启、provider 支持）时，音频以 `audio_chunk` 逐块下发，`sentence` 只携带文本（`audio_data:null`）；否则走 legacy 整段路径——`sentence` 直接带完整 `audio_data`。
+
+示例响应流（流式 TTS）：
 ```
-data: {"type":"sentence","text":"嘿嘿，太棒啦！","audio_data":"//uQxA...","index":0}
-data: {"type":"sentence","text":"我是快乐小鼠呀！","audio_data":"SUQzBA...","index":1}
-data: {"type":"done","full_text":"嘿嘿，太棒啦！我是快乐小鼠呀！","emotion":"curious","latency_ms":4051}
+data: {"type":"sentence","text":"嘿嘿，太棒啦！","audio_data":null,"index":0}
+data: {"type":"audio_chunk","index":0,"audio_data":"//uQxA..."}
+data: {"type":"audio_chunk","index":0,"audio_data":"SUQzBA..."}
+data: {"type":"audio_end","index":0}
+data: {"type":"done","full_text":"嘿嘿，太棒啦！","emotion":"curious","latency_ms":4051,"stages":{...}}
 ```
 
 ### Web 预览 `POST /chat/preview/stream`

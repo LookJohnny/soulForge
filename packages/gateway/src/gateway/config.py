@@ -24,6 +24,19 @@ class Settings(BaseSettings):
     # Session
     session_ttl_seconds: int = 3600  # 1 hour
 
+    # Life loop — spontaneous idle behavior that makes the toy feel alive
+    life_loop_enabled: bool = True
+    life_bored_after_s: int = 90  # idle time before soft sounds start
+    life_sleepy_after_s: int = 600  # idle time before yawns/drowsy mumbles
+    life_asleep_after_s: int = 1200  # idle time before sleeping (soft snores)
+    life_night_start_hour: int = 22  # night hours halve the sleepy thresholds
+    life_night_end_hour: int = 7
+    life_llm_thought_prob: float = 0.25  # chance a bored sound becomes an LLM musing
+
+    # Thinking filler — instant "嗯？" while the LLM thinks, masks latency
+    thinking_filler_enabled: bool = True
+    thinking_filler_prob: float = 0.6
+
     # CORS
     allowed_origins: str = ""  # Comma-separated, e.g. "https://app.example.com"
 

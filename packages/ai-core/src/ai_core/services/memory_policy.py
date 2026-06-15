@@ -35,10 +35,12 @@ class MemoryPolicyEngine:
         re.compile(r"(自杀|自残|轻生|割腕|想死|不想活)"),
         re.compile(r"(抑郁症|精神病|心理医生|心理治疗|创伤|家暴)"),
         re.compile(r"(手机号|电话号码|定位|学校地址|家庭住址)"),
+        re.compile(r"(霸凌|欺负|唯一的朋友)"),
     ]
     _MEDIUM_PATTERNS = [
         re.compile(r"(焦虑|崩溃|害怕|孤独|失眠|财务|欠债|收入|工资|家庭矛盾)"),
         re.compile(r"(真实姓名|生日|学校|公司|老板|同事|家人)"),
+        re.compile(r"(秘密|不要告诉|别告诉)"),
     ]
     _ONE_TIME_MARKERS = ("今天", "刚才", "现在", "这会儿", "此刻", "临时", "一会儿", "这次")
     _RELATIONAL_MARKERS = (
@@ -65,6 +67,40 @@ class MemoryPolicyEngine:
         if any(p.search(text) for p in self._MEDIUM_PATTERNS):
             return "MEDIUM"
         return "LOW"
+
+    def score_importance(self, content: str, layer: str | None = None) -> int:
+        """Return a 1-10 poignancy score for companion-memory retrieval.
+
+        Generative Agents asks an LLM to rate memory poignancy. The MVP keeps
+        this deterministic and cheap, with anchors tuned for child/companion
+        contexts. A future async worker can replace this with model scoring
+        without changing the stored field or retrieval formula.
+        """
+        text = content or ""
+        normalized_layer = (layer or "").upper()
+        sensitivity = self.classify_sensitivity(text)
+
+        if sensitivity == "CRITICAL":
+            return 10
+        if any(k in text for k in ("唯一的朋友", "不要告诉", "秘密", "欺负", "霸凌")):
+            return 9
+        if sensitivity == "HIGH":
+            return 9
+        if any(k in text for k in ("宠物去世", "去世", "住院", "考试", "面试", "比赛", "生日")):
+            return 8
+        if sensitivity == "MEDIUM":
+            return 7
+        if normalized_layer == "RELATIONAL" or any(k in text for k in self._RELATIONAL_MARKERS):
+            return 7
+        if normalized_layer == "PROFILE":
+            return 6
+        if normalized_layer == "SEMANTIC":
+            return 6
+        if any(k in text for k in ("喜欢", "不喜欢", "讨厌", "害怕", "想要", "希望")):
+            return 5 if self.is_one_time_mood(text) else 6
+        if any(marker in text for marker in self._ONE_TIME_MARKERS):
+            return 4
+        return 3
 
     def assign_layer(self, extracted_type: str, content: str) -> str:
         mem_type = (extracted_type or "").upper()

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { motion } from "framer-motion";
 import { Flame, Music, Cpu, ChevronRight, Package, Settings } from "lucide-react";
 
@@ -49,7 +48,7 @@ export default function Home() {
               whileTap={{ scale: 0.98 }}
               transition={{ type: "spring", stiffness: 400, damping: 25 }}
             >
-              <Link href={card.href} className="group relative block p-6 rounded-2xl glass overflow-hidden text-left">
+              <a href={card.href} className="group relative block p-6 rounded-2xl glass overflow-hidden text-left">
                 <div className={`absolute inset-0 bg-gradient-to-br ${card.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
                 <div className="relative z-10">
                   <card.icon className="w-6 h-6 text-amber-400/70 mb-4 group-hover:scale-110 transition-transform duration-300" />
@@ -60,7 +59,7 @@ export default function Home() {
                     <ChevronRight className="w-3.5 h-3.5 ml-0.5 group-hover:translate-x-1 transition-transform" />
                   </div>
                 </div>
-              </Link>
+              </a>
             </motion.div>
           ))}
         </motion.div>
@@ -72,13 +71,13 @@ export default function Home() {
           transition={{ duration: 0.7, delay: 0.4 }}
         >
           {cards.slice(3).map((card) => (
-            <Link key={card.href} href={card.href} className="group block p-4 rounded-xl glass text-left hover:bg-white/[0.04] transition-colors">
+            <a key={card.href} href={card.href} className="group block p-4 rounded-xl glass text-left hover:bg-white/[0.04] transition-colors">
               <div className="flex items-center gap-2.5">
                 <card.icon className="w-4 h-4 text-amber-400/50" />
                 <span className="text-[13px] text-white/50 group-hover:text-white/70 transition-colors">{card.title}</span>
                 <ChevronRight className="w-3 h-3 text-white/15 ml-auto group-hover:translate-x-0.5 transition-transform" />
               </div>
-            </Link>
+            </a>
           ))}
         </motion.div>
       </div>

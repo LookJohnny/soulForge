@@ -14,6 +14,9 @@ from gateway.protocols.base import MessageType, OutboundMessage
 from gateway.protocols.registry import registry
 from gateway.session import SessionManager
 from gateway.handlers.audio import AudioHandler
+from gateway.handlers.audio_codec import StreamingMp3OpusEncoder
+from gateway.latency import latency_tracker
+from gateway.life import LifeLoop
 from gateway.pipeline.orchestrator import PipelineOrchestrator
 from gateway.plugins import match_plugin
 
@@ -102,6 +105,10 @@ class WebSocketServer:
                 session_id=session.session_id,
             )
 
+            # Start the life loop — idle hums/yawns/snores + thinking fillers
+            session._life = LifeLoop(self, ws, adapter, session)
+            session._life.start()
+
             # Start idle timeout checker
             async def _idle_checker():
                 IDLE_TIMEOUT = 120  # seconds
@@ -144,6 +151,9 @@ class WebSocketServer:
             if "idle_task" in locals():
                 idle_task.cancel()
             if "session" in locals():
+                life = getattr(session, "_life", None)
+                if life:
+                    life.cancel()
                 self.audio_handler.abort(session)
                 await self.session_manager.remove_session(session.session_id)
 
@@ -190,6 +200,9 @@ class WebSocketServer:
                     payload={"type": "tts", "state": "stop"},
                 )
                 await ws.send_text(await adapter.encode(out))
+
+            elif action == "reaction_event":
+                await self._handle_reaction_event(ws, adapter, session, msg.payload)
 
         elif msg.type == MessageType.TEXT:
             text = msg.payload if isinstance(msg.payload, str) else str(msg.payload)
@@ -251,8 +264,12 @@ class WebSocketServer:
                 await asyncio.sleep(0.1)
 
                 if self.audio_handler.is_speech_complete(session):
+                    # Anchor for first-word latency: VAD said the user stopped talking
+                    t_speech_end = time.monotonic()
                     # Try streaming ASR first (low latency)
                     asr_text = await self.audio_handler.get_streaming_asr_result(session)
+                    session._t_speech_end = t_speech_end
+                    session._asr_finalize_ms = (time.monotonic() - t_speech_end) * 1000
                     audio = self.audio_handler.stop_listening(session)
 
                     # If streaming ASR failed or returned garbage, fall back to batch
@@ -281,6 +298,8 @@ class WebSocketServer:
                     if asr_text:
                         logger.info("gateway.vad_trigger asr=%s", asr_text[:50])
                         session._last_activity = time.monotonic()
+                        if getattr(session, "_life", None):
+                            session._life.notify_activity()
 
                         # Check plugins first — skip LLM for simple queries
                         plugin_result = match_plugin(asr_text)
@@ -346,11 +365,15 @@ class WebSocketServer:
             )
             await ws.send_text(await adapter.encode(text_msg))
 
-            # TTS for the reply
+            # TTS for the reply, in the character's own voice
             try:
                 from gateway.handlers.audio_codec import mp3_to_pcm_24k, pcm_to_opus_frames
 
-                tts = await self._get_quick_tts(text)
+                tts = await self.orchestrator.synthesize_tts(
+                    text,
+                    character_id=session.character_id,
+                    brand_id=session.brand_id,
+                )
                 if tts:
                     ss = OutboundMessage(
                         type=MessageType.TEXT,
@@ -382,31 +405,40 @@ class WebSocketServer:
         except Exception:
             logger.exception("gateway.quick_reply_error")
 
-    async def _get_quick_tts(self, text: str) -> bytes | None:
-        """Get TTS audio via AI Core for a short text."""
-        try:
-            import httpx
+    def _record_voice_turn(
+        self,
+        session,
+        t_ref: float,
+        first_chunk_ms: float | None,
+        first_word_ms: float | None,
+        core_stages: dict | None,
+        interrupted: bool,
+        route: str = "voice_turn",
+    ):
+        """Record one voice turn's latency: speech-end → first Opus frame.
 
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                # Use AI Core's TTS directly — simpler than full pipeline
-                from gateway.config import settings
-
-                resp = await client.post(
-                    f"{settings.ai_core_url}/tts/synthesize",
-                    json={"text": text},
-                    headers={"X-Service-Token": settings.service_token}
-                    if settings.service_token
-                    else {},
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if data.get("audio_data"):
-                        import base64
-
-                        return base64.b64decode(data["audio_data"])
-        except Exception:
-            pass
-        return None
+        `respond` covers up to the last frame sent, excluding the
+        playback-wait sleeps. ai-core's breakdown is merged with a
+        `core_` prefix.
+        """
+        stages = {
+            "asr_finalize": getattr(session, "_asr_finalize_ms", None),
+            "first_chunk": first_chunk_ms,
+            "first_word": first_word_ms,
+            "respond": (time.monotonic() - t_ref) * 1000,
+        }
+        if core_stages:
+            for k, v in core_stages.items():
+                stages[f"core_{k}"] = v
+        stages = {k: v for k, v in stages.items() if v is not None}
+        session._asr_finalize_ms = None
+        latency_tracker.record_turn(route, stages)
+        logger.info(
+            "gateway.latency",
+            route=route,
+            interrupted=interrupted,
+            **{k: int(v) for k, v in stages.items()},
+        )
 
     async def _process_text_and_respond_streaming(self, ws, adapter, session, text: str):
         """Process text from streaming ASR through AI pipeline with TTS playback.
@@ -431,57 +463,131 @@ class WebSocketServer:
             full_text = ""
             interrupted = False
 
-            async for chunk in self.orchestrator.process_text_stream(session, text):
-                if chunk.is_done:
-                    full_text = chunk.full_text or full_text
-                    break
+            # Latency anchors: measure from VAD speech-end when available,
+            # otherwise from the start of processing.
+            t_speech_end = getattr(session, "_t_speech_end", None)
+            session._t_speech_end = None
+            t_ref = t_speech_end if t_speech_end is not None else time.monotonic()
+            first_chunk_ms = None
+            first_word_ms = None
+            core_stages = None
+            frames_sent = 0  # global PRE_BUFFER counter across the whole response
+            PRE_BUFFER = 5
 
-                if getattr(session, "_interrupted", False):
-                    logger.info("gateway.interrupted by user")
-                    interrupted = True
-                    break
+            async def _send_opus_frames(frames):
+                """Send Opus frames to the device with prebuffer + realtime pacing."""
+                nonlocal first_word_ms, total_opus_frames, frames_sent, interrupted
+                for frame in frames:
+                    if getattr(session, "_interrupted", False):
+                        interrupted = True
+                        return
+                    if first_word_ms is None:
+                        first_word_ms = (time.monotonic() - t_ref) * 1000
+                    await ws.send_bytes(frame)
+                    total_opus_frames += 1
+                    if frames_sent < PRE_BUFFER:
+                        frames_sent += 1
+                    else:
+                        await asyncio.sleep(0.06)
 
-                logger.info(
-                    "gateway.sending sentence=%s audio=%d",
-                    chunk.text[:30],
-                    len(chunk.audio_data) if chunk.audio_data else 0,
+            async def _send_sentence_start():
+                ss = OutboundMessage(
+                    type=MessageType.TEXT, payload="", metadata={"state": "sentence_start"}
                 )
-                text_out = OutboundMessage(
-                    type=MessageType.TEXT,
-                    payload=chunk.text,
-                    metadata={"state": "sentence"},
-                )
-                await ws.send_text(await adapter.encode(text_out))
-                full_text += chunk.text
+                await ws.send_text(await adapter.encode(ss))
 
-                if chunk.audio_data:
+            # Thinking filler — instant "嗯？" in the character's voice while
+            # the pipeline works; masks first-word latency.
+            life = getattr(session, "_life", None)
+            filler = life.pop_filler() if life else None
+            if filler:
+                try:
                     ss = OutboundMessage(
                         type=MessageType.TEXT,
                         payload="",
                         metadata={"state": "sentence_start"},
                     )
                     await ws.send_text(await adapter.encode(ss))
-
-                    audio_out = AudioHandler.make_audio_response(chunk.audio_data)
-                    raw = await adapter.encode(audio_out)
+                    raw = await adapter.encode(AudioHandler.make_audio_response(filler))
                     if isinstance(raw, list):
-                        n = len(raw)
-                        logger.info("gateway.sending %d opus frames @24kHz", n)
-                        total_opus_frames += n
-                        PRE_BUFFER = 5
-                        for frame in raw[:PRE_BUFFER]:
+                        for frame in raw:
                             await ws.send_bytes(frame)
-                        for frame in raw[PRE_BUFFER:]:
-                            if getattr(session, "_interrupted", False):
-                                interrupted = True
-                                break
-                            await ws.send_bytes(frame)
-                            await asyncio.sleep(0.06)
                     elif isinstance(raw, bytes):
                         await ws.send_bytes(raw)
+                except Exception:
+                    logger.exception("gateway.filler_error")
 
-                    if interrupted:
-                        break
+            # Per-sentence incremental MP3→Opus encoder (streaming TTS path).
+            enc: StreamingMp3OpusEncoder | None = None
+
+            async for chunk in self.orchestrator.process_text_stream(
+                session, text, stream_audio=True
+            ):
+                if chunk.is_done:
+                    full_text = chunk.full_text or full_text
+                    core_stages = chunk.stages
+                    break
+
+                if first_chunk_ms is None:
+                    first_chunk_ms = (time.monotonic() - t_ref) * 1000
+
+                if getattr(session, "_interrupted", False):
+                    logger.info("gateway.interrupted by user")
+                    interrupted = True
+                    break
+
+                if chunk.kind == "sentence":
+                    text_out = OutboundMessage(
+                        type=MessageType.TEXT,
+                        payload=chunk.text,
+                        metadata={"state": "sentence"},
+                    )
+                    await ws.send_text(await adapter.encode(text_out))
+                    full_text += chunk.text
+
+                    # Legacy whole-clip audio (non-streaming providers ride here).
+                    if chunk.audio_data:
+                        await _send_sentence_start()
+                        raw = await adapter.encode(
+                            AudioHandler.make_audio_response(chunk.audio_data)
+                        )
+                        if isinstance(raw, list):
+                            logger.info("gateway.sending %d opus frames @24kHz", len(raw))
+                            await _send_opus_frames(raw)
+                        elif isinstance(raw, bytes):
+                            if first_word_ms is None:
+                                first_word_ms = (time.monotonic() - t_ref) * 1000
+                            await ws.send_bytes(raw)
+
+                elif chunk.kind == "audio_chunk":
+                    if chunk.audio_data:
+                        if enc is None:
+                            enc = StreamingMp3OpusEncoder()
+                            await _send_sentence_start()
+                        frames = await enc.feed(chunk.audio_data)
+                        if frames:
+                            await _send_opus_frames(frames)
+
+                elif chunk.kind == "audio_end":
+                    if enc is not None:
+                        frames = await enc.finish()
+                        if frames:
+                            await _send_opus_frames(frames)
+                        enc = None
+
+                if interrupted:
+                    break
+
+            # Flush any dangling encoder (e.g. stream ended before audio_end).
+            if enc is not None and not interrupted:
+                tail = await enc.finish()
+                if tail:
+                    await _send_opus_frames(tail)
+
+            # Record before the playback-wait sleeps so "respond" excludes them
+            self._record_voice_turn(
+                session, t_ref, first_chunk_ms, first_word_ms, core_stages, interrupted
+            )
 
             if interrupted:
                 stop = OutboundMessage(
@@ -508,6 +614,8 @@ class WebSocketServer:
 
             await self.session_manager.add_to_history(session.session_id, "user", text)
             await self.session_manager.add_to_history(session.session_id, "assistant", full_text)
+            if getattr(session, "_life", None):
+                session._life.notify_activity()
             logger.info(
                 "gateway.responding done text=%s frames=%d", full_text[:50], total_opus_frames
             )
@@ -579,6 +687,8 @@ class WebSocketServer:
     async def _handle_touch(self, ws, adapter, session, msg):
         """Forward touch event to ai-core and optionally trigger a response."""
         payload = msg.payload if isinstance(msg.payload, dict) else {}
+        if getattr(session, "_life", None):
+            session._life.notify_activity()
         try:
             result = await self.orchestrator.process_touch(session, payload)
             if result and result.get("text"):
@@ -608,6 +718,32 @@ class WebSocketServer:
         except Exception:
             logger.exception("gateway.touch_error")
 
+    async def _handle_reaction_event(self, ws, adapter, session, payload: dict):
+        """Forward normalized device events to ai-core reaction loop."""
+        payload = payload if isinstance(payload, dict) else {}
+        event_type = str(payload.get("event_type") or "").strip()
+        if not event_type:
+            logger.warning("gateway.reaction_event_missing_type")
+            return
+        try:
+            result = await self.orchestrator.process_reaction_event(
+                session,
+                event_type=event_type,
+                event=payload.get("event") or {},
+                context=payload.get("context") or {},
+                device_manifest=payload.get("device_manifest") or {},
+                device_state=payload.get("device_state") or {},
+            )
+            out = OutboundMessage(
+                type=MessageType.CONTROL,
+                payload={"type": "reaction", **result},
+            )
+            await ws.send_text(await adapter.encode(out))
+            if getattr(session, "_life", None):
+                session._life.notify_activity()
+        except Exception:
+            logger.exception("gateway.reaction_event_error")
+
     async def _process_and_respond(self, ws, adapter, session, audio_data: bytes):
         """Process audio through AI pipeline with streaming response.
 
@@ -634,11 +770,22 @@ class WebSocketServer:
             user_text = ""
             interrupted = False
 
+            t_speech_end = getattr(session, "_t_speech_end", None)
+            session._t_speech_end = None
+            t_ref = t_speech_end if t_speech_end is not None else time.monotonic()
+            first_chunk_ms = None
+            first_word_ms = None
+            core_stages = None
+
             async for chunk in self.orchestrator.process_audio_stream(session, audio_data):
                 if chunk.is_done:
                     full_text = chunk.full_text or full_text
                     user_text = chunk.user_text
+                    core_stages = chunk.stages
                     break
+
+                if first_chunk_ms is None:
+                    first_chunk_ms = (time.monotonic() - t_ref) * 1000
 
                 # Check if user interrupted
                 if getattr(session, "_interrupted", False):
@@ -674,6 +821,8 @@ class WebSocketServer:
                         n = len(raw)
                         logger.info("gateway.sending %d opus frames @24kHz", n)
                         total_opus_frames += n
+                        if first_word_ms is None:
+                            first_word_ms = (time.monotonic() - t_ref) * 1000
                         PRE_BUFFER = 5
                         for frame in raw[:PRE_BUFFER]:
                             await ws.send_bytes(frame)
@@ -686,10 +835,22 @@ class WebSocketServer:
                             await ws.send_bytes(frame)
                             await asyncio.sleep(0.06)
                     elif isinstance(raw, bytes):
+                        if first_word_ms is None:
+                            first_word_ms = (time.monotonic() - t_ref) * 1000
                         await ws.send_bytes(raw)
 
                     if interrupted:
                         break
+
+            self._record_voice_turn(
+                session,
+                t_ref,
+                first_chunk_ms,
+                first_word_ms,
+                core_stages,
+                interrupted,
+                route="voice_turn_batch",
+            )
 
             if interrupted:
                 # User interrupted — send stop immediately, skip waiting
@@ -725,6 +886,8 @@ class WebSocketServer:
             if user_text:
                 await self.session_manager.add_to_history(session.session_id, "user", user_text)
             await self.session_manager.add_to_history(session.session_id, "assistant", full_text)
+            if getattr(session, "_life", None):
+                session._life.notify_activity()
 
         except Exception:
             session._playing = False

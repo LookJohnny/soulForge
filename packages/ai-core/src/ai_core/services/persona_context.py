@@ -61,6 +61,29 @@ class PersonaContext:
         return template.replace("{R}", self.user_ref)
 
 
+def idle_input(state: str) -> str:
+    """Input text for spontaneous idle behavior (no one is talking).
+
+    Archetype-independent on purpose: it runs before the character row is
+    loaded in the pipeline. The character's own persona comes from the
+    system prompt, so the musing still sounds like them.
+    """
+    return _IDLE_INPUTS.get(state, _IDLE_INPUTS["bored"])
+
+
+_IDLE_INPUTS: dict[str, str] = {
+    "bored": (
+        "（现在没有人和你说话，你自己待着，有点无聊。"
+        "把此刻心里冒出来的一个小念头轻声说出来，或者哼哼小曲、自言自语。"
+        "最多一句话，不要提问。）"
+    ),
+    "sleepy": (
+        "（夜深了，你越来越困，眼皮直打架。"
+        "打个小哈欠，或者迷迷糊糊地嘟囔一句梦话。最多一句话。）"
+    ),
+}
+
+
 # ── Archetype definitions ─────────────────────────
 
 _ARCHETYPE_MAP: dict[str, PersonaContext] = {

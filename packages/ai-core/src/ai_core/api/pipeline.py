@@ -18,6 +18,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from ai_core.config import settings
 from ai_core.dependencies import (
     get_asr_client,
     get_cache,
@@ -40,6 +41,7 @@ from ai_core.models.schemas import (
     TouchEventResponse,
 )
 from ai_core.services.content_filter import ContentFilter
+from ai_core.services.latency import Stopwatch, latency_tracker
 from ai_core.services.tts.context import prepare_for_character as _tts_prepare_for_character
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
@@ -60,6 +62,7 @@ def _get_brand_id(request: Request) -> str:
 @limiter.limit("30/minute")
 async def chat(req: ChatRequest, request: Request):
     start = time.monotonic()
+    sw = Stopwatch()
     brand_id = _get_brand_id(request)
 
     # 1. Determine user text input
@@ -70,6 +73,13 @@ async def chat(req: ChatRequest, request: Request):
             raise HTTPException(status_code=422, detail="Audio data exceeds 10MB limit")
         asr = await get_asr_client()
         user_text = await asr.recognize(audio_bytes)
+        sw.mark("asr")
+
+    if not user_text and req.idle_mode:
+        # Idle mode — the character is alone; prompt a spontaneous musing.
+        from ai_core.services.persona_context import idle_input
+
+        user_text = idle_input(req.idle_state)
 
     if not user_text:
         raise HTTPException(status_code=400, detail="No input provided (text or audio)")
@@ -80,14 +90,18 @@ async def chat(req: ChatRequest, request: Request):
         logger.warning("content_filter.blocked_input", reason=reason)
         raise HTTPException(status_code=400, detail=f"输入内容被拦截: {reason}")
 
-    # 3. Detect user mood from text
+    # 3. Detect user mood from text. In idle mode nobody spoke — keep the
+    # stored mood untouched.
     emotion_engine = get_emotion_engine()
     user_mood = emotion_engine.detect_user_mood(user_text)
-    await emotion_engine.set_user_mood(req.session_id, user_mood)
+    if not req.idle_mode:
+        await emotion_engine.set_user_mood(req.session_id, user_mood)
 
-    # 3b. Check for recent touch context
+    # 3b. Check for recent touch context (idle turns must not consume it)
     touch_engine = get_touch_engine()
-    touch_ctx = await touch_engine.get_touch_context(req.session_id)
+    touch_ctx = None
+    if not req.idle_mode:
+        touch_ctx = await touch_engine.get_touch_context(req.session_id)
     touch_prompt = ""
     touch_gesture = None
     touch_affinity_bonus = 0
@@ -118,8 +132,11 @@ async def chat(req: ChatRequest, request: Request):
         except (TypeError, ValueError):
             silence_seconds = 0.0
     prev_user_mood = await cache.get(f"prev_user_mood:{req.session_id}")
-    await cache.set(f"last_user_seen:{req.session_id}", str(_now_ts), ttl=3600)
-    await cache.set(f"prev_user_mood:{req.session_id}", user_mood or "neutral", ttl=3600)
+    if not req.idle_mode:
+        # Idle musings must not reset the silence tracking the user's
+        # absence is measured by.
+        await cache.set(f"last_user_seen:{req.session_id}", str(_now_ts), ttl=3600)
+        await cache.set(f"prev_user_mood:{req.session_id}", user_mood or "neutral", ttl=3600)
 
     # 4. Retrieve memories
     memory_service = await get_memory_service()
@@ -141,9 +158,9 @@ async def chat(req: ChatRequest, request: Request):
         depth = rel_engine.get_memory_depth(rel_state["stage"])
         memories = memories[:depth]
 
-    # 6. Proactive trigger (first message of session)
+    # 6. Proactive trigger (first message of session; not for idle musings)
     proactive_line = None
-    if req.end_user_id:
+    if req.end_user_id and not req.idle_mode:
         trigger_svc = get_proactive_trigger()
         proactive_line = await trigger_svc.maybe_generate_trigger(
             end_user_id=req.end_user_id,
@@ -197,6 +214,7 @@ async def chat(req: ChatRequest, request: Request):
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    sw.mark("context")
 
     # 8. LLM inference
     llm = await get_llm_client()
@@ -204,6 +222,7 @@ async def chat(req: ChatRequest, request: Request):
         system_prompt=prompt_result["system_prompt"],
         user_input=user_text,
     )
+    sw.mark("llm")
 
     # 9. Parse structured output — dialogue/action/thought/pad/voice/stance
     from ai_core.services.emotion import extract_inline_emotion
@@ -260,9 +279,12 @@ async def chat(req: ChatRequest, request: Request):
             ssml_effect=prompt_result.get("ssml_effect", ""),
         )
         audio_b64 = base64.b64encode(audio_bytes).decode()
+        sw.mark("tts")
 
-    # 12. Async post-processing (memory + relationship + drift)
-    if req.end_user_id:
+    # 12. Async post-processing (memory + relationship + drift).
+    # Idle musings are the character talking to itself — they must not
+    # create memories or earn relationship points.
+    if req.end_user_id and not req.idle_mode:
         asyncio.create_task(
             memory_service.extract_and_store(
                 end_user_id=req.end_user_id,
@@ -283,9 +305,13 @@ async def chat(req: ChatRequest, request: Request):
         )
 
     latency = int((time.monotonic() - start) * 1000)
+    stages = {k: int(v) for k, v in sw.stages.items()}
+    stages["total"] = latency
+    latency_tracker.record_turn("chat", stages)
     logger.info(
         "pipeline.chat",
         latency_ms=latency,
+        stages=stages,
         character_id=req.character_id,
         emotion=new_emotion,
         stage=rel_state["stage"],
@@ -299,6 +325,7 @@ async def chat(req: ChatRequest, request: Request):
         relationship_stage=rel_state["stage"],
         affinity=rel_state.get("affinity", 0),
         latency_ms=latency,
+        stages=stages,
     )
 
 
@@ -306,8 +333,87 @@ async def chat(req: ChatRequest, request: Request):
 _STREAM_SENTENCE_RE = re.compile(r"[。！？；\n.!?;]|(?:\.{3,})|(?:……+)")
 
 
+def _sse(payload: dict) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+async def _emit_sentence(
+    *,
+    tts,
+    sentence: str,
+    index: int,
+    prompt_result: dict,
+    stage_ms: dict,
+    start: float,
+    stream_audio: bool,
+):
+    """Yield SSE event(s) for one sentence: text, then its audio.
+
+    When ``stream_audio`` is set and the provider supports streaming, the
+    text is sent first (``sentence`` event with audio_data=None), followed by
+    progressive ``audio_chunk`` events and a closing ``audio_end``. This lets
+    the device start decoding/playing before the whole clip is synthesised.
+    Otherwise the whole clip rides on the ``sentence`` event (legacy path).
+    """
+    voice_id = prompt_result.get("voice_id")
+    if not voice_id:
+        yield _sse({"type": "sentence", "text": sentence, "audio_data": None, "index": index})
+        return
+
+    _tts_prepare_for_character(tts, prompt_result)
+
+    if stream_audio and tts.supports_streaming():
+        # Text first so the device can render it immediately.
+        yield _sse({"type": "sentence", "text": sentence, "audio_data": None, "index": index})
+        _t = time.monotonic()
+        first = True
+        try:
+            async for audio_chunk in tts.synthesize_stream(
+                text=sentence,
+                voice=voice_id,
+                speed=prompt_result.get("voice_speed", 1.0),
+                pitch_rate=prompt_result.get("pitch_rate", 0),
+                speech_rate=prompt_result.get("speech_rate", 0),
+            ):
+                if first:
+                    stage_ms.setdefault("first_audio", (time.monotonic() - start) * 1000)
+                    first = False
+                yield _sse(
+                    {
+                        "type": "audio_chunk",
+                        "index": index,
+                        "audio_data": base64.b64encode(audio_chunk).decode(),
+                    }
+                )
+        except Exception:
+            logger.exception("stream.tts_error")
+        stage_ms["tts"] = stage_ms.get("tts", 0.0) + (time.monotonic() - _t) * 1000
+        yield _sse({"type": "audio_end", "index": index})
+        return
+
+    # Non-streaming providers (or streaming disabled): whole clip per sentence.
+    audio_b64 = None
+    try:
+        _t = time.monotonic()
+        audio_bytes = await tts.synthesize(
+            text=sentence,
+            voice=voice_id,
+            speed=prompt_result.get("voice_speed", 1.0),
+            pitch_rate=prompt_result.get("pitch_rate", 0),
+            speech_rate=prompt_result.get("speech_rate", 0),
+        )
+        stage_ms["tts"] = stage_ms.get("tts", 0.0) + (time.monotonic() - _t) * 1000
+        audio_b64 = base64.b64encode(audio_bytes).decode()
+    except Exception:
+        logger.exception("stream.tts_error")
+    if audio_b64:
+        stage_ms.setdefault("first_audio", (time.monotonic() - start) * 1000)
+    yield _sse({"type": "sentence", "text": sentence, "audio_data": audio_b64, "index": index})
+
+
 async def _prepare_context(req: ChatRequest, brand_id: str):
     """Shared context preparation for both blocking and streaming endpoints."""
+    sw = Stopwatch()
     # 1. Determine user text input
     user_text = req.text_input
     if not user_text and req.audio_data:
@@ -316,6 +422,7 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
             raise HTTPException(status_code=422, detail="Audio data exceeds 10MB limit")
         asr = await get_asr_client()
         user_text = await asr.recognize(audio_bytes, audio_format=req.audio_format)
+        sw.mark("asr")
         logger.info(
             "pipeline.asr_result text=%s bytes=%d",
             user_text[:50] if user_text else "(empty)",
@@ -330,13 +437,62 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
     if not is_safe:
         raise HTTPException(status_code=400, detail=f"输入内容被拦截: {reason}")
 
-    # 3. Detect user mood + touch context
+    # 3. Detect user mood (sync, text-based)
     emotion_engine = get_emotion_engine()
     user_mood = emotion_engine.detect_user_mood(user_text)
-    await emotion_engine.set_user_mood(req.session_id, user_mood)
 
+    # Resolve service singletons (cheap once initialised) before fanning out.
     touch_engine = get_touch_engine()
-    touch_ctx = await touch_engine.get_touch_context(req.session_id)
+    cache = get_cache()
+    memory_service = await get_memory_service()
+    rel_engine = await get_relationship_engine()
+    builder = await get_prompt_builder()
+
+    # 3b. Fan out every independent read concurrently. These hit different
+    # stores (Redis emotion/pad/cache via a pooled client, relationship DB,
+    # character DB, memory vector search) and have no ordering dependency, so
+    # collapsing the serial chain into one gather removes several network
+    # round-trips from the pre-LLM critical path. Memory retrieval does not
+    # consume the touch-adjusted mood (context['user_mood'] is unused
+    # downstream), so launching it before touch resolution is safe.
+    async def _retrieve_memories() -> list:
+        if not req.end_user_id:
+            return []
+        return await memory_service.retrieve_memories(
+            req.end_user_id,
+            req.character_id,
+            query=user_text,
+            context={"user_mood": user_mood},
+        )
+
+    async def _rel_state() -> dict:
+        if not req.end_user_id:
+            return {"stage": "STRANGER", "affinity": 0}
+        return await rel_engine.get_state(req.end_user_id, req.character_id)
+
+    (
+        _,
+        touch_ctx,
+        emotion_state,
+        prev_pad,
+        _last_seen_raw,
+        prev_user_mood,
+        rel_state,
+        _char_row,
+        memories,
+    ) = await asyncio.gather(
+        emotion_engine.set_user_mood(req.session_id, user_mood),
+        touch_engine.get_touch_context(req.session_id),
+        emotion_engine.get_emotion(req.session_id),
+        emotion_engine.get_pad_state(req.session_id),
+        cache.get(f"last_user_seen:{req.session_id}"),
+        cache.get(f"prev_user_mood:{req.session_id}"),
+        _rel_state(),
+        builder._get_character(req.character_id, brand_id),
+        _retrieve_memories(),
+    )
+
+    # 3c. Resolve touch context (may override a neutral mood)
     touch_prompt = ""
     touch_gesture = None
     touch_affinity_bonus = 0
@@ -350,42 +506,25 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
             await emotion_engine.set_user_mood(req.session_id, user_mood)
         await touch_engine.clear_touch_context(req.session_id)
 
-    emotion_state = await emotion_engine.get_emotion(req.session_id)
-    prev_pad = await emotion_engine.get_pad_state(req.session_id)
-
-    # Track silence + mood-shift for mid-session embodiment
-    cache = get_cache()
+    # 3d. Silence + mood-shift tracking for mid-session embodiment
     _now_ts = time.time()
-    _last_seen_raw = await cache.get(f"last_user_seen:{req.session_id}")
     silence_seconds = 0.0
     if _last_seen_raw:
         try:
             silence_seconds = max(0.0, _now_ts - float(_last_seen_raw))
         except (TypeError, ValueError):
             silence_seconds = 0.0
-    prev_user_mood = await cache.get(f"prev_user_mood:{req.session_id}")
-    await cache.set(f"last_user_seen:{req.session_id}", str(_now_ts), ttl=3600)
-    await cache.set(f"prev_user_mood:{req.session_id}", user_mood or "neutral", ttl=3600)
+    await asyncio.gather(
+        cache.set(f"last_user_seen:{req.session_id}", str(_now_ts), ttl=3600),
+        cache.set(f"prev_user_mood:{req.session_id}", user_mood or "neutral", ttl=3600),
+    )
 
-    # 4. Memories + relationship
-    memory_service = await get_memory_service()
-    memories = []
+    # 4. Limit memories by relationship depth
     if req.end_user_id:
-        memories = await memory_service.retrieve_memories(
-            req.end_user_id,
-            req.character_id,
-            query=user_text,
-            context={"user_mood": user_mood},
-        )
-
-    rel_engine = await get_relationship_engine()
-    rel_state = {"stage": "STRANGER", "affinity": 0}
-    if req.end_user_id:
-        rel_state = await rel_engine.get_state(req.end_user_id, req.character_id)
         depth = rel_engine.get_memory_depth(rel_state["stage"])
         memories = memories[:depth]
 
-    # 5. Proactive trigger
+    # 5. Proactive trigger (needs memories + relationship)
     proactive_line = None
     if req.end_user_id:
         trigger_svc = get_proactive_trigger()
@@ -401,8 +540,6 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
     from ai_core.services.embodiment import build_mid_session_thought, build_sensations
     from ai_core.services.time_awareness import build_time_prompt
 
-    builder = await get_prompt_builder()
-    _char_row = await builder._get_character(req.character_id, brand_id)
     _archetype = (_char_row or {}).get("archetype", "ANIMAL")
     time_context = build_time_prompt(rel_state.get("last_interaction_date"), archetype=_archetype)
     sensations = build_sensations(
@@ -438,6 +575,7 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    sw.mark("context")
 
     return {
         "user_text": user_text,
@@ -447,6 +585,7 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
         "touch_affinity_bonus": touch_affinity_bonus,
         "rel_state": rel_state,
         "prompt_result": prompt_result,
+        "timings": dict(sw.stages),
     }
 
 
@@ -472,9 +611,16 @@ async def chat_stream(req: ChatRequest, request: Request):
         full_text = ""
         buffer = ""
         sentence_idx = 0
+        # Stage timings: asr/context from _prepare_context, the rest stamped
+        # here relative to `start` (request arrival).
+        stage_ms: dict[str, float] = dict(ctx["timings"])
 
-        # Stream LLM tokens, split into sentences, TTS each immediately
+        # Stream LLM tokens, split into sentences, TTS each immediately.
         llm = await get_llm_client()
+        tts = await get_tts_client()
+        # Stream audio chunk-by-chunk only when the caller opted in AND it's
+        # globally enabled. Provider capability is checked inside _emit_sentence.
+        stream_audio = bool(req.audio_streaming and settings.tts_streaming)
         history = (
             [{"role": m.role, "content": m.content} for m in req.history] if req.history else None
         )
@@ -483,6 +629,7 @@ async def chat_stream(req: ChatRequest, request: Request):
             user_input=user_text,
             history=history,
         ):
+            stage_ms.setdefault("llm_first_token", (time.monotonic() - start) * 1000)
             buffer += chunk
             full_text += chunk
 
@@ -503,30 +650,16 @@ async def chat_stream(req: ChatRequest, request: Request):
                 if not sentence:
                     continue
 
-                # TTS this sentence immediately
-                audio_b64 = None
-                if prompt_result.get("voice_id"):
-                    try:
-                        tts = await get_tts_client()
-                        _tts_prepare_for_character(tts, prompt_result)
-                        audio_bytes = await tts.synthesize(
-                            text=sentence,
-                            voice=prompt_result["voice_id"],
-                            speed=prompt_result.get("voice_speed", 1.0),
-                            pitch_rate=prompt_result.get("pitch_rate", 0),
-                            speech_rate=prompt_result.get("speech_rate", 0),
-                        )
-                        audio_b64 = base64.b64encode(audio_bytes).decode()
-                    except Exception:
-                        logger.exception("stream.tts_error")
-
-                event = {
-                    "type": "sentence",
-                    "text": sentence,
-                    "audio_data": audio_b64,
-                    "index": sentence_idx,
-                }
-                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                async for sse in _emit_sentence(
+                    tts=tts,
+                    sentence=sentence,
+                    index=sentence_idx,
+                    prompt_result=prompt_result,
+                    stage_ms=stage_ms,
+                    start=start,
+                    stream_audio=stream_audio,
+                ):
+                    yield sse
                 sentence_idx += 1
 
         # Flush remaining buffer
@@ -534,29 +667,16 @@ async def chat_stream(req: ChatRequest, request: Request):
         if remaining:
             remaining = content_filter.filter_output(remaining)
             if remaining:
-                audio_b64 = None
-                if prompt_result.get("voice_id"):
-                    try:
-                        tts = await get_tts_client()
-                        _tts_prepare_for_character(tts, prompt_result)
-                        audio_bytes = await tts.synthesize(
-                            text=remaining,
-                            voice=prompt_result["voice_id"],
-                            speed=prompt_result.get("voice_speed", 1.0),
-                            pitch_rate=prompt_result.get("pitch_rate", 0),
-                            speech_rate=prompt_result.get("speech_rate", 0),
-                        )
-                        audio_b64 = base64.b64encode(audio_bytes).decode()
-                    except Exception:
-                        logger.exception("stream.tts_error")
-
-                event = {
-                    "type": "sentence",
-                    "text": remaining,
-                    "audio_data": audio_b64,
-                    "index": sentence_idx,
-                }
-                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                async for sse in _emit_sentence(
+                    tts=tts,
+                    sentence=remaining,
+                    index=sentence_idx,
+                    prompt_result=prompt_result,
+                    stage_ms=stage_ms,
+                    start=start,
+                    stream_audio=stream_audio,
+                ):
+                    yield sse
 
         # Clean full text for emotion detection
         from ai_core.services.emotion import extract_inline_emotion
@@ -580,6 +700,9 @@ async def chat_stream(req: ChatRequest, request: Request):
 
         # Done event
         latency = int((time.monotonic() - start) * 1000)
+        stages = {k: int(v) for k, v in stage_ms.items()}
+        stages["total"] = latency
+        latency_tracker.record_turn("chat_stream", stages)
         done_event = {
             "type": "done",
             "full_text": ai_text,
@@ -588,6 +711,7 @@ async def chat_stream(req: ChatRequest, request: Request):
             "pad": pad_state.to_dict(),
             "relationship_stage": rel_state["stage"],
             "latency_ms": latency,
+            "stages": stages,
         }
         yield f"data: {json.dumps(done_event, ensure_ascii=False)}\n\n"
 
@@ -613,7 +737,9 @@ async def chat_stream(req: ChatRequest, request: Request):
                 )
             )
 
-        logger.info("pipeline.chat_stream", latency_ms=latency, sentences=sentence_idx)
+        logger.info(
+            "pipeline.chat_stream", latency_ms=latency, stages=stages, sentences=sentence_idx
+        )
 
     return StreamingResponse(
         event_generator(),

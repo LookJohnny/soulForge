@@ -1,0 +1,1104 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/81vmzl",
+    "id": "81vmzl",
+    "slide": 11,
+    "layoutId": "5d42794f-197a-4503-8dc4-946d4132125e",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "1d9f4f48-bac1-4583-aee9-e3b4c33591f1",
+    "masterLayoutName": "Master",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Aptos",
+      "PingFang SC"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "5d42794f-197a-4503-8dc4-946d4132125e",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "1d9f4f48-bac1-4583-aee9-e3b4c33591f1",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "1d9f4f48-bac1-4583-aee9-e3b4c33591f1",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/epkzupwb",
+      "id": "1",
+      "bbox": [
+        0,
+        0,
+        1280,
+        720
+      ],
+      "geometry": "rect",
+      "fillColor": "#121110",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/pg3ex0nu",
+      "id": "2",
+      "bbox": [
+        56,
+        50,
+        26,
+        3
+      ],
+      "geometry": "rect",
+      "fillColor": "#FF5A47",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/wval87ed",
+      "id": "3",
+      "bbox": [
+        96,
+        42,
+        520,
+        22
+      ],
+      "geometry": "rect",
+      "text": "TEAM",
+      "textPreview": "TEAM",
+      "resolvedFontSize": 11,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 11,
+        "typeface": "Aptos",
+        "color": "#F7F1E6",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "TEAM"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "TEAM",
+          "resolvedTextStyle": {
+            "fontSize": 11,
+            "typeface": "Aptos",
+            "color": "#F7F1E6",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "TEAM",
+              "fontSize": 11,
+              "typeface": "Aptos",
+              "color": "#F7F1E6",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/7mp0bi9s",
+      "id": "4",
+      "bbox": [
+        56,
+        82,
+        980,
+        82.8
+      ],
+      "geometry": "rect",
+      "text": "种子轮投人：AI 产品先跑通，硬件和 IP 进入合伙人网络。",
+      "textPreview": "种子轮投人：AI 产品先跑通，硬件和 IP 进入合伙人网络。",
+      "resolvedFontSize": 36,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 36,
+        "typeface": "PingFang SC",
+        "color": "#FFF9EE",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "种子轮投人：AI 产品先跑通，硬件和 IP 进入合伙人网络。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "种子轮投人：AI 产品先跑通，硬件和 IP 进入合伙人网络。",
+          "resolvedTextStyle": {
+            "fontSize": 36,
+            "typeface": "PingFang SC",
+            "color": "#FFF9EE",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "种子轮投人：AI 产品先跑通，硬件和 IP 进入合伙人网络。",
+              "fontSize": 36,
+              "typeface": "PingFang SC",
+              "color": "#FFF9EE",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/e1w7mp0b",
+      "id": "5",
+      "bbox": [
+        58,
+        174,
+        860,
+        72
+      ],
+      "geometry": "rect",
+      "text": "早期团队的可信度来自已经跑通的系统、清晰的能力边界，以及对机电、供应链、IP BD 的明确分工。",
+      "textPreview": "早期团队的可信度来自已经跑通的系统、清晰的能力边界，以及对机电、供应链、IP BD 的明确分工。",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15,
+        "typeface": "PingFang SC",
+        "color": "#D9D1C7",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "早期团队的可信度来自已经跑通的系统、清晰的能力边界，以及对机电、供应链、IP BD 的明确分工。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "早期团队的可信度来自已经跑通的系统、清晰的能力边界，以及对机电、供应链、IP BD 的明确分工。",
+          "resolvedTextStyle": {
+            "fontSize": 15,
+            "typeface": "PingFang SC",
+            "color": "#D9D1C7",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "早期团队的可信度来自已经跑通的系统、清晰的能力边界，以及对机电、供应链、IP BD 的明确分工。",
+              "fontSize": 15,
+              "typeface": "PingFang SC",
+              "color": "#D9D1C7"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/psfil0rq",
+      "id": "6",
+      "bbox": [
+        82,
+        300,
+        330,
+        188
+      ],
+      "geometry": "rect",
+      "fillColor": "#24221F",
+      "lineColor": "#3A342F",
+      "lineWidth": 1
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/w7mp0bi9",
+      "id": "7",
+      "bbox": [
+        82,
+        300,
+        4,
+        188
+      ],
+      "geometry": "rect",
+      "fillColor": "#FF5A47",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/7u54zido",
+      "id": "8",
+      "bbox": [
+        102,
+        318,
+        296,
+        24
+      ],
+      "geometry": "rect",
+      "text": "AI 产品 / 全栈工程",
+      "textPreview": "AI 产品 / 全栈工程",
+      "resolvedFontSize": 17,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 17,
+        "typeface": "PingFang SC",
+        "color": "#FFF9EE",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "AI 产品 / 全栈工程"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "AI 产品 / 全栈工程",
+          "resolvedTextStyle": {
+            "fontSize": 17,
+            "typeface": "PingFang SC",
+            "color": "#FFF9EE",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "AI 产品 / 全栈工程",
+              "fontSize": 17,
+              "typeface": "PingFang SC",
+              "color": "#FFF9EE",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ed8bat47",
+      "id": "9",
+      "bbox": [
+        102,
+        352,
+        294,
+        130
+      ],
+      "geometry": "rect",
+      "text": "SoulForge 核心系统 owner：persona、memory、TTS、gateway、admin web 和端到端 smoke。",
+      "textPreview": "SoulForge 核心系统 owner：persona、memory、TTS、gateway、admin web 和端到端 smoke。",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 13,
+        "typeface": "PingFang SC",
+        "color": "#D8D0C5",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "SoulForge 核心系统"
+          },
+          {
+            "index": 2,
+            "text": "owner：persona、memory、TTS、gateway、ad"
+          },
+          {
+            "index": 3,
+            "text": "min web 和端到端 smoke。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "SoulForge 核心系统 owner：persona、memory、TTS、gateway、admin web 和端到端 smoke。",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "typeface": "PingFang SC",
+            "color": "#D8D0C5",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "SoulForge 核心系统 owner：persona、memory、TTS、gateway、admin web 和端到端 smoke。",
+              "fontSize": 13,
+              "typeface": "PingFang SC",
+              "color": "#D8D0C5"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/onyd0z61",
+      "id": "10",
+      "bbox": [
+        476,
+        300,
+        330,
+        188
+      ],
+      "geometry": "rect",
+      "fillColor": "#24221F",
+      "lineColor": "#3A342F",
+      "lineWidth": 1
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/d8v6psfi",
+      "id": "11",
+      "bbox": [
+        476,
+        300,
+        4,
+        188
+      ],
+      "geometry": "rect",
+      "fillColor": "#20C9B8",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/6hcrmhk3",
+      "id": "12",
+      "bbox": [
+        496,
+        318,
+        296,
+        24
+      ],
+      "geometry": "rect",
+      "text": "硬件 / 供应链网络",
+      "textPreview": "硬件 / 供应链网络",
+      "resolvedFontSize": 17,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 17,
+        "typeface": "PingFang SC",
+        "color": "#FFF9EE",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "硬件 / 供应链网络"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "硬件 / 供应链网络",
+          "resolvedTextStyle": {
+            "fontSize": 17,
+            "typeface": "PingFang SC",
+            "color": "#FFF9EE",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "硬件 / 供应链网络",
+              "fontSize": 17,
+              "typeface": "PingFang SC",
+              "color": "#FFF9EE",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/z25kb6xk",
+      "id": "13",
+      "bbox": [
+        496,
+        352,
+        294,
+        130
+      ],
+      "geometry": "rect",
+      "text": "资金投向机电、ID、打样、BOM、装配和可靠性验证，形成 EVT 样机交付能力。",
+      "textPreview": "资金投向机电、ID、打样、BOM、装配和可靠性验证，形成 EVT 样机交付能力。",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 13,
+        "typeface": "PingFang SC",
+        "color": "#D8D0C5",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "资金投向机电、ID、打样、BOM、装配和可靠性验"
+          },
+          {
+            "index": 2,
+            "text": "证，形成 EVT 样机交付能力。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "资金投向机电、ID、打样、BOM、装配和可靠性验证，形成 EVT 样机交付能力。",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "typeface": "PingFang SC",
+            "color": "#D8D0C5",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "资金投向机电、ID、打样、BOM、装配和可靠性验证，形成 EVT 样机交付能力。",
+              "fontSize": 13,
+              "typeface": "PingFang SC",
+              "color": "#D8D0C5"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ovahoza1",
+      "id": "14",
+      "bbox": [
+        870,
+        300,
+        330,
+        188
+      ],
+      "geometry": "rect",
+      "fillColor": "#24221F",
+      "lineColor": "#3A342F",
+      "lineWidth": 1
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/dg7adsji",
+      "id": "15",
+      "bbox": [
+        870,
+        300,
+        4,
+        188
+      ],
+      "geometry": "rect",
+      "fillColor": "#FFD166",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 16,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/6tovahoz",
+      "id": "16",
+      "bbox": [
+        890,
+        318,
+        296,
+        24
+      ],
+      "geometry": "rect",
+      "text": "IP / 内容 / 渠道网络",
+      "textPreview": "IP / 内容 / 渠道网络",
+      "resolvedFontSize": 17,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 17,
+        "typeface": "PingFang SC",
+        "color": "#FFF9EE",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "IP / 内容 / 渠道网络"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "IP / 内容 / 渠道网络",
+          "resolvedTextStyle": {
+            "fontSize": 17,
+            "typeface": "PingFang SC",
+            "color": "#FFF9EE",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "IP / 内容 / 渠道网络",
+              "fontSize": 17,
+              "typeface": "PingFang SC",
+              "color": "#FFF9EE",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 17,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vahoza1g",
+      "id": "17",
+      "bbox": [
+        890,
+        352,
+        294,
+        130
+      ],
+      "geometry": "rect",
+      "text": "BD 围绕授权风控、角色审核、限定预售和社群冷启动，不依赖先拿头部 IP。",
+      "textPreview": "BD 围绕授权风控、角色审核、限定预售和社群冷启动，不依赖先拿头部 IP。",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 13,
+        "typeface": "PingFang SC",
+        "color": "#D8D0C5",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "BD"
+          },
+          {
+            "index": 2,
+            "text": "围绕授权风控、角色审核、限定预售和社群冷启动"
+          },
+          {
+            "index": 3,
+            "text": "，不依赖先拿头部 IP。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "BD 围绕授权风控、角色审核、限定预售和社群冷启动，不依赖先拿头部 IP。",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "typeface": "PingFang SC",
+            "color": "#D8D0C5",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "BD 围绕授权风控、角色审核、限定预售和社群冷启动，不依赖先拿头部 IP。",
+              "fontSize": 13,
+              "typeface": "PingFang SC",
+              "color": "#D8D0C5"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 18,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/o7qpg3ex",
+      "id": "18",
+      "bbox": [
+        110,
+        574,
+        1060,
+        2
+      ],
+      "geometry": "rect",
+      "fillColor": "#4A433D",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 19,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/dsji5sne",
+      "id": "19",
+      "bbox": [
+        110,
+        598,
+        150,
+        18
+      ],
+      "geometry": "rect",
+      "text": "下一轮前团队目标",
+      "textPreview": "下一轮前团队目标",
+      "resolvedFontSize": 12,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 12,
+        "typeface": "PingFang SC",
+        "color": "#FFD166",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "下一轮前团队目标"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "下一轮前团队目标",
+          "resolvedTextStyle": {
+            "fontSize": 12,
+            "typeface": "PingFang SC",
+            "color": "#FFD166",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "下一轮前团队目标",
+              "fontSize": 12,
+              "typeface": "PingFang SC",
+              "color": "#FFD166",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 20,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/hk3q5o7q",
+      "id": "20",
+      "bbox": [
+        276,
+        594,
+        820,
+        28
+      ],
+      "geometry": "rect",
+      "text": "补齐机电/供应链 owner、IP BD owner 和首批渠道资源，让团队从软件验证进入实体交付。",
+      "textPreview": "补齐机电/供应链 owner、IP BD owner 和首批渠道资源，让团队从软件验证进入实体交付。",
+      "resolvedFontSize": 14,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 14,
+        "typeface": "PingFang SC",
+        "color": "#FFF9EE",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "补齐机电/供应链 owner、IP BD owner 和首批渠道资源，让团队从软件验证进入实体交付。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "补齐机电/供应链 owner、IP BD owner 和首批渠道资源，让团队从软件验证进入实体交付。",
+          "resolvedTextStyle": {
+            "fontSize": 14,
+            "typeface": "PingFang SC",
+            "color": "#FFF9EE",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "补齐机电/供应链 owner、IP BD owner 和首批渠道资源，让团队从软件验证进入实体交付。",
+              "fontSize": 14,
+              "typeface": "PingFang SC",
+              "color": "#FFF9EE",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 21,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/oza1gvy9",
+      "id": "21",
+      "bbox": [
+        56,
+        674,
+        980,
+        20
+      ],
+      "geometry": "rect",
+      "text": "Team and capability boundary",
+      "textPreview": "Team and capability boundary",
+      "resolvedFontSize": 10,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 10,
+        "typeface": "PingFang SC",
+        "color": "#AFA79D",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Team and capability boundary"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Team and capability boundary",
+          "resolvedTextStyle": {
+            "fontSize": 10,
+            "typeface": "PingFang SC",
+            "color": "#AFA79D",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Team and capability boundary",
+              "fontSize": 10,
+              "typeface": "PingFang SC",
+              "color": "#AFA79D"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 22,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/zed8v6ps",
+      "id": "22",
+      "bbox": [
+        1188,
+        668,
+        38,
+        24
+      ],
+      "geometry": "rect",
+      "text": "11",
+      "textPreview": "11",
+      "resolvedFontSize": 12,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 12,
+        "typeface": "Aptos",
+        "color": "#AFA79D",
+        "alignment": "right",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "11"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "11",
+          "resolvedTextStyle": {
+            "fontSize": 12,
+            "typeface": "Aptos",
+            "color": "#AFA79D",
+            "alignment": "right"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "11",
+              "fontSize": 12,
+              "typeface": "Aptos",
+              "color": "#AFA79D"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

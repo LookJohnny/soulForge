@@ -78,6 +78,19 @@ class GenericWSAdapter(ProtocolAdapter):
                 device_id="",
                 payload={"action": "abort"},
             )
+        elif action in {"event", "device_event", "reaction"}:
+            return InboundMessage(
+                type=MessageType.CONTROL,
+                device_id="",
+                payload={
+                    "action": "reaction_event",
+                    "event_type": msg.get("event_type") or msg.get("type"),
+                    "event": msg.get("event", msg),
+                    "context": msg.get("context", {}),
+                    "device_manifest": msg.get("device_manifest", {}),
+                    "device_state": msg.get("device_state", {}),
+                },
+            )
         elif action == "touch":
             return InboundMessage(
                 type=MessageType.TOUCH,

@@ -1,17 +1,48 @@
 """Memory management API for five-layer companion memory."""
 
+from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from ai_core.db import get_pool
 from ai_core.dependencies import get_memory_service
+from ai_core.services.companion_reaction import CompanionReactionPlanner
 
 router = APIRouter(prefix="/memory", tags=["memory"])
 
 
 MemoryLayerLiteral = Literal["PROFILE", "EPISODIC", "SEMANTIC", "RELATIONAL"]
 SensitivityLiteral = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+
+
+async def _load_reaction_persona(character_id: str | None) -> dict:
+    if not character_id:
+        return {}
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """SELECT archetype::TEXT, species, personality, response_length::TEXT,
+                          language_mode::TEXT, vocalization_palette
+                   FROM characters
+                   WHERE id = $1
+                   LIMIT 1""",
+                character_id,
+            )
+    except Exception:
+        return {}
+    if not row:
+        return {}
+    return {
+        "archetype": row["archetype"],
+        "species": row["species"],
+        "personality": row["personality"] or {},
+        "response_length": row["response_length"],
+        "language_mode": row["language_mode"],
+        "vocalization_palette": row["vocalization_palette"] or [],
+    }
 
 
 class CreateMemoryRequest(BaseModel):
@@ -44,10 +75,34 @@ class RetrieveMemoryRequest(BaseModel):
     response_id: str | None = None
 
 
+class RawEventRequest(BaseModel):
+    user_id: str
+    character_id: str | None = None
+    device_id: str | None = None
+    session_id: str | None = None
+    event_type: str = Field(min_length=1, max_length=80)
+    content: str = Field(min_length=1, max_length=4000)
+    source: str = Field(default="api", max_length=50)
+    payload: dict = Field(default_factory=dict)
+    context: dict = Field(default_factory=dict)
+    importance_score: int | None = Field(default=None, ge=1, le=10)
+    sensitivity_level: SensitivityLiteral | None = None
+    observed_at: datetime | None = None
+
+
 class CompileMemoryRequest(BaseModel):
     user_id: str
     character_id: str | None = None
     trigger: str = "manual"
+
+
+class ReflectMemoryRequest(BaseModel):
+    user_id: str
+    character_id: str | None = None
+    trigger: str = "manual"
+    dry_run: bool = False
+    limit: int = Field(default=100, ge=10, le=500)
+    min_importance_sum: int = Field(default=12, ge=1, le=500)
 
 
 class DecayMemoryRequest(BaseModel):
@@ -65,6 +120,15 @@ class BehaviorWithMemoryRequest(BaseModel):
     user_id: str
     character_id: str | None = None
     context: dict = Field(default_factory=dict)
+
+
+class CompanionReactionRequest(BaseModel):
+    user_id: str | None = None
+    character_id: str | None = None
+    event_type: str = Field(min_length=1, max_length=80)
+    event: dict = Field(default_factory=dict)
+    context: dict = Field(default_factory=dict)
+    limit: int = Field(default=10, ge=1, le=30)
 
 
 @router.post("")
@@ -106,11 +170,64 @@ async def retrieve_memory(req: RetrieveMemoryRequest):
     )
 
 
+@router.post("/events")
+async def record_raw_event(req: RawEventRequest):
+    svc = await get_memory_service()
+    try:
+        return await svc.record_raw_event(req.model_dump(exclude_none=True))
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+
+@router.get("/events")
+async def list_raw_events(
+    user_id: str,
+    character_id: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    svc = await get_memory_service()
+    try:
+        return await svc.list_raw_events(user_id, character_id, limit=limit)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
 @router.post("/compile")
 async def compile_memory(req: CompileMemoryRequest):
     svc = await get_memory_service()
     try:
         return await svc.compile_memory(req.user_id, req.character_id)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@router.post("/reflect")
+async def reflect_memory(req: ReflectMemoryRequest):
+    svc = await get_memory_service()
+    try:
+        return await svc.reflect_memory(
+            user_id=req.user_id,
+            character_id=req.character_id,
+            trigger=req.trigger,
+            dry_run=req.dry_run,
+            limit=req.limit,
+            min_importance_sum=req.min_importance_sum,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@router.get("/reflections")
+async def list_reflections(
+    user_id: str,
+    character_id: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    svc = await get_memory_service()
+    try:
+        return await svc.list_reflections(user_id, character_id, limit=limit)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
@@ -154,6 +271,37 @@ async def user_feedback_on_memory(req: FeedbackMemoryRequest):
         raise HTTPException(status_code=404, detail="memory not found") from e
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+
+
+@router.post("/reaction")
+async def decide_companion_reaction(req: CompanionReactionRequest):
+    context = dict(req.context)
+    if req.character_id and "persona" not in context and "character" not in context:
+        persona = await _load_reaction_persona(req.character_id)
+        if persona:
+            context["persona"] = persona
+
+    memory_pack: dict = {}
+    if req.user_id:
+        svc = await get_memory_service()
+        try:
+            memory_pack = await svc.retrieve_memory_pack(
+                end_user_id=req.user_id,
+                character_id=req.character_id,
+                query=f"{req.event_type} {req.event}",
+                context=context,
+                limit=req.limit,
+            )
+        except RuntimeError:
+            memory_pack = {}
+
+    planner = CompanionReactionPlanner()
+    return planner.decide(
+        event_type=req.event_type,
+        event=req.event,
+        memory_pack=memory_pack,
+        context=context,
+    ).to_dict()
 
 
 @router.post("/behavior")

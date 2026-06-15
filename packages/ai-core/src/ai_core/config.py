@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     tts_provider: str = "dashscope"  # dashscope | fish | edge
     tts_model: str = "cosyvoice-v3-flash"
     tts_timeout: int = 15  # seconds
+    # Stream TTS audio chunk-by-chunk to the device (lower time-to-first-audio).
+    # Only applies when the provider supports streaming AND the caller opts in
+    # (ChatRequest.audio_streaming). Kill-switch: set false to force the
+    # legacy whole-clip-per-sentence behaviour.
+    tts_streaming: bool = True
 
     # ─── Fish Audio ────────────────────────────
     fish_audio_api_key: str = ""

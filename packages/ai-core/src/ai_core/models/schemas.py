@@ -78,6 +78,14 @@ class ChatRequest(BaseModel):
     audio_format: str = "pcm"  # pcm or opus
     text_input: str | None = Field(default=None, max_length=2000)
     history: list[HistoryMessage] | None = None  # conversation history for multi-turn
+    # Idle mode: character is alone and speaks spontaneously. No memory
+    # writes, no relationship points, no touch consumption.
+    idle_mode: bool = False
+    idle_state: str = "bored"  # bored | sleepy
+    # Caller can decode chunked audio (audio_chunk/audio_end SSE events) for
+    # lower time-to-first-audio. Defaults off so non-streaming consumers keep
+    # receiving whole-clip-per-sentence audio.
+    audio_streaming: bool = False
 
     @field_validator("character_id")
     @classmethod
@@ -109,6 +117,7 @@ class ChatResponse(BaseModel):
     relationship_stage: str | None = None  # STRANGER → BESTFRIEND
     affinity: int | None = None  # 0-1000
     latency_ms: int
+    stages: dict[str, int] | None = None  # per-stage latency breakdown (ms)
 
 
 class RagDocument(BaseModel):

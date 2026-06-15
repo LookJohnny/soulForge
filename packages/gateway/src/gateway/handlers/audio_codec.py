@@ -322,3 +322,65 @@ def pcm_to_opus_frames(
         frames.append(opus_frame)
 
     return frames
+
+
+class StreamingMp3OpusEncoder:
+    """Incrementally turn a growing MP3 byte stream into 24kHz Opus frames.
+
+    Fish streams MP3 progressively. Rather than wait for the whole clip, feed()
+    each received chunk and send back any newly-complete 60ms Opus frames so
+    playback starts early. Implementation re-decodes the accumulated buffer with
+    the proven one-shot ``mp3_to_pcm_24k`` + ``pcm_to_opus_frames`` and only
+    emits frames not yet returned — no fragile long-lived subprocess piping.
+
+    The last complete frame is held back until more data arrives (or finish()
+    is called): MP3 granule overlap means a frame decoded from a truncated
+    prefix can have a slightly different tail than from a longer prefix, so we
+    keep a one-frame safety margin to avoid emitting an audibly unstable frame.
+
+    Decodes are coalesced: feed() only re-decodes once ``min_decode_bytes`` of
+    new MP3 has accumulated, bounding ffmpeg spawns to ~len/min_decode_bytes.
+    """
+
+    def __init__(
+        self,
+        sample_rate: int = 24000,
+        frame_duration_ms: int = 60,
+        min_decode_bytes: int = 6000,
+    ):
+        self._buf = bytearray()
+        self._sent = 0  # frames already emitted
+        self._since_decode = 0
+        self._sample_rate = sample_rate
+        self._frame_ms = frame_duration_ms
+        self._min_decode_bytes = min_decode_bytes
+
+    async def feed(self, mp3_chunk: bytes) -> list[bytes]:
+        """Add a chunk; return any newly-ready Opus frames (last held back)."""
+        if mp3_chunk:
+            self._buf += mp3_chunk
+            self._since_decode += len(mp3_chunk)
+        if self._since_decode < self._min_decode_bytes:
+            return []
+        self._since_decode = 0
+        return await self._decode_new(hold_last=True)
+
+    async def finish(self) -> list[bytes]:
+        """Flush: decode everything and return all remaining frames."""
+        return await self._decode_new(hold_last=False)
+
+    async def _decode_new(self, hold_last: bool) -> list[bytes]:
+        if not self._buf:
+            return []
+        pcm = await mp3_to_pcm_24k(bytes(self._buf))
+        if not pcm:
+            return []
+        frames = pcm_to_opus_frames(pcm, self._sample_rate, self._frame_ms)
+        end = len(frames)
+        if hold_last and end > 0:
+            end -= 1  # one-frame overlap-stability margin
+        if end <= self._sent:
+            return []
+        new = frames[self._sent : end]
+        self._sent = end
+        return new

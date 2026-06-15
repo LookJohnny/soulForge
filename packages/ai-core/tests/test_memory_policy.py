@@ -34,6 +34,16 @@ def test_one_time_mood_is_not_profile_memory():
     assert layer == "EPISODIC"
 
 
+def test_companion_importance_scores_major_events_above_trivia():
+    engine = MemoryPolicyEngine()
+
+    major = engine.score_importance("用户说明天要参加重要考试", "EPISODIC")
+    trivia = engine.score_importance("用户今天午饭吃了面条", "EPISODIC")
+
+    assert major >= 8
+    assert trivia < major
+
+
 def test_implicit_memory_stays_implicit_on_read():
     engine = MemoryPolicyEngine()
     memory = {

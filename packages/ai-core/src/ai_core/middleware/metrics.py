@@ -121,3 +121,11 @@ metrics_router = APIRouter()
 async def metrics_endpoint():
     """Return current metrics as JSON."""
     return get_metrics()
+
+
+@metrics_router.get("/metrics/latency")
+async def latency_metrics_endpoint():
+    """Per-stage pipeline latency (ASR/context/LLM/TTS/first-audio) percentiles."""
+    from ai_core.services.latency import latency_tracker
+
+    return latency_tracker.snapshot()

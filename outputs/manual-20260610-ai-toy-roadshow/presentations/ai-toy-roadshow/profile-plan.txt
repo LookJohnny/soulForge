@@ -1,0 +1,24 @@
+task mode: create from source deck rewrite
+primary deck-profile: gtm-growth
+secondary profile gates: product-platform, engineering-platform
+required proof objects:
+- growth loop from fan content to preorder to retention to content updates
+- segment wedge table for initial ICPs
+- monetization bridge from hardware to subscription/IP/content
+- roadmap and financing milestone bridge
+source/asset requirements:
+- source deck: /Users/lovelyjoy/Downloads/AI+潮玩.pptx
+- product repo context: /Users/lovelyjoy/Desktop/soulForge README and shipped companion-memory implementation
+- public market signals: 36Kr AI toy/AI trend reporting, Tencent/Wuyuan reporting on AheadForm financing, public Fuzozo references
+brand authenticity constraints:
+- no unofficial IP logos, mascots, product screenshots, or fake partner marks
+- represent product and IP integration with abstract editable diagrams only
+profile-specific QA gates:
+- visibly connect reach, activation, engagement, monetization, and margin/retention
+- mark unverified financial and operating numbers as assumptions or target ranges
+- keep all deck objects editable
+known missing inputs:
+- actual prototype video/stills
+- BOM and target COGS
+- named IP LOIs or channel commitments
+- seed-user retention and preorder data
