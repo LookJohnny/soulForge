@@ -1,0 +1,29 @@
+[
+  {
+    "avatar_name": "Lydia",
+    "model_path": "assets/vtubers/open_source_avatars/lydia.vrm",
+    "thumbnail_path": "assets/vtubers/open_source_avatars/lydia_thumbnail.gif",
+    "license": "CC0",
+    "source_url": "https://arweave.net/x48D7v037irPQYG7e0vZLDV1E3x5-KookbP9-vaXvYE",
+    "thumbnail_url": "https://arweave.net/DgPsMxXBXBxREc7Wq_w-L0Z2MFiM9E7T5s0yV0c4PJg",
+    "project_id": "100avatars-r1"
+  },
+  {
+    "avatar_name": "Robert",
+    "model_path": "assets/vtubers/open_source_avatars/robert.vrm",
+    "thumbnail_path": "assets/vtubers/open_source_avatars/robert_thumbnail.gif",
+    "license": "CC0",
+    "source_url": "https://arweave.net/gwG7w4bY-A5c3R6A6GOz3xBCgbPvkFQmqPIDtvnNsYI",
+    "thumbnail_url": "https://arweave.net/gaFPebQ9hSZDa_xNHkja8CH0Qde2y41L95VQTtroWNA",
+    "project_id": "100avatars-r1"
+  },
+  {
+    "avatar_name": "Polybot",
+    "model_path": "assets/vtubers/open_source_avatars/polybot.vrm",
+    "thumbnail_path": "assets/vtubers/open_source_avatars/polybot_thumbnail.gif",
+    "license": "CC0",
+    "source_url": "https://arweave.net/DUR8v-IugXppdMBxPdE1rDO2dZCJJ7ZgBTXSRgPJFNo",
+    "thumbnail_url": "https://arweave.net/PJ-ovenhR5xdQPv_Z1NkujIpPWjfD_7XENdf7yzHZ_0",
+    "project_id": "100avatars-r1"
+  }
+]

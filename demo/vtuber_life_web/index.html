@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SoulForge VTuber Life Demo</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="scene"></canvas>
+      <div class="hud top-left">
+        <div class="dayline">Day 1 · Tue</div>
+        <div class="clock" id="clock">20:47</div>
+        <div class="phase">Evening</div>
+        <div class="playback" aria-label="playback controls">
+          <button type="button">II</button>
+          <button type="button">▶</button>
+          <button type="button">▶▶</button>
+          <button type="button">⛶</button>
+        </div>
+      </div>
+      <div class="hud goal-panel">
+        <span>Main Goal</span>
+        <strong>Build wonderful memories together</strong>
+      </div>
+      <div class="hud source">SoulForge v0.3.0 · WebGL · VRM · Voice</div>
+      <div class="hud relations-panel">
+        <div class="panel-tabs"><span>Relations</span><span>Activity</span></div>
+        <div class="relation-row"><b>Astra-F</b><small>Planning</small><em>92</em></div>
+        <div class="relation-row"><b>Mason-M</b><small>Cooking</small><em>86</em></div>
+        <div class="relation-row"><b>Hex-01</b><small>Exploring</small><em>74</em></div>
+      </div>
+      <div class="hud shortcuts-panel">
+        <div><span>Call Astra</span><kbd>1</kbd></div>
+        <div><span>Call Mason</span><kbd>2</kbd></div>
+        <div><span>Call Hex</span><kbd>3</kbd></div>
+        <div><span>Screenshot</span><kbd>F12</kbd></div>
+      </div>
+      <div id="cards" class="cards"></div>
+      <div id="nametags" class="nametags"></div>
+      <div id="queue" class="queue"></div>
+      <div id="bubble" class="bubble"></div>
+      <div id="dialogue" class="dialogue">
+        <div class="dialogue-speaker" id="dialogue-speaker">Astra-F</div>
+        <div class="dialogue-copy">
+          <div class="dialogue-meta" id="dialogue-meta">Creative Care · Warm CN voiceprint</div>
+          <div class="dialogue-line" id="dialogue-line">Coffee is ready.</div>
+        </div>
+        <div class="dialogue-wave" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+      <div id="loading" class="loading">Loading VRM agents…</div>
+    </div>
+    <script type="module" src="/demo/vtuber_life_web/src/main.js"></script>
+  </body>
+</html>

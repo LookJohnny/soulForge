@@ -1,0 +1,173 @@
+{
+  "sourceVideo": "/Users/lovelyjoy/Desktop/soulForge/outputs/webgl/vtuber_cinematic_life_gameplay_sample.mp4",
+  "outputVideo": "/Users/lovelyjoy/Desktop/soulForge/outputs/webgl/vtuber_cinematic_life_gameplay_voiceover.mp4",
+  "duration": 12,
+  "mode": "auto",
+  "aiCoreUrl": null,
+  "agents": {
+    "Astra-F": {
+      "plannedProvider": "fish",
+      "fishVoice": "a6b29d0ef2404ca1aa8d1fdd8d7a2a90",
+      "fishLabel": "女性仿生陪伴机器人 / 温暖清晰",
+      "edgeVoice": "zh-CN-XiaoyiNeural",
+      "sayVoice": "Tingting",
+      "rate": 190,
+      "pitch": 1.08,
+      "post": "bright"
+    },
+    "Mason-M": {
+      "plannedProvider": "fish",
+      "fishVoice": "d99547e2dad64ce0aa085319a3c9cc56",
+      "fishLabel": "男性双足服务机器人 / 稳定低频",
+      "edgeVoice": "zh-CN-YunxiNeural",
+      "sayVoice": "Reed (中文（中国大陆）)",
+      "rate": 170,
+      "pitch": 0.94,
+      "post": "warm"
+    },
+    "Hex-01": {
+      "plannedProvider": "fish",
+      "fishVoice": "15896f78e288417db16cc34da8fc6f09",
+      "fishLabel": "非人形侦察机器人 / 合成机械音",
+      "edgeVoice": "zh-CN-YunjianNeural",
+      "sayVoice": "Rocko (中文（中国大陆）)",
+      "rate": 155,
+      "pitch": 0.86,
+      "post": "robot"
+    }
+  },
+  "events": [
+    {
+      "t": 0.55,
+      "agent": "Astra-F",
+      "text": "早间陪伴模式启动，我先校准表情和动作。",
+      "emotion": "warm",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "a6b29d0ef2404ca1aa8d1fdd8d7a2a90",
+      "fishLabel": "女性仿生陪伴机器人 / 温暖清晰",
+      "edgeVoice": "zh-CN-XiaoyiNeural",
+      "fallbackVoice": "Tingting"
+    },
+    {
+      "t": 1.65,
+      "agent": "Mason-M",
+      "text": "厨房执行器上线，热源保持安全距离。",
+      "emotion": "calm",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "d99547e2dad64ce0aa085319a3c9cc56",
+      "fishLabel": "男性双足服务机器人 / 稳定低频",
+      "edgeVoice": "zh-CN-YunxiNeural",
+      "fallbackVoice": "Reed (中文（中国大陆）)"
+    },
+    {
+      "t": 2.75,
+      "agent": "Hex-01",
+      "text": "非人形侦察单元在线，环境扫描开始。",
+      "emotion": "robot",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "15896f78e288417db16cc34da8fc6f09",
+      "fishLabel": "非人形侦察机器人 / 合成机械音",
+      "edgeVoice": "zh-CN-YunjianNeural",
+      "fallbackVoice": "Rocko (中文（中国大陆）)"
+    },
+    {
+      "t": 3.95,
+      "agent": "Mason-M",
+      "text": "我会把任务拆成可执行的关节动作。",
+      "emotion": "calm",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "d99547e2dad64ce0aa085319a3c9cc56",
+      "fishLabel": "男性双足服务机器人 / 稳定低频",
+      "edgeVoice": "zh-CN-YunxiNeural",
+      "fallbackVoice": "Reed (中文（中国大陆）)"
+    },
+    {
+      "t": 4.95,
+      "agent": "Astra-F",
+      "text": "先照顾情绪，再安排今天的动作模板。",
+      "emotion": "curious",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "a6b29d0ef2404ca1aa8d1fdd8d7a2a90",
+      "fishLabel": "女性仿生陪伴机器人 / 温暖清晰",
+      "edgeVoice": "zh-CN-XiaoyiNeural",
+      "fallbackVoice": "Tingting"
+    },
+    {
+      "t": 6.15,
+      "agent": "Hex-01",
+      "text": "植物叶片状态正常，湿度偏低。",
+      "emotion": "robot",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "15896f78e288417db16cc34da8fc6f09",
+      "fishLabel": "非人形侦察机器人 / 合成机械音",
+      "edgeVoice": "zh-CN-YunjianNeural",
+      "fallbackVoice": "Rocko (中文（中国大陆）)"
+    },
+    {
+      "t": 7.25,
+      "agent": "Astra-F",
+      "text": "这个动作可以写成模板，明天直接复用。",
+      "emotion": "happy",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "a6b29d0ef2404ca1aa8d1fdd8d7a2a90",
+      "fishLabel": "女性仿生陪伴机器人 / 温暖清晰",
+      "edgeVoice": "zh-CN-XiaoyiNeural",
+      "fallbackVoice": "Tingting"
+    },
+    {
+      "t": 8.25,
+      "agent": "Mason-M",
+      "text": "我把舵机曲线和安全阈值一起保存。",
+      "emotion": "steady",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "d99547e2dad64ce0aa085319a3c9cc56",
+      "fishLabel": "男性双足服务机器人 / 稳定低频",
+      "edgeVoice": "zh-CN-YunxiNeural",
+      "fallbackVoice": "Reed (中文（中国大陆）)"
+    },
+    {
+      "t": 9.3,
+      "agent": "Hex-01",
+      "text": "维修循环开始，扳手扭矩百分之七十。",
+      "emotion": "robot",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "15896f78e288417db16cc34da8fc6f09",
+      "fishLabel": "非人形侦察机器人 / 合成机械音",
+      "edgeVoice": "zh-CN-YunjianNeural",
+      "fallbackVoice": "Rocko (中文（中国大陆）)"
+    },
+    {
+      "t": 10.35,
+      "agent": "Astra-F",
+      "text": "情绪反馈良好，动作幅度可以再柔一点。",
+      "emotion": "excited",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "a6b29d0ef2404ca1aa8d1fdd8d7a2a90",
+      "fishLabel": "女性仿生陪伴机器人 / 温暖清晰",
+      "edgeVoice": "zh-CN-XiaoyiNeural",
+      "fallbackVoice": "Tingting"
+    },
+    {
+      "t": 11.1,
+      "agent": "Mason-M",
+      "text": "晚间复盘完成，明天计划已锁定。",
+      "emotion": "calm",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "d99547e2dad64ce0aa085319a3c9cc56",
+      "fishLabel": "男性双足服务机器人 / 稳定低频",
+      "edgeVoice": "zh-CN-YunxiNeural",
+      "fallbackVoice": "Reed (中文（中国大陆）)"
+    }
+  ]
+}

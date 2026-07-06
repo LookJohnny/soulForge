@@ -1,0 +1,440 @@
+Unity Editor version:    6000.5.2f1 (eb73d3b415a1)
+Branch:                  6000.5/staging
+Build type:              Release
+Batch mode:              YES
+macOS version:           Version 26.3 (Build 25D125)
+Darwin version:          25.3.0
+Architecture:            arm64
+Running under Rosetta:   NO
+Available memory:        16384 MB
+Date:                    2026-07-04T06:52:12Z
+[Licensing::Module] Trying to connect to existing licensing client channel...
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-lovelyjoy" at "2026-07-04T06:52:12.734467Z"
+Launching external process: /Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Helpers/PackageManager/Server/UnityPackageManager
+
+COMMAND LINE ARGUMENTS:
+/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/MacOS/Unity
+-batchmode
+-quit
+-projectPath
+/Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient
+-executeMethod
+SoulForge.UnityClient.Editor.SoulForgeSceneBuilder.CreateApartmentDemoScene
+-logFile
+/Users/lovelyjoy/Desktop/soulForge/outputs/unity/unity_create_scene_assetpass_v7.log
+Successfully changed project path to: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient
+/Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient
+[UnityMemory] Configuration Parameters - Can be set up in boot.config
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-nav-mesh-worker=65536"
+    "memorysetup-temp-allocator-size-audio-worker=65536"
+    "memorysetup-temp-allocator-size-cloud-worker=32768"
+    "memorysetup-allocator-temp-initial-block-size-main=262144"
+    "memorysetup-allocator-temp-initial-block-size-worker=262144"
+    "memorysetup-temp-allocator-size-preload-manager=33554432"
+    "memorysetup-temp-allocator-size-gfx=262144"
+    "memorysetup-temp-allocator-size-background-worker=32768"
+    "memorysetup-temp-allocator-size-job-worker=262144"
+    "memorysetup-bucket-allocator-granularity=16"
+    "memorysetup-bucket-allocator-bucket-count=8"
+    "memorysetup-bucket-allocator-block-size=33554432"
+    "memorysetup-bucket-allocator-block-count=8"
+    "memorysetup-main-allocator-block-size=16777216"
+    "memorysetup-thread-allocator-block-size=16777216"
+    "memorysetup-main-allocator-mimalloc-enabled=0"
+    "memorysetup-gfx-main-allocator-block-size=16777216"
+    "memorysetup-gfx-thread-allocator-block-size=16777216"
+    "memorysetup-cache-allocator-block-size=4194304"
+    "memorysetup-typetree-allocator-block-size=2097152"
+    "memorysetup-profiler-bucket-allocator-granularity=16"
+    "memorysetup-profiler-bucket-allocator-bucket-count=8"
+    "memorysetup-profiler-bucket-allocator-block-size=33554432"
+    "memorysetup-profiler-bucket-allocator-block-count=8"
+    "memorysetup-profiler-allocator-block-size=16777216"
+    "memorysetup-profiler-editor-allocator-block-size=1048576"
+    "memorysetup-temp-allocator-size-main=16777216"
+    "memorysetup-job-temp-allocator-block-size=2097152"
+    "memorysetup-job-temp-allocator-block-size-background=1048576"
+    "memorysetup-job-temp-allocator-reduction-small-platforms=262144"
+Logging is directed to a specific file, skipping project log.Player connection [8758587520]  Target information:
+
+Player connection [8758587520]  * "[IP] 192.168.1.172 [Port] 55504 [Flags] 2 [Guid] 3984587082 [EditorId] 3984587082 [Version] 1048832 [Id] OSXEditor(0,LovelyjoydeMac-mini.local) [Debug] 1 [PackageName] OSXEditor [ProjectName] Editor" 
+
+Player connection [8758587520]  * "[IP] 192.168.1.206 [Port] 55504 [Flags] 2 [Guid] 3984587082 [EditorId] 3984587082 [Version] 1048832 [Id] OSXEditor(0,LovelyjoydeMac-mini.local) [Debug] 1 [PackageName] OSXEditor [ProjectName] Editor" 
+
+Player connection [8758587520]  * "[IP] 198.18.0.1 [Port] 55504 [Flags] 2 [Guid] 3984587082 [EditorId] 3984587082 [Version] 1048832 [Id] OSXEditor(0,LovelyjoydeMac-mini.local) [Debug] 1 [PackageName] OSXEditor [ProjectName] Editor" 
+
+Player connection [8758587520] Host joined multi-casting on [225.0.0.222:54997]...
+Player connection [8758587520] Host joined alternative multi-casting on [225.0.0.222:34997]...
+Input System module state changed to: Initialized.
+[Physics::Module] Initialized fallback backend.
+[Physics::Module] Id: 0xdecafbad
+[Licensing::Client] Error: HandshakeResponse reported an error:
+	ResponseCode: 505
+	ResponseStatus: Unsupported protocol version '1.18.1'.
+[Licensing::Module] Error: Failed to handshake to channel: "LicenseClient-lovelyjoy"
+[Licensing::IpcConnector] LicenseClient-lovelyjoy channel disconnected successfully.
+[Licensing::IpcConnector] Channel LicenseClient-lovelyjoy-6000.5.2 doesn't exist
+Launching external process: /Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Helpers/UnityLicensingClient.app/Contents/MacOS/Unity.Licensing.Client
+[Licensing::Module] Successfully launched the LicensingClient (PId: 85979)
+[Package Manager] Connected to IPC stream "Upm-85921" after 0.3 seconds.
+[Licensing::Module] Licensing is not yet initialized.
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-lovelyjoy-6000.5.2" at "2026-07-04T06:52:13.645186Z"
+[Licensing::Client] Handshaking with LicensingClient:
+  Version:                 1.18.1+9fbee8e
+  Session Id:              ca652c5f384f4a44aee0176bb46371ea
+  Correlation Id:          8756bec259e1d75615c4e771d8d1b466
+  External correlation Id: 6853604922520562015
+  Machine Id:              SDHUngXkiKNcxSPIxgVLa+vPMH8=
+[Licensing::Module] Successfully connected to LicensingClient on channel: "LicenseClient-lovelyjoy-6000.5.2" (connect: 0.57s, validation: 0.03s, handshake: 0.31s)
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-lovelyjoy-6000.5.2-notifications" at "2026-07-04T06:52:13.983607Z"
+[Licensing::Module] Connected to LicensingClient (PId: 85979, launch time: 0.00, total connection time: 0.91s)
+[Licensing::Module] Error: Access token is unavailable; failed to update
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Module] License group:
+  Id: 18968458761207-UnityPersXXXX
+  Product: Unity Personal
+  Type: Assigned
+  Expiration: Unlimited
+[Licensing::Client] Successfully updated license, isAsync: True, time: 0.00
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Module] Licensing Background thread has ended after 1.26s
+[Licensing::Module] Licensing is initialized (took 0.79s).
+[Licensing::Client] Successfully resolved entitlement details
+Library Redirect Path: Library/
+[Physics::Module] Selected backend.
+[Physics::Module] Name: PhysX
+[Physics::Module] Id: 0xf2b8ea05
+[Physics::Module] SDK Version: 4.1.2
+[Physics::Module] Integration Version: 1.0.0
+[Physics::Module] Threading Mode: Multi-Threaded
+Initialize engine version: 6000.5.2f1 (eb73d3b415a1)
+[Subsystems] Discovering subsystems at path /Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/UnitySubsystems
+[Subsystems] Discovering subsystems at path /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Assets
+GfxDevice: creating device client; kGfxThreadingModeNonThreaded
+ preferred device: Apple M4 (high power)
+Metal devices available: 1
+0: Apple M4 (high power)
+Using device Apple M4 (high power)
+Initializing Metal device caps: Apple M4
+Mac GPU Family: 2
+Apple GPU Family: 9
+MSL Version: 3.0
+Has Float MSAA: 1
+Has Float Filtering: 1
+ReadWrite Texture Tier: 2
+Initialize mono
+Mono path[0] = '/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/Scripting/Managed'
+Mono path[1] = '/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/Scripting/BCLExtensions/runtime/netstandard2.1'
+Mono path[2] = '/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/Scripting/MonoBleedingEdge/lib/mono/unityjit-macos'
+Mono config path = '/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/Scripting/MonoBleedingEdge/etc'
+Using monoOptions --debugger-agent=transport=dt_socket,embedding=1,server=y,suspend=n,address=127.0.0.1:56921
+CodeReloadManager initialized
+ImportWorker Server TCP listen port: 0
+AcceleratorClientConnectionCallback - disconnected - :0
+Begin MonoManager ReloadAssembly
+Registering precompiled unity dll's ...
+Register platform support module: /Applications/Unity/Hub/Editor/6000.5.2f1/PlaybackEngines/WebGLSupport/UnityEditor.WebGL.Extensions.dll
+Register platform support module: /Applications/Unity/Hub/Editor/6000.5.2f1/PlaybackEngines/MacStandaloneSupport/UnityEditor.OSXStandalone.Extensions.dll
+Registered in 0.001025 seconds.
+Native extension for OSXStandalone target not found
+Native extension for WebGL target not found
+Package Manager log level set to [2]
+ScheduleIndexationOnStartup MainProcess:False IndexOnStartup:False
+Mono: successfully reloaded assembly
+- Finished resetting the current domain, in  0.200 seconds
+Domain Reload Profiling: 503ms
+	BeginReloadAssembly (86ms)
+		CreateAndSetChildDomain (6ms)
+	RebuildCommonClasses (3ms)
+	RebuildNativeTypeToScriptingClass (13ms)
+	initialDomainReloadingComplete (35ms)
+	LoadAllAssembliesAndSetupDomain (166ms)
+		LoadAssemblies (80ms)
+		AnalyzeDomain (128ms)
+			TypeCache.Refresh (127ms)
+				TypeCache.ScanAssembly (116ms)
+	FinalizeReload (201ms)
+		SetupLoadedEditorAssemblies (0ms)
+			BeforeProcessingInitializeOnLoad (43ms)
+			ProcessInitializeOnLoadAttributes (47ms)
+			ProcessInitializeOnLoadMethodAttributes (71ms)
+[Licensing::Client] Successfully resolved entitlement details
+Application.AssetDatabase Initial Refresh Start
+[Package Manager] Restoring resolved packages state from cache
+[Licensing::Client] Successfully resolved entitlement details
+[Package Manager] Registered 47 packages:
+  Packages from [https://packages.unity.com]:
+    com.unity.searcher@4.9.4 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.searcher@d45a78918735)
+    com.unity.burst@1.8.29 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.burst@6bb9aca3ef38)
+    com.unity.nuget.mono-cecil@1.11.6 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.nuget.mono-cecil@ecb9724e46ff)
+    com.unity.test-framework.performance@3.5.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.test-framework.performance@8b56083ec0f0)
+  Built-in packages:
+    com.unity.render-pipelines.universal@17.5.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.render-pipelines.universal@748d7458cc62)
+    com.unity.test-framework@1.7.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.test-framework@1405238725ab)
+    com.unity.textmeshpro@5.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.textmeshpro@53f43edfd2e0)
+    com.unity.ugui@2.5.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.ugui@3d1ea40b73ef)
+    com.unity.modules.ai@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.ai)
+    com.unity.modules.androidjni@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.androidjni)
+    com.unity.modules.animation@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.animation)
+    com.unity.modules.assetbundle@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.assetbundle)
+    com.unity.modules.audio@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.audio)
+    com.unity.modules.cloth@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.cloth)
+    com.unity.modules.director@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.director)
+    com.unity.modules.imageconversion@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.imageconversion)
+    com.unity.modules.imgui@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.imgui)
+    com.unity.modules.jsonserialize@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.jsonserialize)
+    com.unity.modules.particlesystem@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.particlesystem)
+    com.unity.modules.physics@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.physics)
+    com.unity.modules.physics2d@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.physics2d)
+    com.unity.modules.screencapture@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.screencapture)
+    com.unity.modules.terrain@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.terrain)
+    com.unity.modules.terrainphysics@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.terrainphysics)
+    com.unity.modules.tilemap@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.tilemap)
+    com.unity.modules.ui@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.ui)
+    com.unity.modules.uielements@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.uielements)
+    com.unity.modules.umbra@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.umbra)
+    com.unity.modules.unityanalytics@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.unityanalytics)
+    com.unity.modules.unitywebrequest@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.unitywebrequest)
+    com.unity.modules.unitywebrequestassetbundle@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.unitywebrequestassetbundle)
+    com.unity.modules.unitywebrequestaudio@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.unitywebrequestaudio)
+    com.unity.modules.unitywebrequesttexture@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.unitywebrequesttexture)
+    com.unity.modules.unitywebrequestwww@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.unitywebrequestwww)
+    com.unity.modules.vehicles@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.vehicles)
+    com.unity.modules.video@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.video)
+    com.unity.modules.wind@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.wind)
+    com.unity.modules.xr@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.xr)
+    com.unity.modules.subsystems@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.subsystems)
+    com.unity.modules.hierarchycore@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.hierarchycore)
+    com.unity.modules.physicscore2d@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.physicscore2d)
+    com.unity.ext.nunit@2.1.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.ext.nunit@44f7d31723bd)
+    com.unity.render-pipelines.core@17.5.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.render-pipelines.core@9fe9377312a8)
+    com.unity.shadergraph@17.5.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.shadergraph@2df19e8719bc)
+    com.unity.render-pipelines.universal-config@17.5.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.render-pipelines.universal-config@fdda01c80fe3)
+    com.unity.collections@6.5.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.collections@a43cabe808ca)
+    com.unity.mathematics@1.4.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.mathematics@981956d94fb6)
+[Package Manager] com.unity.textmeshpro is deprecated: This package is no longer supported. TextMeshPro functionalities are now included in the com.unity.ugui package. To continue using them, consider adding it to your project dependencies.
+[Subsystems] No new subsystems found in resolved package list.
+[Package Manager] Done registering packages in 0.01 seconds
+[ScriptCompilation] Requested script compilation because: AssetDatabase observed changes in script compilation related files
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://unix:/tmp/ilpp.sock-f0dc56c254e8e77c743ce7d5d332a1a3
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Production
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient
+info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+      Request starting HTTP/2 POST http://ilpp/UnityILPP.PostProcessing/Ping - application/grpc -
+info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+      Executing endpoint 'gRPC - /UnityILPP.PostProcessing/Ping'
+info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+      Executed endpoint 'gRPC - /UnityILPP.PostProcessing/Ping'
+info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+      Request finished HTTP/2 POST http://ilpp/UnityILPP.PostProcessing/Ping - 200 - application/grpc 25.1172ms
+Starting: /Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/BuildPipeline/bee_backend --ipc --defer-dag-verification --dagfile="Library/Bee/200b0aE.dag" --continue-on-failure --profile="Library/Bee/backend1.traceevents" ScriptAssemblies
+WorkingDir: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient
+DisplayProgressbar: Compiling Scripts
+info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+      Request starting HTTP/2 POST http://ilpp/UnityILPP.PostProcessing/ConfigurePostProcessors - application/grpc -
+info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+      Executing endpoint 'gRPC - /UnityILPP.PostProcessing/ConfigurePostProcessors'
+warn: Unity.ILPP.Runner.PostProcessingAssemblyLoadContext[0]
+      Assembly system.runtime.interopservices.windowsruntime has duplicate hint path. Ignoring "/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/Scripting/UnityReferenceAssemblies/unity-4.8-api/Facades/System.Runtime.InteropServices.WindowsRuntime.dll" in favor of "/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/Scripting/NetStandard/Extensions/2.0.0/System.Runtime.InteropServices.WindowsRuntime.dll"
+warn: Unity.ILPP.Runner.PostProcessingAssemblyLoadContext[0]
+      Assembly system.componentmodel.composition has duplicate hint path. Ignoring "/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/Scripting/UnityReferenceAssemblies/unity-4.8-api/System.ComponentModel.Composition.dll" in favor of "/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/Scripting/NetStandard/compat/2.1.0/shims/netfx/System.ComponentModel.Composition.dll"
+info: Unity.ILPP.Runner.PostProcessingAssemblyLoadContext[0]
+      Resolved Unity.Burst.Cecil, Version=0.11.6.0, Culture=neutral, PublicKeyToken=50cebf1cceb9d05e with Library/PackageCache/com.unity.burst@6bb9aca3ef38/Unity.Burst.CodeGen/Unity.Burst.Cecil.dll
+info: Unity.ILPP.Runner.PostProcessingAssemblyLoadContext[0]
+      Resolved Mono.Cecil, Version=0.11.5.0, Culture=neutral, PublicKeyToken=50cebf1cceb9d05e with Library/PackageCache/com.unity.nuget.mono-cecil@ecb9724e46ff/Mono.Cecil.dll
+info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+      Executed endpoint 'gRPC - /UnityILPP.PostProcessing/ConfigurePostProcessors'
+info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+      Request finished HTTP/2 POST http://ilpp/UnityILPP.PostProcessing/ConfigurePostProcessors - 200 - application/grpc 39.5009ms
+info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+      Request starting HTTP/2 POST http://ilpp/UnityILPP.PostProcessing/PostProcessAssembly - application/grpc -
+info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+      Executing endpoint 'gRPC - /UnityILPP.PostProcessing/PostProcessAssembly'
+info: Unity.ILPP.Runner.PostProcessingPipeline[0]
+      Processing assembly Library/Bee/artifacts/200b0aE.dag/SoulForge.UnityClient.Editor.dll, with 134 defines and 298 references
+info: Unity.ILPP.Runner.PostProcessingPipeline[0]
+      processors: Unity.Jobs.CodeGen.JobsILPostProcessor, zzzUnity.Burst.CodeGen.BurstILPostProcessor
+info: Unity.ILPP.Runner.PostProcessingPipeline[0]
+      running Unity.Jobs.CodeGen.JobsILPostProcessor
+info: Unity.ILPP.Runner.PostProcessingPipeline[0]
+      running zzzUnity.Burst.CodeGen.BurstILPostProcessor
+info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+      Executed endpoint 'gRPC - /UnityILPP.PostProcessing/PostProcessAssembly'
+info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+      Request finished HTTP/2 POST http://ilpp/UnityILPP.PostProcessing/PostProcessAssembly - 200 - application/grpc 10.9714ms
+ExitCode: 0 Duration: 2s417ms
+[461/583    0s] ILPP-Configuration Library/ilpp-configuration.nevergeneratedoutput
+[579/583    2s] Csc Library/Bee/artifacts/200b0aE.dag/SoulForge.UnityClient.Editor.dll (+2 others)
+Assets/SoulForge/Editor/SoulForgeSceneBuilder.cs(73,62): warning CS0618: 'Object.FindObjectOfType<T>()' is obsolete: 'Object.FindObjectOfType has been deprecated. Use Object.FindAnyObjectByType instead.'
+Assets/SoulForge/Editor/SoulForgeSceneBuilder.cs(119,62): warning CS0618: 'Object.FindObjectOfType<T>()' is obsolete: 'Object.FindObjectOfType has been deprecated. Use Object.FindAnyObjectByType instead.'
+[580/583    0s] ILPostProcess Library/Bee/artifacts/200b0aE.dag/post-processed/SoulForge.UnityClient.Editor.dll (+pdb)
+Processing assembly Library/Bee/artifacts/200b0aE.dag/SoulForge.UnityClient.Editor.dll, with 134 defines and 298 references
+processors: Unity.Jobs.CodeGen.JobsILPostProcessor, zzzUnity.Burst.CodeGen.BurstILPostProcessor
+running Unity.Jobs.CodeGen.JobsILPostProcessor
+running zzzUnity.Burst.CodeGen.BurstILPostProcessor
+[581/583    0s] CopyFiles Library/ScriptAssemblies/SoulForge.UnityClient.Editor.dll
+[582/583    0s] CopyFiles Library/ScriptAssemblies/SoulForge.UnityClient.Editor.pdb
+*** Tundra build success (2.40 seconds), 5 items updated, 583 evaluated
+Assets/SoulForge/Editor/SoulForgeSceneBuilder.cs(73,62): warning CS0618: 'Object.FindObjectOfType<T>()' is obsolete: 'Object.FindObjectOfType has been deprecated. Use Object.FindAnyObjectByType instead.'
+Assets/SoulForge/Editor/SoulForgeSceneBuilder.cs(119,62): warning CS0618: 'Object.FindObjectOfType<T>()' is obsolete: 'Object.FindObjectOfType has been deprecated. Use Object.FindAnyObjectByType instead.'
+Total cache size 18097732
+AssetDatabase: script compilation time: 2.940736s
+Total cache size after purge 18097732, took 00:00:00.0134563
+Begin MonoManager ReloadAssembly
+Native extension for OSXStandalone target not found
+Native extension for WebGL target not found
+ScheduleIndexationOnStartup MainProcess:True IndexOnStartup:True
+Mono: successfully reloaded assembly
+- Finished resetting the current domain, in  1.258 seconds
+Domain Reload Profiling: 1622ms
+	BeginReloadAssembly (130ms)
+		DisableScriptedObjects (18ms)
+		CreateAndSetChildDomain (27ms)
+	RebuildCommonClasses (4ms)
+	RebuildNativeTypeToScriptingClass (9ms)
+	initialDomainReloadingComplete (23ms)
+	LoadAllAssembliesAndSetupDomain (195ms)
+		LoadAssemblies (144ms)
+		AnalyzeDomain (60ms)
+			TypeCache.Refresh (41ms)
+				TypeCache.ScanAssembly (36ms)
+			BuildScriptInfoCaches (15ms)
+			ResolveRequiredComponents (3ms)
+	FinalizeReload (1259ms)
+		SetupLoadedEditorAssemblies (0ms)
+			BeforeProcessingInitializeOnLoad (44ms)
+			ProcessInitializeOnLoadAttributes (1029ms)
+			ProcessInitializeOnLoadMethodAttributes (76ms)
+		AwakeInstancesAfterBackupRestoration (9ms)
+Starting new worker id: 0 with log in /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Logs/AssetImportWorkerHW0.log
+
+Asset Pipeline Refresh (id=fd8f8db1246c046b3be0ed95ce8eceba): Total: 5.717 seconds - Initiated by InitialRefreshV2(ForceSynchronousImport)
+	(Values over 0.05ms)
+	Summary:
+		Imports: total=0 (actual=0, local cache=0, cache server=0)
+		Asset DB Process Time: managed=0 ms, native=1663 ms
+		Asset DB Callback time: managed=691 ms, native=27 ms
+		Scripting: domain reloads=1, domain reload time=375 ms, compile time=2943 ms, other=14 ms
+		Project Asset Count: scripts=779, non-scripts=1482
+		Asset File Changes: new=0, changed=1, moved=0, deleted=0
+		Scan Filter Count: 1
+	InvokePackagesCallback: 12.237ms
+	ApplyChangesToAssetFolders: 0.212ms
+	Scan: 217.263ms
+	Collect global state as custom dependencies: 3.746ms
+	OnSourceAssetsModified: 0.551ms
+	CategorizeScriptCompilationAssets: 14.140ms
+	ProcessAssetsWithTransientArtifactChanges: 19.328ms
+	CategorizeAssets: 60.580ms
+	CompileScripts: 2942.882ms
+	ImportOutOfDateAssets: 1285.683ms (1265.326ms without children)
+		UnloadImportedAssets: 0.774ms
+		EnsureUptoDateAssetsAreRegisteredWithGuidPM: 0.252ms
+		ImportSchedulerStart: 19.329ms
+	PostProcessAllAssets: 696.553ms
+		VCAutoAddAssetPostprocess 3.090ms
+		ShaderAssetModifiedCallback 0.320ms
+		WindowTitlePostprocess 0.118ms
+		MonoPostProcessAllAssets: 691.192ms
+			UniversalRenderPipelineGlobalSettingsPostprocessor.OnPostprocessAllAssets 544.634ms
+			AssetPostprocessor.OnPostprocessAllAssets 78.916ms
+			StyleCatalogPostProcessor.OnPostprocessAllAssets 7.765ms
+			BuilderAssetPostprocessor.OnPostprocessAllAssets 3.741ms
+			SpeedTree9Postprocessor.OnPostprocessAllAssets 2.703ms
+			ShaderGraphAssetPostProcessor.OnPostprocessAllAssets 1.035ms
+			WindowAssetPostprocessingWatcher.OnPostprocessAllAssets 0.999ms
+			AssetChangedListener.OnPostprocessAllAssets 0.888ms
+			SyncVS.PostprocessSyncProject 0.766ms
+			RetainedModeAssetPostprocessor.OnPostprocessAllAssets 0.746ms
+			MaterialPostprocessor.OnPostprocessAllAssets 0.535ms
+			TMPro_TexturePostProcessor.OnPostprocessAllAssets 0.505ms
+			ArtifactBrowserPostProcessor.OnPostprocessAllAssets 0.352ms
+			ShaderReflectionAssetPostProcessor.OnPostprocessAllAssets 0.349ms
+			TextAssetPostProcessor.OnPostprocessAllAssets 0.276ms
+			SampleDependencyImporterPostProcessor.OnPostprocessAllAssets 0.254ms
+			PostProcessor.OnPostprocessAllAssets 0.191ms
+			ReferencedClipsPostProcessor.OnPostprocessAllAssets 0.160ms
+			AudioMixerPostprocessor.OnPostprocessAllAssets 0.141ms
+			AssetEvents.OnPostprocessAllAssets 0.132ms
+			TerrainToolbarOverlayPostProcessor.OnPostprocessAllAssets 0.126ms
+			SpeedTreePostProcessor.OnPostprocessAllAssets 0.098ms
+			AssetDatabaseCallbacks.OnPostprocessAllAssets 0.071ms
+			ConfigAssetsTracker.OnPostprocessAllAssets 0.053ms
+	PostAssetChangesProfiler: 11.339ms
+	UnloadStreamsBegin: 0.888ms
+	GenerateScriptTypeHashes: 0.975ms
+	GenerateScriptTypeSerializationHashes: 1.703ms
+	Untracked: 449.100ms
+
+Application.AssetDatabase Initial Refresh End
+Shader Hidden/ChartRasterizerHardware is not supported: GPU does not support conservative rasterization
+Launching external process: /Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Helpers/UnityShaderCompiler
+Launched and connected shader compiler UnityShaderCompiler after 0.08 seconds
+Shader Hidden/ChartRasterizerHardware is not supported: GPU does not support conservative rasterization
+Scanning for USB devices : 0.445ms
+Initializing Unity extensions:
+[MODES] ModeService[none].Initialize
+[MODES] ModeService[none].LoadModes
+[MODES] Loading mode Default (0) for mode-current-id-SoulForgeUnityClient
+2026-07-04 14:52:21.384 Unity[85921:88674045] NSEventModifierFlagFunction specified to -setKeyEquivalentModifierMask: for item <NSMenuItem: 0x74a833660 SDF, ke='Command-F12'>, but is only supported for system-provided menu items; will not be used
+Unloading 247 Unused Serialized files (Serialized files now loaded: 0)
+Unloading 3185 unused Assets / (8.2 MB). Loaded Objects now: 3997.
+Memory consumption went from 240.8 MB to 232.6 MB.
+Total: 13.827709 ms (FindLiveObjects: 0.173708 ms CreateObjectMapping: 0.546000 ms MarkObjects: 10.497917 ms  DeleteObjects: 2.609708 ms)
+
+2026-07-04 14:52:21.491 Unity[85921:88674045] NSEventModifierFlagFunction specified to -setKeyEquivalentModifierMask: for item <NSMenuItem: 0x74a830b40 SDF, ke='Command-F12'>, but is only supported for system-provided menu items; will not be used
+Asset Pipeline Refresh (id=9459971ddb799400daa0fc7f8974976d): Total: 0.166 seconds - Initiated by RefreshV2(NoUpdateAssetOptions)
+Unloading 0 Unused Serialized files (Serialized files now loaded: 0)
+Unloading 1 unused Assets / (0.8 KB). Loaded Objects now: 3999.
+Memory consumption went from 187.2 MB to 187.2 MB.
+Total: 4.377292 ms (FindLiveObjects: 0.085625 ms CreateObjectMapping: 0.188083 ms MarkObjects: 4.082458 ms  DeleteObjects: 0.020750 ms)
+
+Worker ready: AssetImportWorkerHW0 0
+Importing 'GUID: bb623ecda68404456a3b16c65be30fe7 - Path: Assets/SoulForge/Scenes/SoulForgeApartment.unity' with importer (DefaultImporter)
+Imported 'GUID: bb623ecda68404456a3b16c65be30fe7' -> (Import Result ID: '50afff9e32941259bc1cbcc8a0e42a18') in 0.003 seconds [static dependencies only]. Details - ImportResultOutputID=c5a1ac5b2395a2fc11334f4b47000fc9 DependenciesID=4c1e909f75f01edbb9f540787934f6d1 StaticDependenciesID=f5a7f0c9831b57a10bd4f4f53eed84f8 
+Asset Pipeline Refresh (id=b1666f1881be3458d9ff7f65586fc99d): Total: 0.041 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Asset Pipeline Refresh (id=0cf171b4aae1442009451f76fe94cfb1): Total: 0.033 seconds - Initiated by RefreshV2(NoUpdateAssetOptions)
+Batchmode quit successfully invoked - shutting down!
+Curl error 42: Callback aborted
+Thread 0x325787000 may have been prematurely finalized
+Input System module state changed to: ShutdownInProgress.
+Input Polling Thread exited.
+Input System module state changed to: Shutdown.
+正在关闭 MSBuild 服务器...
+正在关闭 VB/C# 编译器服务器...
+[Physics::Module] Cleanup current backend.
+[Physics::Module] Id: 0xf2b8ea05
+[Licensing::IpcConnector] LicenseClient-lovelyjoy-6000.5.2-notifications channel disconnected successfully.
+[Licensing::IpcConnector] LicenseClient-lovelyjoy-6000.5.2 channel disconnected successfully.
+Thread 0x170957000 may have been prematurely finalized
+Thread 0x170afb000 may have been prematurely finalized
+Thread 0x1708cb000 may have been prematurely finalized
+Thread 0x1709e3000 may have been prematurely finalized
+Thread 0x170a6f000 may have been prematurely finalized
+Thread 0x170b87000 may have been prematurely finalized
+Thread 0x170c9f000 may have been prematurely finalized
+Thread 0x170c13000 may have been prematurely finalized
+Thread 0x170d2b000 may have been prematurely finalized
+成功关闭 MSBuild 服务器。
+成功关闭 VB/C# 编译器服务器。
+AcceleratorClientConnectionCallback - disconnected - :0
+Thread 0x172467000 may have been prematurely finalized
+Cleanup mono
+CodeReloadManager destroyed
+info: Microsoft.Hosting.Lifetime[0]
+      Application is shutting down...
+info: Unity.ILPP.Runner.PostProcessingAssemblyLoadContext[0]
+      ALC ILPP context 1 is unloading
+debugger-agent: Unable to listen on 43
+Exiting batchmode successfully now!
+[Package Manager] Server process was shutdown

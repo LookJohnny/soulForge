@@ -1,0 +1,40 @@
+{
+  "out": "outputs/mujoco/sim_life_960_smoke.mp4",
+  "duration_s": 3.0,
+  "record_fps": 4.0,
+  "frames": 12,
+  "agents": [
+    "Nova",
+    "Mira",
+    "Kite"
+  ],
+  "assets": [
+    {
+      "avatar_name": "Polydancer",
+      "model_path": "assets/vtubers/open_source_avatars/polydancer.vrm",
+      "thumbnail_path": "assets/vtubers/open_source_avatars/polydancer_thumbnail.gif",
+      "license": "CC0",
+      "source_url": "https://arweave.net/jPOg-G0MPH55ZQmamFhT9f8cHn-hjeAQ0mRO5gWeKMQ",
+      "thumbnail_url": "https://arweave.net/SUPfb9dzBeLUUpJaEjGPGDkEE_6PylCs3_wU_Em69LM",
+      "project_id": "100avatars-r1"
+    },
+    {
+      "avatar_name": "Rose",
+      "model_path": "assets/vtubers/open_source_avatars/rose.vrm",
+      "thumbnail_path": "assets/vtubers/open_source_avatars/rose_thumbnail.gif",
+      "license": "CC0",
+      "source_url": "https://arweave.net/Ea1KXujzJatQgCFSMzGOzp_UtHqB1pyia--U3AtkMAY",
+      "thumbnail_url": "https://arweave.net/MsKV9G8Dvzv1rOfU8aCLlxZ2PtzQ-J9ijkdkFU-ExPo",
+      "project_id": "100avatars-r1"
+    },
+    {
+      "avatar_name": "Robert",
+      "model_path": "assets/vtubers/open_source_avatars/robert.vrm",
+      "thumbnail_path": "assets/vtubers/open_source_avatars/robert_thumbnail.gif",
+      "license": "CC0",
+      "source_url": "https://arweave.net/gwG7w4bY-A5c3R6A6GOz3xBCgbPvkFQmqPIDtvnNsYI",
+      "thumbnail_url": "https://arweave.net/gaFPebQ9hSZDa_xNHkja8CH0Qde2y41L95VQTtroWNA",
+      "project_id": "100avatars-r1"
+    }
+  ]
+}

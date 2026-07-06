@@ -1,0 +1,566 @@
+Unity Editor version:    6000.5.2f1 (eb73d3b415a1)
+Branch:                  6000.5/staging
+Build type:              Release
+Batch mode:              YES
+macOS version:           Version 26.3 (Build 25D125)
+Darwin version:          25.3.0
+Architecture:            arm64
+Running under Rosetta:   NO
+Available memory:        16384 MB
+Date:                    2026-07-04T06:32:26Z
+[Licensing::Module] Trying to connect to existing licensing client channel...
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-lovelyjoy" at "2026-07-04T06:32:26.390399Z"
+Launching external process: /Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Helpers/PackageManager/Server/UnityPackageManager
+
+COMMAND LINE ARGUMENTS:
+/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/MacOS/Unity
+-batchmode
+-quit
+-projectPath
+/Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient
+-executeMethod
+SoulForge.UnityClient.Editor.SoulForgeSceneBuilder.CreateApartmentDemoScene
+-logFile
+/Users/lovelyjoy/Desktop/soulForge/outputs/unity/unity_create_scene_assetpass_v1.log
+Successfully changed project path to: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient
+/Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient
+[UnityMemory] Configuration Parameters - Can be set up in boot.config
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-nav-mesh-worker=65536"
+    "memorysetup-temp-allocator-size-audio-worker=65536"
+    "memorysetup-temp-allocator-size-cloud-worker=32768"
+    "memorysetup-allocator-temp-initial-block-size-main=262144"
+    "memorysetup-allocator-temp-initial-block-size-worker=262144"
+    "memorysetup-temp-allocator-size-preload-manager=33554432"
+    "memorysetup-temp-allocator-size-gfx=262144"
+    "memorysetup-temp-allocator-size-background-worker=32768"
+    "memorysetup-temp-allocator-size-job-worker=262144"
+    "memorysetup-bucket-allocator-granularity=16"
+    "memorysetup-bucket-allocator-bucket-count=8"
+    "memorysetup-bucket-allocator-block-size=33554432"
+    "memorysetup-bucket-allocator-block-count=8"
+    "memorysetup-main-allocator-block-size=16777216"
+    "memorysetup-thread-allocator-block-size=16777216"
+    "memorysetup-main-allocator-mimalloc-enabled=0"
+    "memorysetup-gfx-main-allocator-block-size=16777216"
+    "memorysetup-gfx-thread-allocator-block-size=16777216"
+    "memorysetup-cache-allocator-block-size=4194304"
+    "memorysetup-typetree-allocator-block-size=2097152"
+    "memorysetup-profiler-bucket-allocator-granularity=16"
+    "memorysetup-profiler-bucket-allocator-bucket-count=8"
+    "memorysetup-profiler-bucket-allocator-block-size=33554432"
+    "memorysetup-profiler-bucket-allocator-block-count=8"
+    "memorysetup-profiler-allocator-block-size=16777216"
+    "memorysetup-profiler-editor-allocator-block-size=1048576"
+    "memorysetup-temp-allocator-size-main=16777216"
+    "memorysetup-job-temp-allocator-block-size=2097152"
+    "memorysetup-job-temp-allocator-block-size-background=1048576"
+    "memorysetup-job-temp-allocator-reduction-small-platforms=262144"
+Logging is directed to a specific file, skipping project log.Player connection [8758587520]  Target information:
+
+Player connection [8758587520]  * "[IP] 192.168.1.172 [Port] 55504 [Flags] 2 [Guid] 3926893725 [EditorId] 3926893725 [Version] 1048832 [Id] OSXEditor(0,LovelyjoydeMac-mini.local) [Debug] 1 [PackageName] OSXEditor [ProjectName] Editor" 
+
+Player connection [8758587520]  * "[IP] 192.168.1.206 [Port] 55504 [Flags] 2 [Guid] 3926893725 [EditorId] 3926893725 [Version] 1048832 [Id] OSXEditor(0,LovelyjoydeMac-mini.local) [Debug] 1 [PackageName] OSXEditor [ProjectName] Editor" 
+
+Player connection [8758587520]  * "[IP] 198.18.0.1 [Port] 55504 [Flags] 2 [Guid] 3926893725 [EditorId] 3926893725 [Version] 1048832 [Id] OSXEditor(0,LovelyjoydeMac-mini.local) [Debug] 1 [PackageName] OSXEditor [ProjectName] Editor" 
+
+Player connection [8758587520] Host joined multi-casting on [225.0.0.222:54997]...
+Player connection [8758587520] Host joined alternative multi-casting on [225.0.0.222:34997]...
+Input System module state changed to: Initialized.
+[Physics::Module] Initialized fallback backend.
+[Physics::Module] Id: 0xdecafbad
+[Licensing::Client] Error: HandshakeResponse reported an error:
+	ResponseCode: 505
+	ResponseStatus: Unsupported protocol version '1.18.1'.
+[Licensing::Module] Error: Failed to handshake to channel: "LicenseClient-lovelyjoy"
+[Licensing::IpcConnector] LicenseClient-lovelyjoy channel disconnected successfully.
+[Licensing::IpcConnector] Channel LicenseClient-lovelyjoy-6000.5.2 doesn't exist
+Launching external process: /Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Helpers/UnityLicensingClient.app/Contents/MacOS/Unity.Licensing.Client
+[Licensing::Module] Successfully launched the LicensingClient (PId: 44504)
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-lovelyjoy-6000.5.2" at "2026-07-04T06:32:27.369681Z"
+[Licensing::Client] Handshaking with LicensingClient:
+  Version:                 1.18.1+9fbee8e
+  Session Id:              8a86e6ef5a004e04930d15062ecc0299
+  Correlation Id:          8262fd86d38125544be2a6c1ef590da5
+  External correlation Id: 3263165199158454722
+  Machine Id:              SDHUngXkiKNcxSPIxgVLa+vPMH8=
+[Licensing::Module] Successfully connected to LicensingClient on channel: "LicenseClient-lovelyjoy-6000.5.2" (connect: 0.58s, validation: 0.05s, handshake: 0.34s)
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-lovelyjoy-6000.5.2-notifications" at "2026-07-04T06:32:27.756767Z"
+[Licensing::Module] Connected to LicensingClient (PId: 44504, launch time: 0.00, total connection time: 0.97s)
+[Licensing::Module] Error: Access token is unavailable; failed to update
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Module] License group:
+  Id: 18968458761207-UnityPersXXXX
+  Product: Unity Personal
+  Type: Assigned
+  Expiration: Unlimited
+[Licensing::Client] Successfully updated license, isAsync: True, time: 0.01
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Module] Licensing Background thread has ended after 1.38s
+[Package Manager] Connected to IPC stream "Upm-44427" after 1.4 seconds.
+[Licensing::Client] Successfully resolved entitlement details
+Library Redirect Path: Library/
+[Physics::Module] Selected backend.
+[Physics::Module] Name: PhysX
+[Physics::Module] Id: 0xf2b8ea05
+[Physics::Module] SDK Version: 4.1.2
+[Physics::Module] Integration Version: 1.0.0
+[Physics::Module] Threading Mode: Multi-Threaded
+Initialize engine version: 6000.5.2f1 (eb73d3b415a1)
+[Subsystems] Discovering subsystems at path /Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/UnitySubsystems
+[Subsystems] Discovering subsystems at path /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Assets
+GfxDevice: creating device client; kGfxThreadingModeNonThreaded
+ preferred device: Apple M4 (high power)
+Metal devices available: 1
+0: Apple M4 (high power)
+Using device Apple M4 (high power)
+Initializing Metal device caps: Apple M4
+Mac GPU Family: 2
+Apple GPU Family: 9
+MSL Version: 3.0
+Has Float MSAA: 1
+Has Float Filtering: 1
+ReadWrite Texture Tier: 2
+Initialize mono
+Mono path[0] = '/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/Scripting/Managed'
+Mono path[1] = '/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/Scripting/BCLExtensions/runtime/netstandard2.1'
+Mono path[2] = '/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/Scripting/MonoBleedingEdge/lib/mono/unityjit-macos'
+Mono config path = '/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/Scripting/MonoBleedingEdge/etc'
+Using monoOptions --debugger-agent=transport=dt_socket,embedding=1,server=y,suspend=n,address=127.0.0.1:56427
+CodeReloadManager initialized
+ImportWorker Server TCP listen port: 0
+AcceleratorClientConnectionCallback - disconnected - :0
+Begin MonoManager ReloadAssembly
+Registering precompiled unity dll's ...
+Register platform support module: /Applications/Unity/Hub/Editor/6000.5.2f1/PlaybackEngines/WebGLSupport/UnityEditor.WebGL.Extensions.dll
+Register platform support module: /Applications/Unity/Hub/Editor/6000.5.2f1/PlaybackEngines/MacStandaloneSupport/UnityEditor.OSXStandalone.Extensions.dll
+Registered in 0.001366 seconds.
+Native extension for OSXStandalone target not found
+Native extension for WebGL target not found
+Package Manager log level set to [2]
+ScheduleIndexationOnStartup MainProcess:False IndexOnStartup:False
+Mono: successfully reloaded assembly
+- Finished resetting the current domain, in  0.220 seconds
+Domain Reload Profiling: 527ms
+	BeginReloadAssembly (88ms)
+		CreateAndSetChildDomain (6ms)
+	RebuildCommonClasses (3ms)
+	RebuildNativeTypeToScriptingClass (13ms)
+	initialDomainReloadingComplete (32ms)
+	LoadAllAssembliesAndSetupDomain (171ms)
+		LoadAssemblies (82ms)
+		AnalyzeDomain (131ms)
+			TypeCache.Refresh (131ms)
+				TypeCache.ScanAssembly (119ms)
+	FinalizeReload (221ms)
+		SetupLoadedEditorAssemblies (0ms)
+			BeforeProcessingInitializeOnLoad (44ms)
+			ProcessInitializeOnLoadAttributes (57ms)
+			ProcessInitializeOnLoadMethodAttributes (74ms)
+[Licensing::Client] Successfully resolved entitlement details
+Application.AssetDatabase Initial Refresh Start
+[Package Manager] Restoring resolved packages state from cache
+[Licensing::Client] Successfully resolved entitlement details
+[Package Manager] Registered 47 packages:
+  Packages from [https://packages.unity.com]:
+    com.unity.searcher@4.9.4 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.searcher@d45a78918735)
+    com.unity.burst@1.8.29 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.burst@6bb9aca3ef38)
+    com.unity.nuget.mono-cecil@1.11.6 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.nuget.mono-cecil@ecb9724e46ff)
+    com.unity.test-framework.performance@3.5.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.test-framework.performance@8b56083ec0f0)
+  Built-in packages:
+    com.unity.render-pipelines.universal@17.5.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.render-pipelines.universal@748d7458cc62)
+    com.unity.test-framework@1.7.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.test-framework@1405238725ab)
+    com.unity.textmeshpro@5.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.textmeshpro@53f43edfd2e0)
+    com.unity.ugui@2.5.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.ugui@3d1ea40b73ef)
+    com.unity.modules.ai@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.ai)
+    com.unity.modules.androidjni@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.androidjni)
+    com.unity.modules.animation@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.animation)
+    com.unity.modules.assetbundle@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.assetbundle)
+    com.unity.modules.audio@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.audio)
+    com.unity.modules.cloth@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.cloth)
+    com.unity.modules.director@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.director)
+    com.unity.modules.imageconversion@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.imageconversion)
+    com.unity.modules.imgui@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.imgui)
+    com.unity.modules.jsonserialize@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.jsonserialize)
+    com.unity.modules.particlesystem@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.particlesystem)
+    com.unity.modules.physics@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.physics)
+    com.unity.modules.physics2d@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.physics2d)
+    com.unity.modules.screencapture@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.screencapture)
+    com.unity.modules.terrain@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.terrain)
+    com.unity.modules.terrainphysics@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.terrainphysics)
+    com.unity.modules.tilemap@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.tilemap)
+    com.unity.modules.ui@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.ui)
+    com.unity.modules.uielements@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.uielements)
+    com.unity.modules.umbra@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.umbra)
+    com.unity.modules.unityanalytics@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.unityanalytics)
+    com.unity.modules.unitywebrequest@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.unitywebrequest)
+    com.unity.modules.unitywebrequestassetbundle@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.unitywebrequestassetbundle)
+    com.unity.modules.unitywebrequestaudio@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.unitywebrequestaudio)
+    com.unity.modules.unitywebrequesttexture@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.unitywebrequesttexture)
+    com.unity.modules.unitywebrequestwww@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.unitywebrequestwww)
+    com.unity.modules.vehicles@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.vehicles)
+    com.unity.modules.video@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.video)
+    com.unity.modules.wind@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.wind)
+    com.unity.modules.xr@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.xr)
+    com.unity.modules.subsystems@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.subsystems)
+    com.unity.modules.hierarchycore@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.hierarchycore)
+    com.unity.modules.physicscore2d@1.0.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.modules.physicscore2d)
+    com.unity.ext.nunit@2.1.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.ext.nunit@44f7d31723bd)
+    com.unity.render-pipelines.core@17.5.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.render-pipelines.core@9fe9377312a8)
+    com.unity.shadergraph@17.5.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.shadergraph@2df19e8719bc)
+    com.unity.render-pipelines.universal-config@17.5.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.render-pipelines.universal-config@fdda01c80fe3)
+    com.unity.collections@6.5.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.collections@a43cabe808ca)
+    com.unity.mathematics@1.4.0 (location: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Library/PackageCache/com.unity.mathematics@981956d94fb6)
+[Package Manager] com.unity.textmeshpro is deprecated: This package is no longer supported. TextMeshPro functionalities are now included in the com.unity.ugui package. To continue using them, consider adding it to your project dependencies.
+[Subsystems] No new subsystems found in resolved package list.
+[Package Manager] Done registering packages in 0.01 seconds
+[ScriptCompilation] Requested script compilation because: AssetDatabase observed changes in script compilation related files
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://unix:/tmp/ilpp.sock-f0dc56c254e8e77c743ce7d5d332a1a3
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Production
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient
+info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+      Request starting HTTP/2 POST http://ilpp/UnityILPP.PostProcessing/Ping - application/grpc -
+info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+      Executing endpoint 'gRPC - /UnityILPP.PostProcessing/Ping'
+info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+      Executed endpoint 'gRPC - /UnityILPP.PostProcessing/Ping'
+info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+      Request finished HTTP/2 POST http://ilpp/UnityILPP.PostProcessing/Ping - 200 - application/grpc 82.8983ms
+Starting: /Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/BuildPipeline/bee_backend --ipc --defer-dag-verification --dagfile="Library/Bee/200b0aE.dag" --continue-on-failure --profile="Library/Bee/backend1.traceevents" ScriptAssemblies
+WorkingDir: /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient
+DisplayProgressbar: Compiling Scripts
+info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+      Request starting HTTP/2 POST http://ilpp/UnityILPP.PostProcessing/ConfigurePostProcessors - application/grpc -
+info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+      Executing endpoint 'gRPC - /UnityILPP.PostProcessing/ConfigurePostProcessors'
+warn: Unity.ILPP.Runner.PostProcessingAssemblyLoadContext[0]
+      Assembly system.runtime.interopservices.windowsruntime has duplicate hint path. Ignoring "/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/Scripting/UnityReferenceAssemblies/unity-4.8-api/Facades/System.Runtime.InteropServices.WindowsRuntime.dll" in favor of "/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/Scripting/NetStandard/Extensions/2.0.0/System.Runtime.InteropServices.WindowsRuntime.dll"
+warn: Unity.ILPP.Runner.PostProcessingAssemblyLoadContext[0]
+      Assembly system.componentmodel.composition has duplicate hint path. Ignoring "/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/Scripting/UnityReferenceAssemblies/unity-4.8-api/System.ComponentModel.Composition.dll" in favor of "/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Resources/Scripting/NetStandard/compat/2.1.0/shims/netfx/System.ComponentModel.Composition.dll"
+info: Unity.ILPP.Runner.PostProcessingAssemblyLoadContext[0]
+      Resolved Unity.Burst.Cecil, Version=0.11.6.0, Culture=neutral, PublicKeyToken=50cebf1cceb9d05e with Library/PackageCache/com.unity.burst@6bb9aca3ef38/Unity.Burst.CodeGen/Unity.Burst.Cecil.dll
+info: Unity.ILPP.Runner.PostProcessingAssemblyLoadContext[0]
+      Resolved Mono.Cecil, Version=0.11.5.0, Culture=neutral, PublicKeyToken=50cebf1cceb9d05e with Library/PackageCache/com.unity.nuget.mono-cecil@ecb9724e46ff/Mono.Cecil.dll
+info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+      Executed endpoint 'gRPC - /UnityILPP.PostProcessing/ConfigurePostProcessors'
+info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+      Request finished HTTP/2 POST http://ilpp/UnityILPP.PostProcessing/ConfigurePostProcessors - 200 - application/grpc 17.3174ms
+info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+      Request starting HTTP/2 POST http://ilpp/UnityILPP.PostProcessing/PostProcessAssembly - application/grpc -
+info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+      Executing endpoint 'gRPC - /UnityILPP.PostProcessing/PostProcessAssembly'
+info: Unity.ILPP.Runner.PostProcessingPipeline[0]
+      Processing assembly Library/Bee/artifacts/200b0aE.dag/SoulForge.UnityClient.Editor.dll, with 134 defines and 296 references
+info: Unity.ILPP.Runner.PostProcessingPipeline[0]
+      processors: Unity.Jobs.CodeGen.JobsILPostProcessor, zzzUnity.Burst.CodeGen.BurstILPostProcessor
+info: Unity.ILPP.Runner.PostProcessingPipeline[0]
+      running Unity.Jobs.CodeGen.JobsILPostProcessor
+info: Unity.ILPP.Runner.PostProcessingPipeline[0]
+      running zzzUnity.Burst.CodeGen.BurstILPostProcessor
+info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+      Executed endpoint 'gRPC - /UnityILPP.PostProcessing/PostProcessAssembly'
+info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+      Request finished HTTP/2 POST http://ilpp/UnityILPP.PostProcessing/PostProcessAssembly - 200 - application/grpc 20.0295ms
+ExitCode: 0 Duration: 3s195ms
+[461/583    0s] ILPP-Configuration Library/ilpp-configuration.nevergeneratedoutput
+[579/583    2s] Csc Library/Bee/artifacts/200b0aE.dag/SoulForge.UnityClient.Editor.dll (+2 others)
+Assets/SoulForge/Editor/SoulForgeSceneBuilder.cs(67,62): warning CS0618: 'Object.FindObjectOfType<T>()' is obsolete: 'Object.FindObjectOfType has been deprecated. Use Object.FindAnyObjectByType instead.'
+Assets/SoulForge/Editor/SoulForgeSceneBuilder.cs(113,62): warning CS0618: 'Object.FindObjectOfType<T>()' is obsolete: 'Object.FindObjectOfType has been deprecated. Use Object.FindAnyObjectByType instead.'
+[580/583    0s] ILPostProcess Library/Bee/artifacts/200b0aE.dag/post-processed/SoulForge.UnityClient.Editor.dll (+pdb)
+Processing assembly Library/Bee/artifacts/200b0aE.dag/SoulForge.UnityClient.Editor.dll, with 134 defines and 296 references
+processors: Unity.Jobs.CodeGen.JobsILPostProcessor, zzzUnity.Burst.CodeGen.BurstILPostProcessor
+running Unity.Jobs.CodeGen.JobsILPostProcessor
+running zzzUnity.Burst.CodeGen.BurstILPostProcessor
+[581/583    0s] CopyFiles Library/ScriptAssemblies/SoulForge.UnityClient.Editor.pdb
+[582/583    0s] CopyFiles Library/ScriptAssemblies/SoulForge.UnityClient.Editor.dll
+*** Tundra build success (3.17 seconds), 5 items updated, 583 evaluated
+Assets/SoulForge/Editor/SoulForgeSceneBuilder.cs(67,62): warning CS0618: 'Object.FindObjectOfType<T>()' is obsolete: 'Object.FindObjectOfType has been deprecated. Use Object.FindAnyObjectByType instead.'
+Assets/SoulForge/Editor/SoulForgeSceneBuilder.cs(113,62): warning CS0618: 'Object.FindObjectOfType<T>()' is obsolete: 'Object.FindObjectOfType has been deprecated. Use Object.FindAnyObjectByType instead.'
+Total cache size 18097732
+Total cache size after purge 18097732, took 00:00:00.0173631
+AssetDatabase: script compilation time: 4.699715s
+Begin MonoManager ReloadAssembly
+Importing 'GUID: 5743eeb768c8a48c9899f411ddd48f14 - Path: Assets/ThirdParty' with importer (DefaultImporter)
+Imported 'GUID: 5743eeb768c8a48c9899f411ddd48f14' -> (Import Result ID: '1e3a9fbd78b77e6c391133a068fc2094') in 0.038 seconds [static dependencies only]. Details - ImportResultOutputID=9d41baa9b4c3a8e7e72ab7c9d629a56a DependenciesID=d14c3429704e0b614dbecb47e28c14fc StaticDependenciesID=76f455138200ff084ea7ee0f29ef9db9 
+Importing 'GUID: 31a4ea43490814057b2a6518c5bd6431 - Path: Assets/ThirdParty/KenneyFurniture' with importer (DefaultImporter)
+Imported 'GUID: 31a4ea43490814057b2a6518c5bd6431' -> (Import Result ID: 'da12ef183bb0b2829cf0d5c53b04719a') in 0.003 seconds [static dependencies only]. Details - ImportResultOutputID=07e2c6d084cf5467fd81f4358ace66bc DependenciesID=4e2fed7e1624b705f324b1b99e47df08 StaticDependenciesID=f528a34e567428c87d797defadf49d6a 
+Importing 'GUID: 77c4e532b2df84c29a6f2a8d553448ad - Path: Assets/ThirdParty/KenneyFurniture/FBX' with importer (DefaultImporter)
+Imported 'GUID: 77c4e532b2df84c29a6f2a8d553448ad' -> (Import Result ID: 'a31caff4f9f197a7140eef738e1403ea') in 0.001 seconds [static dependencies only]. Details - ImportResultOutputID=4f06ff1a64241fe6677231022e11fdbf DependenciesID=bd80834ca1d4eca6cf4bc6565540ef48 StaticDependenciesID=7ed8e3063e498c5a0b50811b404dae64 
+Native extension for OSXStandalone target not found
+Native extension for WebGL target not found
+ScheduleIndexationOnStartup MainProcess:True IndexOnStartup:True
+Mono: successfully reloaded assembly
+- Finished resetting the current domain, in  1.346 seconds
+Domain Reload Profiling: 1806ms
+	BeginReloadAssembly (203ms)
+		DisableScriptedObjects (18ms)
+		CreateAndSetChildDomain (48ms)
+	RebuildCommonClasses (6ms)
+	RebuildNativeTypeToScriptingClass (9ms)
+	initialDomainReloadingComplete (25ms)
+	LoadAllAssembliesAndSetupDomain (216ms)
+		LoadAssemblies (199ms)
+		AnalyzeDomain (70ms)
+			TypeCache.Refresh (46ms)
+				TypeCache.ScanAssembly (38ms)
+			BuildScriptInfoCaches (15ms)
+			ResolveRequiredComponents (4ms)
+	FinalizeReload (1347ms)
+		SetupLoadedEditorAssemblies (0ms)
+			BeforeProcessingInitializeOnLoad (42ms)
+			ProcessInitializeOnLoadAttributes (1122ms)
+			ProcessInitializeOnLoadMethodAttributes (84ms)
+		AwakeInstancesAfterBackupRestoration (11ms)
+Importing 'GUID: 20eb7e89b21c34f11bbe0c6af072905a - Path: Assets/ThirdParty/KenneyFurniture/FBX/rugRectangle.fbx' with importer (FBXImporter)
+Launching external process: /Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/Helpers/UnityShaderCompiler
+Launched and connected shader compiler UnityShaderCompiler after 0.35 seconds
+Imported 'GUID: 20eb7e89b21c34f11bbe0c6af072905a' -> (Import Result ID: 'f88d7f774ee40bc3a2742fe4a7fe08c9') in 0.677 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=54ff746c70dc0447125d95197c61f8f7 DependenciesID=3fb11ff05a520913f7384e7796cca775 StaticDependenciesID=a39444d2dddb751b00365668369b007f 
+Importing 'GUID: 30702eb5a723f4cf0b5d69019baea7b2 - Path: Assets/ThirdParty/KenneyFurniture/FBX/plantSmall2.fbx' with importer (FBXImporter)
+Imported 'GUID: 30702eb5a723f4cf0b5d69019baea7b2' -> (Import Result ID: '9e34ceb0f65d13fabc9fd4d78122b0a5') in 0.016 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=89a15c6d94dcd6a1536992ad9cf7b8fe DependenciesID=44d24d2af390b7c8ab0e95d3dd503137 StaticDependenciesID=d6d49039eca90e909927bcb8d82d1296 
+Importing 'GUID: 5049e1df555fc41e7ae028ba9d0eb687 - Path: Assets/ThirdParty/KenneyFurniture/FBX/laptop.fbx' with importer (FBXImporter)
+Imported 'GUID: 5049e1df555fc41e7ae028ba9d0eb687' -> (Import Result ID: '64bc80956d57c7399629c88b516a100f') in 0.012 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=00355699623889391a017463dfa05ae1 DependenciesID=e47c2b66aac1f2cb8c728bb09f263a3c StaticDependenciesID=6b942c392b046f015a2bd17a10fcafee 
+Importing 'GUID: 80f29ce28bdb14134a52d51307bdcb59 - Path: Assets/ThirdParty/KenneyFurniture/FBX/computerKeyboard.fbx' with importer (FBXImporter)
+Imported 'GUID: 80f29ce28bdb14134a52d51307bdcb59' -> (Import Result ID: 'b5247b4aab8e9c4f31355c64a88acddf') in 0.012 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=5058a37b7b18daafb03abc35c88a83fd DependenciesID=ca1171b6f7e4ab90672defc0ac640ffd StaticDependenciesID=c06e586dae75633b52e5474c27baf52e 
+Importing 'GUID: 901d18b9e7a4147739521f83ceb89b23 - Path: Assets/ThirdParty/KenneyFurniture/FBX/wallWindowSlide.fbx' with importer (FBXImporter)
+Imported 'GUID: 901d18b9e7a4147739521f83ceb89b23' -> (Import Result ID: '2595d85fc11b97d67de4b7255af227ba') in 0.022 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=a4d4cc8429b704d5a6614e6dd3bf14d0 DependenciesID=b2478787df0548afe63f2ef71c91e9da StaticDependenciesID=33a070048090ba734b071fcb45fb1f8c 
+Importing 'GUID: 909e39941275a4764b3414a4502b40d9 - Path: Assets/ThirdParty/KenneyFurniture/FBX/lampRoundFloor.fbx' with importer (FBXImporter)
+Imported 'GUID: 909e39941275a4764b3414a4502b40d9' -> (Import Result ID: '39407286fcd68a9fff18bb9b528e1658') in 0.013 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=13a557ba8429526d47c1371a91b870d6 DependenciesID=8ef43ce6eb35837e6e08d8bf2330ee2b StaticDependenciesID=bfb1b6b85533390b9ba769e09f9fb240 
+Importing 'GUID: a07ac3d3fe01b47daae9f40e7025eaa3 - Path: Assets/ThirdParty/KenneyFurniture/FBX/ceilingFan.fbx' with importer (FBXImporter)
+Imported 'GUID: a07ac3d3fe01b47daae9f40e7025eaa3' -> (Import Result ID: 'ca93550dd9726d0ed6a10e73b78db43a') in 0.014 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=b2cae20f4da502e252a6bf6c74df832c DependenciesID=abf9740fb3458c4d5e3e70d01938222d StaticDependenciesID=956bd11ebe3e947acecaed0734b36b04 
+Importing 'GUID: d03098b8951874a1e809eb0f42802436 - Path: Assets/ThirdParty/KenneyFurniture/FBX/deskCorner.fbx' with importer (FBXImporter)
+Imported 'GUID: d03098b8951874a1e809eb0f42802436' -> (Import Result ID: '359f427e68e2b7cae841631d5dc1ea35') in 0.011 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=b571775a3ec98c9e76bbe766ed6a1516 DependenciesID=4674592cbf9d1c62fe6bd0157f16470a StaticDependenciesID=5a95094c82dcbad38f416b7da1b3b51f 
+Importing 'GUID: e09cd76a423f24a34ab2286989c9e44f - Path: Assets/ThirdParty/KenneyFurniture/FBX/sideTable.fbx' with importer (FBXImporter)
+Imported 'GUID: e09cd76a423f24a34ab2286989c9e44f' -> (Import Result ID: '75d51abcf39cc90770c00bf2e3a6280f') in 0.014 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=20387d0ae0973256185ebc010605d4c8 DependenciesID=12a464bd42a759b1af2305287a8fc160 StaticDependenciesID=28c1d6662c4bcab061df5051e2e56d76 
+Importing 'GUID: 31393b98902ed44e49637ad80bceadc0 - Path: Assets/ThirdParty/KenneyFurniture/FBX/pillowLong.fbx' with importer (FBXImporter)
+Imported 'GUID: 31393b98902ed44e49637ad80bceadc0' -> (Import Result ID: '2d2d712e9e4ab6248bd48b8a433e448a') in 0.012 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=d2ae753314a7f51af1e351fabe70177b DependenciesID=b686c885a60b7ae5454ff42cb784fc0b StaticDependenciesID=10e8c155bb89bd5beb23218435a7e705 
+Importing 'GUID: 51c71e73a13df4ef0ae23997b7f59119 - Path: Assets/ThirdParty/KenneyFurniture/FBX/kitchenBlender.fbx' with importer (FBXImporter)
+Imported 'GUID: 51c71e73a13df4ef0ae23997b7f59119' -> (Import Result ID: 'ee2ac37c6148831b9d5d8ab37eddb256') in 0.013 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=5fea7dfa3771c600c161a3f9ced3be05 DependenciesID=a8f0044f4db08b9a07f18507babd0137 StaticDependenciesID=24db53e25ed7f6149e201be22c74cf41 
+Importing 'GUID: 9174826b01c1f48a592500f89d549bed - Path: Assets/ThirdParty/KenneyFurniture/FBX/tableCoffeeGlassSquare.fbx' with importer (FBXImporter)
+Imported 'GUID: 9174826b01c1f48a592500f89d549bed' -> (Import Result ID: '449ba1ec65d49b2fc80b852749048e93') in 0.014 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=0b77e0eacdcc9aa1bff0e890d1ba7df5 DependenciesID=fb49383f679982e06a88ab035ddd8dfd StaticDependenciesID=80457472f2423b1c5d8dfa2cac3fbcf3 
+Importing 'GUID: a1a75493db1014a83b1aee52823ad414 - Path: Assets/ThirdParty/KenneyFurniture/FBX/loungeDesignChair.fbx' with importer (FBXImporter)
+Imported 'GUID: a1a75493db1014a83b1aee52823ad414' -> (Import Result ID: '5309ffe7daa1c8b6d3bdd103a009577a') in 0.011 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=48e3c72d4c4344151540bb8e929df674 DependenciesID=dbfacb3079c2ad375b62c1d1299dfa23 StaticDependenciesID=de3c9c7cc0a66d1f4ed23ebfc2c774b7 
+Importing 'GUID: e171ca6f22f834cd4b480701290531e0 - Path: Assets/ThirdParty/KenneyFurniture/FBX/tableCoffee.fbx' with importer (FBXImporter)
+Imported 'GUID: e171ca6f22f834cd4b480701290531e0' -> (Import Result ID: '3f01e581a54defd99c21cbb08261908a') in 0.012 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=4faf0099b73c6a488c24970690b66e69 DependenciesID=ef3c77d8fa08b014f768a5f2fca9c757 StaticDependenciesID=9785fef7e409564d279ea796fe1b304a 
+Importing 'GUID: 42e605bd2946b4e5292b4fcdd4cd069c - Path: Assets/ThirdParty/KenneyFurniture/FBX/chairModernCushion.fbx' with importer (FBXImporter)
+Imported 'GUID: 42e605bd2946b4e5292b4fcdd4cd069c' -> (Import Result ID: 'ffa8f50490a176462ff418423cf3a9a2') in 0.011 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=0377d21c10d698bc2a7d045c618f1b70 DependenciesID=5d0952c3f0c1571cc23f076b616253a7 StaticDependenciesID=adeb178b28d62240f54dff0970d440c0 
+Importing 'GUID: 62a05f9c1bb6046bfb402b19c915c8d7 - Path: Assets/ThirdParty/KenneyFurniture/FBX/books.fbx' with importer (FBXImporter)
+Imported 'GUID: 62a05f9c1bb6046bfb402b19c915c8d7' -> (Import Result ID: '4b80a3fb4bfd8d503e8148a5abe1b82c') in 0.013 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=4e5b6ffc915eb6b8dc448609cbb824c5 DependenciesID=4da827863a7a082216c2f648bead3d60 StaticDependenciesID=c1d5daacc6db5040cda6ee529104b8d8 
+Importing 'GUID: e21411f77f6ce4e7f920361cea59471c - Path: Assets/ThirdParty/KenneyFurniture/FBX/kitchenCabinet.fbx' with importer (FBXImporter)
+Imported 'GUID: e21411f77f6ce4e7f920361cea59471c' -> (Import Result ID: '34341a2c463a265cbe9e08a0ca506b2b') in 0.017 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=eb24106113de03c8f9460c61258561b8 DependenciesID=01a2079a517018154a8a94cb5fbb5c3c StaticDependenciesID=a3c84bea0131f9c04e43d1ec5ec67264 
+Importing 'GUID: 23cc9661cbcf94534a31b6f82c287a9a - Path: Assets/ThirdParty/KenneyFurniture/FBX/plantSmall1.fbx' with importer (FBXImporter)
+Imported 'GUID: 23cc9661cbcf94534a31b6f82c287a9a' -> (Import Result ID: '0d56fc37c9497b5d5f0c3065deed902e') in 0.016 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=3d9c7d797a402e7146982cf36703f26c DependenciesID=d64f73020d1c1f9962c4ba9b2f226f6a StaticDependenciesID=31fc1e758acb5163e7c861c5f5beaf62 
+Importing 'GUID: 43b71fa729c0d4aff94f080ee487f180 - Path: Assets/ThirdParty/KenneyFurniture/FBX/pillow.fbx' with importer (FBXImporter)
+Imported 'GUID: 43b71fa729c0d4aff94f080ee487f180' -> (Import Result ID: '67b35b1c270bc509e71b9aafb5f2baf8') in 0.052 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=152db70af9193f6abd35b9d486f0d4a4 DependenciesID=824ca0487af45835bdb771d50023b39b StaticDependenciesID=80236029ea09014cb92ccad28bb2308f 
+Importing 'GUID: 8375e2b2a55614aeaa2ec81d3ab227db - Path: Assets/ThirdParty/KenneyFurniture/FBX/lampRoundTable.fbx' with importer (FBXImporter)
+Imported 'GUID: 8375e2b2a55614aeaa2ec81d3ab227db' -> (Import Result ID: '6d55da4b35c1ae1bf2ca80041a995591') in 0.013 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=16cde9f14395a502ceeddf0ceb3e9866 DependenciesID=b40db580e59bd56211f823f77f2820a8 StaticDependenciesID=03db0e1e9402840b351ccfc7fdca2333 
+Importing 'GUID: 9340499a239cb46df8ff56458e5ca800 - Path: Assets/ThirdParty/KenneyFurniture/FBX/computerMouse.fbx' with importer (FBXImporter)
+Imported 'GUID: 9340499a239cb46df8ff56458e5ca800' -> (Import Result ID: 'd3fd34d3cf3e09d69f2a0f2624426a5e') in 0.020 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=859a1ce63b150dd2b1927e6b510c4a75 DependenciesID=614851739cc1e4de0a622e5285fb12f6 StaticDependenciesID=577b912f6543e9a3d6825f1c5d4d1554 
+Importing 'GUID: 9345476d55ae3417299654ab45e87004 - Path: Assets/ThirdParty/KenneyFurniture/FBX/kitchenStoveElectric.fbx' with importer (FBXImporter)
+Imported 'GUID: 9345476d55ae3417299654ab45e87004' -> (Import Result ID: '6273aa60776963c44d7da25659ee49cf') in 0.015 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=43e27555f76c7203b97f94e1abf62298 DependenciesID=6b6c418c13732f9e3b1364b5f39059cc StaticDependenciesID=4ae3a5b0ee6fae448a63002dada3aef6 
+Importing 'GUID: a37c834f32d584116878c27d01788f3a - Path: Assets/ThirdParty/KenneyFurniture/FBX/trashcan.fbx' with importer (FBXImporter)
+Imported 'GUID: a37c834f32d584116878c27d01788f3a' -> (Import Result ID: '00a05d3597652e7383e8e61e056ed3ba') in 0.010 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=1cf528895a5462b92c130830398af638 DependenciesID=1baea38639302dfa314d736cb981882b StaticDependenciesID=fb02f749413d7a03b8c756a87cf51aa0 
+Importing 'GUID: 74731b3ad093a440fbe956c4465fae47 - Path: Assets/ThirdParty/KenneyFurniture/FBX/kitchenBarEnd.fbx' with importer (FBXImporter)
+Imported 'GUID: 74731b3ad093a440fbe956c4465fae47' -> (Import Result ID: 'bcbeb13d993960ea4f6c117cb2154729') in 0.010 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=d1b8ff34e27a6e5599d8766140c083f2 DependenciesID=7baaf00d00074fa34c0372addd89dfd9 StaticDependenciesID=4b3f22650f04fc17315a4c2ced61aa33 
+Importing 'GUID: e43770f326d45423f93203db2b8773f1 - Path: Assets/ThirdParty/KenneyFurniture/FBX/lampSquareCeiling.fbx' with importer (FBXImporter)
+Imported 'GUID: e43770f326d45423f93203db2b8773f1' -> (Import Result ID: '61d231a0b7c1a75f92c0ce101cd8fabf') in 0.011 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=d5a739a8768bef7f9f2aa4c3ef811709 DependenciesID=9c730c3a24d8a75fd9c1cc3133a7f082 StaticDependenciesID=23ae55b0d910ace31144ffd4523b405c 
+Importing 'GUID: 4536961037b2d4f80be08df50c003d17 - Path: Assets/ThirdParty/KenneyFurniture/FBX/bookcaseOpen.fbx' with importer (FBXImporter)
+Imported 'GUID: 4536961037b2d4f80be08df50c003d17' -> (Import Result ID: '98091d4857ffd3b49dd1c1abf135dde1') in 0.021 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=4911aa28f2b3cd60d278ffa92599b86f DependenciesID=e719e89c660a82b87da0ce0253d01d61 StaticDependenciesID=b05a798d085e8486c24ac9d3106021fb 
+Importing 'GUID: 55e80865bc8514922a7a4abcdcd31e69 - Path: Assets/ThirdParty/KenneyFurniture/FBX/desk.fbx' with importer (FBXImporter)
+Imported 'GUID: 55e80865bc8514922a7a4abcdcd31e69' -> (Import Result ID: 'a56a1b1ef1737af9329de7cb89e8b251') in 0.055 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=e11560d01834c987852ae7b7f72e4cd1 DependenciesID=02c9f9b3090c678758ea927fa69d3615 StaticDependenciesID=81abe7ed35292b65a3cd438c5ba11ded 
+Importing 'GUID: 55ebfc373c33743fbafcbf3f6113cef3 - Path: Assets/ThirdParty/KenneyFurniture/FBX/loungeSofaLong.fbx' with importer (FBXImporter)
+Imported 'GUID: 55ebfc373c33743fbafcbf3f6113cef3' -> (Import Result ID: 'bb2ba5734d4d6169e7cf8446b246553a') in 0.030 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=6ae56087b072f8cb39a21381395fb079 DependenciesID=b0857f5491996a37cc8974f794c0665e StaticDependenciesID=04a7e887fb27c36092b970376b98da08 
+Importing 'GUID: 658a28a36aba94d02990b14194aa8396 - Path: Assets/ThirdParty/KenneyFurniture/FBX/speakerSmall.fbx' with importer (FBXImporter)
+Imported 'GUID: 658a28a36aba94d02990b14194aa8396' -> (Import Result ID: '1f10895e95cc3d584e00e58a7c6df96b') in 0.012 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=63b9f84b8a2b4b524e8a96046c04d254 DependenciesID=19c4cd8b8fcba093a2e4b3af5348e941 StaticDependenciesID=8fc72bdaaad3ed4898a27116a528b755 
+Importing 'GUID: d54f00d0adaa94fbfb2ba07d3d783a73 - Path: Assets/ThirdParty/KenneyFurniture/FBX/kitchenCoffeeMachine.fbx' with importer (FBXImporter)
+Imported 'GUID: d54f00d0adaa94fbfb2ba07d3d783a73' -> (Import Result ID: '7b7631dbacf240068759d22be5c18b2d') in 0.016 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=141b2e952977bbae868ecb8281f31e9d DependenciesID=f33ac77830bca9d772882a3638ae50c3 StaticDependenciesID=f3d751a3b0986f40759de4b9fecc9f04 
+Importing 'GUID: c6cbba6dd2ccb497a919edc52c678cb6 - Path: Assets/ThirdParty/KenneyFurniture/FBX/chairDesk.fbx' with importer (FBXImporter)
+Imported 'GUID: c6cbba6dd2ccb497a919edc52c678cb6' -> (Import Result ID: '66d810d0a0e3e9cc9f11f3f7e33de493') in 0.023 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=7064b9b1e75c0731697d31fcb5d0cd0f DependenciesID=117c54e95bcde6dace077e11e971e7d3 StaticDependenciesID=e716eade2f35efa245d4954cf41a61ff 
+Importing 'GUID: e61b30d97ccae480f81207fcd3bef30c - Path: Assets/ThirdParty/KenneyFurniture/FBX/kitchenBar.fbx' with importer (FBXImporter)
+Imported 'GUID: e61b30d97ccae480f81207fcd3bef30c' -> (Import Result ID: '0148839b67e0200744956ea4909e421a') in 0.012 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=4d5f3f651a62b9ce63068b1b7c28daa0 DependenciesID=2aae49044e5588d261e810cca052b61a StaticDependenciesID=ffd74c7dba8ec07e7580643500b7a626 
+Importing 'GUID: 0794ea9f8eec24826bf663166d5e9391 - Path: Assets/ThirdParty/KenneyFurniture/FBX/kitchenFridgeLarge.fbx' with importer (FBXImporter)
+Imported 'GUID: 0794ea9f8eec24826bf663166d5e9391' -> (Import Result ID: '9f74c7df925742541f059e56c106febd') in 0.014 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=9074da55642c6b909d04eaa9407bc27d DependenciesID=4b92929689d020fd365af2f20098b7f7 StaticDependenciesID=2d086de1ce05f7bde0c3629d176e974a 
+Importing 'GUID: 48de1f45ce917431cb021e3bfbe81583 - Path: Assets/ThirdParty/KenneyFurniture/FBX/kitchenCabinetUpperCorner.fbx' with importer (FBXImporter)
+Imported 'GUID: 48de1f45ce917431cb021e3bfbe81583' -> (Import Result ID: 'a719faaaa71743b401e4a50f2d8c05a2') in 0.016 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=21cc2f7b1b6976a82de5a751f9d826c9 DependenciesID=8b81c738ad617dc8f38c8da48e585ef0 StaticDependenciesID=1cf1300af160da85e9779f4acd0b6413 
+Importing 'GUID: 98212e4b87c964742bfd7aa316fb5f54 - Path: Assets/ThirdParty/KenneyFurniture/FBX/loungeDesignSofaCorner.fbx' with importer (FBXImporter)
+Imported 'GUID: 98212e4b87c964742bfd7aa316fb5f54' -> (Import Result ID: 'a37d1981d3090d4caf9959451bec14a2') in 0.014 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=b834ac930e24cf015c7ccf855331153a DependenciesID=f82fb384eda0a5be32b5ab010c649e91 StaticDependenciesID=4d1d4e57b7125bc74d0a4eea790d70c3 
+Importing 'GUID: b8e449729a98c4193a2dd2e9a8270b91 - Path: Assets/ThirdParty/KenneyFurniture/FBX/radio.fbx' with importer (FBXImporter)
+Imported 'GUID: b8e449729a98c4193a2dd2e9a8270b91' -> (Import Result ID: '679deed533e95996d97fe27432a7b619') in 0.015 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=e9ac01a02643def64cfcc94432d7e734 DependenciesID=0c66ddaf6f044ae3e872a8fb9678384d StaticDependenciesID=d1d196d8bfd1a599e83594f8c2938500 
+Importing 'GUID: 19cb50cbbb6eb4100a8f248737e9d8bb - Path: Assets/ThirdParty/KenneyFurniture/FBX/wallWindow.fbx' with importer (FBXImporter)
+Imported 'GUID: 19cb50cbbb6eb4100a8f248737e9d8bb' -> (Import Result ID: '8fbf1485be270b3f4d25622d7181a939') in 0.011 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=941fb78d0565f4761f8825e521917b3b DependenciesID=6a1c485413588959bc11251b017f117a StaticDependenciesID=874fd9ab0b029d3162ddf015de84767e 
+Importing 'GUID: 6999e579d706a47d580fb6928f138cd1 - Path: Assets/ThirdParty/KenneyFurniture/FBX/pottedPlant.fbx' with importer (FBXImporter)
+Imported 'GUID: 6999e579d706a47d580fb6928f138cd1' -> (Import Result ID: 'f57751041594b25472488a94c64cef85') in 0.012 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=03d6d7e37d0158128bed1a0d870bd026 DependenciesID=0f1590756a67a2a7a15ccd35153fc631 StaticDependenciesID=bfb087daf1a39a677e89b4ca1fd79e42 
+Importing 'GUID: b9eb40ad3955443f4bd52d7e62c55e39 - Path: Assets/ThirdParty/KenneyFurniture/FBX/computerScreen.fbx' with importer (FBXImporter)
+Imported 'GUID: b9eb40ad3955443f4bd52d7e62c55e39' -> (Import Result ID: '06f3f42611eb0e3111afe03cbfc56d63') in 0.012 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=daca5ea250edb62fbd2aa1870cf0ae29 DependenciesID=50d5e378e962e44fa65eb8df7a502114 StaticDependenciesID=3373ed2c1b6b7b1696e561cbe6c14f85 
+Importing 'GUID: e99479ed8366541e2b85b8eaf04e377f - Path: Assets/ThirdParty/KenneyFurniture/FBX/bookcaseClosedWide.fbx' with importer (FBXImporter)
+Imported 'GUID: e99479ed8366541e2b85b8eaf04e377f' -> (Import Result ID: '3883e74f59190427ba9f12c7d7155ac0') in 0.013 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=46bf86578de3c510f3b8b18a578bb7c1 DependenciesID=0c3654d95590e43681fcc4d0141c951f StaticDependenciesID=e23b734e8ec93d4e7bbf957702232d47 
+Importing 'GUID: 4ae38a57d636b44f08941a30ab0dfc7e - Path: Assets/ThirdParty/KenneyFurniture/FBX/kitchenCabinetUpper.fbx' with importer (FBXImporter)
+Imported 'GUID: 4ae38a57d636b44f08941a30ab0dfc7e' -> (Import Result ID: 'e3fb62387c89dcb9c3caeaad3a47b16e') in 0.010 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=851f1a5d1175136ca840d7d83af6deb2 DependenciesID=b2dc32ed2195df20497ed7ea580aaf82 StaticDependenciesID=6765f918122d287f587c3fc12f4902dd 
+Importing 'GUID: ea5e9a4e2c5ec467e8168ca0a64b9826 - Path: Assets/ThirdParty/KenneyFurniture/FBX/chairRounded.fbx' with importer (FBXImporter)
+Imported 'GUID: ea5e9a4e2c5ec467e8168ca0a64b9826' -> (Import Result ID: 'b26dffe0255ce2d48ab458a9da862d06') in 0.011 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=b5c4b1c696b2a5cee370b99885cb4d69 DependenciesID=f21217d1d59d49cc6a91452166af8fa9 StaticDependenciesID=27eec49a26f903be658d7abf31ffe7ee 
+Importing 'GUID: 4ce7abf73db934c3ca3d8f54e99f163a - Path: Assets/ThirdParty/KenneyFurniture/FBX/stoolBarSquare.fbx' with importer (FBXImporter)
+Imported 'GUID: 4ce7abf73db934c3ca3d8f54e99f163a' -> (Import Result ID: '9f395890440728256aec654b26b2aba3') in 0.013 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=1500244c6fdd1335df18f3aa1e4a40da DependenciesID=7ac602db0b5543b4a5fa351325303191 StaticDependenciesID=fa72c00ceb3d36064412f35f14bb35fb 
+Importing 'GUID: 6ca275619b10f4e628d6082f30221239 - Path: Assets/ThirdParty/KenneyFurniture/FBX/kitchenCabinetUpperDouble.fbx' with importer (FBXImporter)
+Imported 'GUID: 6ca275619b10f4e628d6082f30221239' -> (Import Result ID: 'e892a79d2e5abfd4d9f09ac0f5b3f425') in 0.013 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=92f5f76253cb86ba1d5ebd8317dcb364 DependenciesID=a8b99bb67fc4024e550212a0eb472f55 StaticDependenciesID=7d1294e114310507bf838dbc98c273e8 
+Importing 'GUID: 8c60d1ac48d7943ae86bd57b46757e86 - Path: Assets/ThirdParty/KenneyFurniture/FBX/kitchenCabinetDrawer.fbx' with importer (FBXImporter)
+Imported 'GUID: 8c60d1ac48d7943ae86bd57b46757e86' -> (Import Result ID: 'aa8ac26f1f362f948262fa32568e9104') in 0.014 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=25fbaeb192a5714c06e2751f925bbdaf DependenciesID=cc4dd145637a546aeb0a05ea6c0921c1 StaticDependenciesID=d6270a2a88b2cbd10bb091b7706e068c 
+Importing 'GUID: 8cc59c48eb46549f6ba483055333d1fe - Path: Assets/ThirdParty/KenneyFurniture/FBX/kitchenSink.fbx' with importer (FBXImporter)
+Imported 'GUID: 8cc59c48eb46549f6ba483055333d1fe' -> (Import Result ID: '34550e33bdb3afa591f5ca1cae86371d') in 0.013 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=3c7a974d65f62990467ee5d40a664b2d DependenciesID=b9317157d718eba4ce8d542f8092d055 StaticDependenciesID=bb3252a44efc93a9e13f097cd2a276d5 
+Importing 'GUID: 1d1be565accc84541b10e083ce1c1bab - Path: Assets/ThirdParty/KenneyFurniture/FBX/kitchenStove.fbx' with importer (FBXImporter)
+Imported 'GUID: 1d1be565accc84541b10e083ce1c1bab' -> (Import Result ID: 'dc46994f4c8ecc31fb1c73efe651155e') in 0.014 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=5699b11e885e308b8d1070d8e9bf0bf8 DependenciesID=667c804319ed9547efdd6b1bd65f9c5b StaticDependenciesID=6187d5686f5cd3a3bb7779c0b1dcee48 
+Importing 'GUID: ad82a6803f54b465b9e9747647fc94a8 - Path: Assets/ThirdParty/KenneyFurniture/FBX/lampSquareFloor.fbx' with importer (FBXImporter)
+Imported 'GUID: ad82a6803f54b465b9e9747647fc94a8' -> (Import Result ID: '97795c536316cf01c23631df81bf604d') in 0.011 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=b82f200bfbaa83440560d468f1598934 DependenciesID=e2db7cef19bccdad4e412b658a2463e2 StaticDependenciesID=3a939ee7e3d87603913835b4e91e2f76 
+Importing 'GUID: 0ef8311f15d6a4c6abf026e261f41eca - Path: Assets/ThirdParty/KenneyFurniture/FBX/kitchenMicrowave.fbx' with importer (FBXImporter)
+Imported 'GUID: 0ef8311f15d6a4c6abf026e261f41eca' -> (Import Result ID: '192b5545e00586f3f87c924a5468411e') in 0.011 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=ab4a48b92211894dc08c95c07bdaea5f DependenciesID=2967296f8e19b643060fd7232739f3ce StaticDependenciesID=1f724405af2bc8ac89b94670e93235d3 
+Importing 'GUID: 1e4341d0bf5ed4b06adf2d06f18987b7 - Path: Assets/ThirdParty/KenneyFurniture/FBX/bear.fbx' with importer (FBXImporter)
+Imported 'GUID: 1e4341d0bf5ed4b06adf2d06f18987b7' -> (Import Result ID: 'ff21677e8180c96741bb5373f05c84cd') in 0.013 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=b92cc01398f304cc307b2502026fbddc DependenciesID=c2af6ee2af9a508e24b73dc8202ee310 StaticDependenciesID=c5cdc01de6e8f5fd5c0ec8a418f2907e 
+Importing 'GUID: 2ee119a813e3c4d3f897de6a97e67047 - Path: Assets/ThirdParty/KenneyFurniture/FBX/tableCoffeeGlass.fbx' with importer (FBXImporter)
+Imported 'GUID: 2ee119a813e3c4d3f897de6a97e67047' -> (Import Result ID: '97fead3d034c3125db3c53c848d13041') in 0.010 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=b05d0957a0e15a8a887f6dc984229ab8 DependenciesID=2e9bbcb35103af361c1498e2b6037ac7 StaticDependenciesID=1d8a8eb1f32776d7d30de184e716540b 
+Importing 'GUID: 7e08dfd7d0078464a9eafd013f1965f0 - Path: Assets/ThirdParty/KenneyFurniture/FBX/televisionModern.fbx' with importer (FBXImporter)
+Imported 'GUID: 7e08dfd7d0078464a9eafd013f1965f0' -> (Import Result ID: '54417e39183445180530cf9862e7bfc9') in 0.009 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=debd816c038b65801cda4e455f484983 DependenciesID=90e76127c33f842132f8f514290328b1 StaticDependenciesID=37a6b8d02e1d4c1acddb8d8aa41b1a33 
+Importing 'GUID: 3f0ccc969ffa64815af74536a565e5af - Path: Assets/ThirdParty/KenneyFurniture/FBX/pillowBlue.fbx' with importer (FBXImporter)
+Imported 'GUID: 3f0ccc969ffa64815af74536a565e5af' -> (Import Result ID: '4bdab65e229343564c8a128f3722ab21') in 0.009 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=88774c73c9e9996a106410641bf1e7f2 DependenciesID=db0984e2fce574c166c11da16599b66d StaticDependenciesID=f79b02e89ab794cae206589b04b150a1 
+Importing 'GUID: 4f676b2ce83b14002a7e4e5bad600be1 - Path: Assets/ThirdParty/KenneyFurniture/FBX/kitchenCabinetUpperLow.fbx' with importer (FBXImporter)
+Imported 'GUID: 4f676b2ce83b14002a7e4e5bad600be1' -> (Import Result ID: 'ee2444b6f0ccdfa71b89adbfbc0a761b') in 0.014 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=4aeeea7e419425bfc2fa96a082de56f7 DependenciesID=ae108c357216d040cab06547ef759dc7 StaticDependenciesID=cc678ac6d6caf991769bce552c0614e3 
+Importing 'GUID: 6f740f4c13824484c923b0626487e7bf - Path: Assets/ThirdParty/KenneyFurniture/FBX/loungeDesignSofa.fbx' with importer (FBXImporter)
+Imported 'GUID: 6f740f4c13824484c923b0626487e7bf' -> (Import Result ID: 'bbebec0e1b854cd0e78d28836198e20f') in 0.012 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=390c2b9d38fd752ce913017c0db8ac8e DependenciesID=aa6b998ea1e9cff6b3c945a137b66793 StaticDependenciesID=94eca46b3df41b52456b886dc9da179e 
+Importing 'GUID: 7f071f28c2c514e089b29cce80c548cc - Path: Assets/ThirdParty/KenneyFurniture/FBX/rugRound.fbx' with importer (FBXImporter)
+Imported 'GUID: 7f071f28c2c514e089b29cce80c548cc' -> (Import Result ID: '8f1ebfa91923816301a3c923257a279f') in 0.026 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=d207d82ade0c332f9cf431cc777f04f3 DependenciesID=88ceed596785e15eb6c4b4c1f774fea5 StaticDependenciesID=bdb5a32bf8ceec55e953551cb0439f04 
+Importing 'GUID: 8f663ee65297b481ca4fb49dce16b20d - Path: Assets/ThirdParty/KenneyFurniture/FBX/pillowBlueLong.fbx' with importer (FBXImporter)
+Imported 'GUID: 8f663ee65297b481ca4fb49dce16b20d' -> (Import Result ID: 'ef515dda15a1dfce1b80e7213ff6710b') in 0.029 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=c136b14c2ca8737261758ead9622c5f8 DependenciesID=0d2517ab962db93b7416582b497b5fff StaticDependenciesID=ecb21ea2bff791887768760c12771a5c 
+Importing 'GUID: 9f489276d933e42d59a934b3af020c8b - Path: Assets/ThirdParty/KenneyFurniture/FBX/plantSmall3.fbx' with importer (FBXImporter)
+Imported 'GUID: 9f489276d933e42d59a934b3af020c8b' -> (Import Result ID: '67abf52de45cb0a17b0b1eb0b69de15f') in 0.080 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=5ab3747315cad45e5d8dfebd3ad1480d DependenciesID=44c37ba22158fd403ea843f13ae8c0d7 StaticDependenciesID=ea351797d71dbb3b53c2293579b35147 
+Importing 'GUID: efdc02b0c2c3349dea48c0d6922319bb - Path: Assets/ThirdParty/KenneyFurniture/FBX/stoolBar.fbx' with importer (FBXImporter)
+Imported 'GUID: efdc02b0c2c3349dea48c0d6922319bb' -> (Import Result ID: 'c48cbe46fbadc1245bf033d13e7560cf') in 0.011 seconds [static and dynamic dependencies]. Details - ImportResultOutputID=efddc547c66b0efc2a55b849df05e946 DependenciesID=8cb1c72d44d1e445fe219e100d36d606 StaticDependenciesID=13ffb414a979f10d33a8b717866e8971 
+Importing 'GUID: 646c200e534f34615ab03b06b8b97b75 - Path: Assets/ThirdParty/KenneyFurniture/LICENSE.md' with importer (TextScriptImporter)
+Imported 'GUID: 646c200e534f34615ab03b06b8b97b75' -> (Import Result ID: '6146f701109db80a72fd16bf46d5670e') in 0.003 seconds [static dependencies only]. Details - ImportResultOutputID=ddd460591f33addf416210aa03a38350 DependenciesID=90a4ae9acc9a8e9947dc2e429c2a8b64 StaticDependenciesID=c1f979b2d4852c9a5b94955abb78bf41 
+Starting new worker id: 0 with log in /Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient/Logs/AssetImportWorkerHW0.log
+
+Asset Pipeline Refresh (id=abce5caf8abb14e729c93afae5585e2a): Total: 9.198 seconds - Initiated by InitialRefreshV2(ForceSynchronousImport)
+	(Values over 0.05ms)
+	Summary:
+		Imports: total=63 (actual=63, local cache=0, cache server=0)
+		Asset DB Process Time: managed=148 ms, native=3521 ms
+		Asset DB Callback time: managed=262 ms, native=32 ms
+		Scripting: domain reloads=1, domain reload time=489 ms, compile time=4729 ms, other=14 ms
+		Project Asset Count: scripts=774, non-scripts=1467
+		Asset File Changes: new=63, changed=64, moved=0, deleted=0
+		Scan Filter Count: 1
+	InvokePackagesCallback: 13.004ms
+	ApplyChangesToAssetFolders: 0.279ms
+	Scan: 292.986ms
+	Collect global state as custom dependencies: 11.299ms
+	OnSourceAssetsModified: 0.559ms
+	CategorizeScriptCompilationAssets: 27.978ms
+	ProcessAssetsWithTransientArtifactChanges: 19.341ms
+	CategorizeAssets: 96.173ms
+	CompileScripts: 4728.551ms
+	ImportOutOfDateAssets: 3134.543ms (1355.107ms without children)
+		ImportManagerImport: 1756.472ms (3.292ms without children)
+			UpdateCategorizedAssets: 0.519ms
+		UnloadImportedAssets: 0.146ms
+		EnsureUptoDateAssetsAreRegisteredWithGuidPM: 0.265ms
+		ImportSchedulerStart: 22.543ms
+	PostProcessAllAssets: 279.515ms
+		PostProcessCallbackCreateDeferredMaterials 0.319ms
+		VersionControlSettings.HiddenFilePostprocess 0.192ms
+		RaytracingShaderImportPostprocess 0.079ms
+		ShaderAssetModifiedCallback 0.075ms
+		MonoPostProcessAllAssets: 262.012ms
+			UniversalRenderPipelineGlobalSettingsPostprocessor.OnPostprocessAllAssets 150.178ms
+			AssetPostprocessor.OnPostprocessAllAssets 86.032ms
+			StyleCatalogPostProcessor.OnPostprocessAllAssets 7.793ms
+			BuilderAssetPostprocessor.OnPostprocessAllAssets 3.832ms
+			ShaderGraphAssetPostProcessor.OnPostprocessAllAssets 1.652ms
+			WindowAssetPostprocessingWatcher.OnPostprocessAllAssets 1.040ms
+			SpeedTree9Postprocessor.OnPostprocessAllAssets 0.936ms
+			AssetChangedListener.OnPostprocessAllAssets 0.833ms
+			RetainedModeAssetPostprocessor.OnPostprocessAllAssets 0.567ms
+			SyncVS.PostprocessSyncProject 0.491ms
+			MaterialPostprocessor.OnPostprocessAllAssets 0.476ms
+			ArtifactBrowserPostProcessor.OnPostprocessAllAssets 0.432ms
+			SampleDependencyImporterPostProcessor.OnPostprocessAllAssets 0.367ms
+			PostProcessor.OnPostprocessAllAssets 0.362ms
+			TextAssetPostProcessor.OnPostprocessAllAssets 0.246ms
+			TMPro_TexturePostProcessor.OnPostprocessAllAssets 0.199ms
+			ReferencedClipsPostProcessor.OnPostprocessAllAssets 0.171ms
+			AudioMixerPostprocessor.OnPostprocessAllAssets 0.152ms
+			ShaderReflectionAssetPostProcessor.OnPostprocessAllAssets 0.140ms
+			AssetEvents.OnPostprocessAllAssets 0.119ms
+			TerrainToolbarOverlayPostProcessor.OnPostprocessAllAssets 0.086ms
+			SpeedTreePostProcessor.OnPostprocessAllAssets 0.067ms
+			AssetDatabaseCallbacks.OnPostprocessAllAssets 0.063ms
+			ScenarioDriftAssetsTracker.OnPostprocessAllAssets 0.058ms
+			RenderPipelineGlobalSettingsPostprocessor.OnPostprocessAllAssets 0.055ms
+			ConfigAssetsTracker.OnPostprocessAllAssets 0.053ms
+	PostAssetChangesProfiler: 3.758ms
+	UnloadStreamsBegin: 1.108ms
+	PersistCurrentRevisions: 0.163ms
+	GenerateScriptTypeHashes: 3.529ms
+	GenerateScriptTypeSerializationHashes: 6.745ms
+	Untracked: 586.014ms
+
+Application.AssetDatabase Initial Refresh End
+Shader Hidden/ChartRasterizerHardware is not supported: GPU does not support conservative rasterization
+Shader Hidden/ChartRasterizerHardware is not supported: GPU does not support conservative rasterization
+Scanning for USB devices : 0.429ms
+Initializing Unity extensions:
+[MODES] ModeService[none].Initialize
+[MODES] ModeService[none].LoadModes
+[MODES] Loading mode Default (0) for mode-current-id-SoulForgeUnityClient
+2026-07-04 14:32:38.633 Unity[44427:88586337] NSEventModifierFlagFunction specified to -setKeyEquivalentModifierMask: for item <NSMenuItem: 0x812eb37a0 SDF, ke='Command-F12'>, but is only supported for system-provided menu items; will not be used
+Unloading 306 Unused Serialized files (Serialized files now loaded: 0)
+Unloading 3244 unused Assets / (9.0 MB). Loaded Objects now: 3999.
+Memory consumption went from 251.1 MB to 242.1 MB.
+Total: 9.825333 ms (FindLiveObjects: 0.160500 ms CreateObjectMapping: 0.463708 ms MarkObjects: 6.621750 ms  DeleteObjects: 2.578917 ms)
+
+2026-07-04 14:32:38.773 Unity[44427:88586337] NSEventModifierFlagFunction specified to -setKeyEquivalentModifierMask: for item <NSMenuItem: 0x812eb08c0 SDF, ke='Command-F12'>, but is only supported for system-provided menu items; will not be used
+Asset Pipeline Refresh (id=88f4bf965efe4466cac0a1193d10d441): Total: 0.117 seconds - Initiated by RefreshV2(NoUpdateAssetOptions)
+Unloading 0 Unused Serialized files (Serialized files now loaded: 0)
+Unloading 1 unused Assets / (23.1 KB). Loaded Objects now: 3999.
+Memory consumption went from 185.3 MB to 185.3 MB.
+Total: 4.256458 ms (FindLiveObjects: 0.078209 ms CreateObjectMapping: 0.170666 ms MarkObjects: 3.991084 ms  DeleteObjects: 0.016458 ms)
+
+Importing 'GUID: bb623ecda68404456a3b16c65be30fe7 - Path: Assets/SoulForge/Scenes/SoulForgeApartment.unity' with importer (DefaultImporter)
+Imported 'GUID: bb623ecda68404456a3b16c65be30fe7' -> (Import Result ID: '231f14fe8ff2a15527d8807b423b6cdb') in 0.002 seconds [static dependencies only]. Details - ImportResultOutputID=c5a1ac5b2395a2fc11334f4b47000fc9 DependenciesID=60285f65404b28eac6a322f74452e64c StaticDependenciesID=1900ea6e0c4d0ca5ea02fc6dae36840d 
+Asset Pipeline Refresh (id=0ce15f17ea7134bb7b22fd256ccedfb1): Total: 0.048 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Asset Pipeline Refresh (id=81ef03bd0b60f403a91f3ed8eeb46e30): Total: 0.059 seconds - Initiated by RefreshV2(NoUpdateAssetOptions)
+Batchmode quit successfully invoked - shutting down!
+Thread 0x31a4f3000 may have been prematurely finalized
+Input System module state changed to: ShutdownInProgress.
+Input Polling Thread exited.
+Input System module state changed to: Shutdown.
+[Physics::Module] Cleanup current backend.
+[Physics::Module] Id: 0xf2b8ea05
+[Licensing::IpcConnector] LicenseClient-lovelyjoy-6000.5.2-notifications channel disconnected successfully.
+[Licensing::IpcConnector] LicenseClient-lovelyjoy-6000.5.2 channel disconnected successfully.
+Thread 0x16ed4f000 may have been prematurely finalized
+Thread 0x16ecc3000 may have been prematurely finalized
+Thread 0x16ef7f000 may have been prematurely finalized
+Thread 0x16eef3000 may have been prematurely finalized
+Thread 0x16ee67000 may have been prematurely finalized
+Thread 0x16ec37000 may have been prematurely finalized
+Thread 0x16eddb000 may have been prematurely finalized
+Thread 0x16f00b000 may have been prematurely finalized
+AcceleratorClientConnectionCallback - disconnected - :0
+Thread 0x170747000 may have been prematurely finalized
+Cleanup mono
+CodeReloadManager destroyed
+info: Microsoft.Hosting.Lifetime[0]
+      Application is shutting down...
+info: Unity.ILPP.Runner.PostProcessingAssemblyLoadContext[0]
+      ALC ILPP context 1 is unloading
+正在关闭 MSBuild 服务器...
+正在关闭 VB/C# 编译器服务器...
+debugger-agent: Unable to listen on 43
+Exiting batchmode successfully now!
+[Package Manager] Server process was shutdown
+成功关闭 MSBuild 服务器。

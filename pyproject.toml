@@ -12,7 +12,14 @@ members = [
 
 [dependency-groups]
 dev = [
+    "protobuf>=7.34.1",
     "ruff>=0.9",
     "pytest>=8.0",
     "pytest-asyncio>=0.25",
+]
+mujoco-demo = [
+    "imageio>=2.37.0",
+    "imageio-ffmpeg>=0.6.0",
+    "mujoco>=3.3.0",
+    "pillow>=11.0.0",
 ]

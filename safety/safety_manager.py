@@ -121,6 +121,16 @@ class SafetyManager:
             # Joint position constraint
             pos_constraint = self._constraints.get(f"{aid}_pos")
             if pos_constraint:
+                raw_val = val
+                val = max(pos_constraint.x_min, min(pos_constraint.x_max, val))
+                if abs(val - raw_val) > 1e-9:
+                    self._log_event(
+                        f"{aid}_pos",
+                        abs(raw_val - val),
+                        abs(raw_val - val),
+                        pos_constraint.status(val),
+                    )
+
                 prev = self._prev_values.get(aid, val)
                 velocity = (val - prev) / max(dt, 1e-6)
 

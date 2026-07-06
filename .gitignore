@@ -47,3 +47,15 @@ minio_data/
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Unity generated files
+unity/**/Library/
+unity/**/Temp/
+unity/**/Obj/
+unity/**/Build/
+unity/**/Builds/
+unity/**/Logs/
+unity/**/UserSettings/
+unity/**/*.csproj
+unity/**/*.sln
+unity/**/*.user

@@ -1,0 +1,173 @@
+{
+  "sourceVideo": "/Users/lovelyjoy/Desktop/soulForge/outputs/webgl/vtuber_life_true_vrm_activity_sample.mp4",
+  "outputVideo": "/Users/lovelyjoy/Desktop/soulForge/outputs/webgl/vtuber_life_true_vrm_activity_voiceover.mp4",
+  "duration": 12,
+  "mode": "auto",
+  "aiCoreUrl": null,
+  "agents": {
+    "Lydia": {
+      "plannedProvider": "fish",
+      "fishVoice": "a6b29d0ef2404ca1aa8d1fdd8d7a2a90",
+      "fishLabel": "青春活泼女 / 元气少女",
+      "edgeVoice": "zh-CN-XiaoyiNeural",
+      "sayVoice": "Tingting",
+      "rate": 190,
+      "pitch": 1.08,
+      "post": "bright"
+    },
+    "Robert": {
+      "plannedProvider": "fish",
+      "fishVoice": "d99547e2dad64ce0aa085319a3c9cc56",
+      "fishLabel": "温柔男声 / 温暖大哥",
+      "edgeVoice": "zh-CN-YunxiNeural",
+      "sayVoice": "Reed (中文（中国大陆）)",
+      "rate": 170,
+      "pitch": 0.94,
+      "post": "warm"
+    },
+    "Polybot": {
+      "plannedProvider": "fish",
+      "fishVoice": "15896f78e288417db16cc34da8fc6f09",
+      "fishLabel": "机械化少年声 / 低温机器人",
+      "edgeVoice": "zh-CN-YunjianNeural",
+      "sayVoice": "Rocko (中文（中国大陆）)",
+      "rate": 155,
+      "pitch": 0.86,
+      "post": "robot"
+    }
+  },
+  "events": [
+    {
+      "t": 0.55,
+      "agent": "Lydia",
+      "text": "咖啡到位。今天先把草图做出来。",
+      "emotion": "warm",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "a6b29d0ef2404ca1aa8d1fdd8d7a2a90",
+      "fishLabel": "青春活泼女 / 元气少女",
+      "edgeVoice": "zh-CN-XiaoyiNeural",
+      "fallbackVoice": "Tingting"
+    },
+    {
+      "t": 1.65,
+      "agent": "Robert",
+      "text": "我在准备早餐，火候稳一点。",
+      "emotion": "calm",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "d99547e2dad64ce0aa085319a3c9cc56",
+      "fishLabel": "温柔男声 / 温暖大哥",
+      "edgeVoice": "zh-CN-YunxiNeural",
+      "fallbackVoice": "Reed (中文（中国大陆）)"
+    },
+    {
+      "t": 2.75,
+      "agent": "Polybot",
+      "text": "启动完成。情绪模块在线。",
+      "emotion": "robot",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "15896f78e288417db16cc34da8fc6f09",
+      "fishLabel": "机械化少年声 / 低温机器人",
+      "edgeVoice": "zh-CN-YunjianNeural",
+      "fallbackVoice": "Rocko (中文（中国大陆）)"
+    },
+    {
+      "t": 3.95,
+      "agent": "Robert",
+      "text": "我读到一条新闻，和我们的计划有关。",
+      "emotion": "calm",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "d99547e2dad64ce0aa085319a3c9cc56",
+      "fishLabel": "温柔男声 / 温暖大哥",
+      "edgeVoice": "zh-CN-YunxiNeural",
+      "fallbackVoice": "Reed (中文（中国大陆）)"
+    },
+    {
+      "t": 4.95,
+      "agent": "Lydia",
+      "text": "早餐后我想改一下客厅布局。",
+      "emotion": "curious",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "a6b29d0ef2404ca1aa8d1fdd8d7a2a90",
+      "fishLabel": "青春活泼女 / 元气少女",
+      "edgeVoice": "zh-CN-XiaoyiNeural",
+      "fallbackVoice": "Tingting"
+    },
+    {
+      "t": 6.15,
+      "agent": "Polybot",
+      "text": "植物叶片状态正常，湿度偏低。",
+      "emotion": "robot",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "15896f78e288417db16cc34da8fc6f09",
+      "fishLabel": "机械化少年声 / 低温机器人",
+      "edgeVoice": "zh-CN-YunjianNeural",
+      "fallbackVoice": "Rocko (中文（中国大陆）)"
+    },
+    {
+      "t": 7.25,
+      "agent": "Lydia",
+      "text": "看，这里画成半开放空间会更舒服。",
+      "emotion": "happy",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "a6b29d0ef2404ca1aa8d1fdd8d7a2a90",
+      "fishLabel": "青春活泼女 / 元气少女",
+      "edgeVoice": "zh-CN-XiaoyiNeural",
+      "fallbackVoice": "Tingting"
+    },
+    {
+      "t": 8.25,
+      "agent": "Robert",
+      "text": "我把数据表整理完，再听你讲。",
+      "emotion": "steady",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "d99547e2dad64ce0aa085319a3c9cc56",
+      "fishLabel": "温柔男声 / 温暖大哥",
+      "edgeVoice": "zh-CN-YunxiNeural",
+      "fallbackVoice": "Reed (中文（中国大陆）)"
+    },
+    {
+      "t": 9.3,
+      "agent": "Polybot",
+      "text": "维修循环开始，扳手扭矩百分之七十。",
+      "emotion": "robot",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "15896f78e288417db16cc34da8fc6f09",
+      "fishLabel": "机械化少年声 / 低温机器人",
+      "edgeVoice": "zh-CN-YunjianNeural",
+      "fallbackVoice": "Rocko (中文（中国大陆）)"
+    },
+    {
+      "t": 10.35,
+      "agent": "Lydia",
+      "text": "跳一下，灵感回来了。",
+      "emotion": "excited",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "a6b29d0ef2404ca1aa8d1fdd8d7a2a90",
+      "fishLabel": "青春活泼女 / 元气少女",
+      "edgeVoice": "zh-CN-XiaoyiNeural",
+      "fallbackVoice": "Tingting"
+    },
+    {
+      "t": 11.1,
+      "agent": "Robert",
+      "text": "晚上再通个电话，确认明天安排。",
+      "emotion": "calm",
+      "provider": "edge-tts",
+      "plannedProvider": "fish",
+      "fishVoice": "d99547e2dad64ce0aa085319a3c9cc56",
+      "fishLabel": "温柔男声 / 温暖大哥",
+      "edgeVoice": "zh-CN-YunxiNeural",
+      "fallbackVoice": "Reed (中文（中国大陆）)"
+    }
+  ]
+}

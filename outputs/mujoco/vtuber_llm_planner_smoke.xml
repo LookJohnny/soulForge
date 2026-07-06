@@ -1,0 +1,66 @@
+<mujoco model="soulforge_example_avatar">
+  <compiler angle="radian" autolimits="true"/>
+  <option timestep="0.01" gravity="0 0 -9.81"/>
+  <visual>
+    <global offwidth="1280" offheight="960"/>
+    <headlight diffuse="0.7 0.7 0.7" ambient="0.25 0.25 0.25" specular="0.2 0.2 0.2"/>
+    <rgba haze="0.92 0.95 1 1"/>
+  </visual>
+  <asset>
+    <material name="mat_body" rgba="0.58 0.72 0.92 1"/>
+    <material name="mat_head" rgba="0.96 0.90 0.82 1"/>
+    <material name="mat_eye" rgba="0.02 0.025 0.03 1"/>
+    <material name="mat_accent" rgba="0.95 0.20 0.35 1"/>
+    <material name="mat_floor" rgba="0.88 0.90 0.92 1"/>
+  </asset>
+  <worldbody>
+    <light name="key" pos="0 -3 3" dir="0 1 -1" directional="true"/>
+    <geom name="floor" type="plane" pos="0 0 0" size="3 3 0.02" material="mat_floor"/>
+
+    <body name="root" pos="0 0 0.55">
+      <joint name="body_yaw" type="hinge" axis="0 0 1" range="-0.35 0.35" damping="5.0" armature="0.04"/>
+      <joint name="body_roll" type="hinge" axis="0 1 0" range="-0.26 0.26" damping="5.0" armature="0.04"/>
+      <geom name="body_geom" type="capsule" fromto="0 0 -0.25 0 0 0.28" size="0.18" material="mat_body"/>
+
+      <body name="left_arm" pos="-0.20 0 0.12">
+        <inertial pos="0 0 -0.12" mass="0.08" diaginertia="0.0002 0.0002 0.0002"/>
+        <joint name="left_arm_pitch" type="hinge" axis="1 0 0" range="-0.35 1.40" damping="3.0" armature="0.02"/>
+        <geom type="capsule" fromto="0 0 0 0 0 -0.25" size="0.04" material="mat_body"/>
+      </body>
+
+      <body name="right_arm" pos="0.20 0 0.12">
+        <inertial pos="0 0 -0.12" mass="0.08" diaginertia="0.0002 0.0002 0.0002"/>
+        <joint name="right_arm_pitch" type="hinge" axis="1 0 0" range="-0.35 1.40" damping="3.0" armature="0.02"/>
+        <geom type="capsule" fromto="0 0 0 0 0 -0.25" size="0.04" material="mat_body"/>
+      </body>
+
+      <body name="head_yaw_link" pos="0 0 0.32">
+        <inertial pos="0 0 0" mass="0.02" diaginertia="0.00002 0.00002 0.00002"/>
+        <joint name="head_yaw" type="hinge" axis="0 0 1" range="-0.70 0.70" damping="4.0" armature="0.02"/>
+        <body name="head_pitch_link">
+          <inertial pos="0 0 0" mass="0.02" diaginertia="0.00002 0.00002 0.00002"/>
+          <joint name="head_pitch" type="hinge" axis="1 0 0" range="-0.45 0.45" damping="4.0" armature="0.02"/>
+          <body name="head_roll_link">
+            <inertial pos="0 0 0" mass="0.02" diaginertia="0.00002 0.00002 0.00002"/>
+            <joint name="head_roll" type="hinge" axis="0 1 0" range="-0.30 0.30" damping="3.0" armature="0.02"/>
+            <body name="head" pos="0 -0.02 0.15">
+              <geom name="head_geom" type="ellipsoid" size="0.19 0.15 0.18" material="mat_head"/>
+              <geom name="left_eye" type="sphere" pos="-0.060 -0.130 0.035" size="0.024" material="mat_eye"/>
+              <geom name="right_eye" type="sphere" pos="0.060 -0.130 0.035" size="0.024" material="mat_eye"/>
+              <geom name="hair_accent" type="capsule" fromto="-0.10 -0.02 0.16 0.10 -0.02 0.16" size="0.025" material="mat_accent"/>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <position name="body_yaw_servo" joint="body_yaw" kp="8" ctrlrange="-0.35 0.35"/>
+    <position name="body_roll_servo" joint="body_roll" kp="8" ctrlrange="-0.26 0.26"/>
+    <position name="left_arm_pitch_servo" joint="left_arm_pitch" kp="8" ctrlrange="-0.35 1.40"/>
+    <position name="right_arm_pitch_servo" joint="right_arm_pitch" kp="8" ctrlrange="-0.35 1.40"/>
+    <position name="head_yaw_servo" joint="head_yaw" kp="12" ctrlrange="-0.70 0.70"/>
+    <position name="head_pitch_servo" joint="head_pitch" kp="12" ctrlrange="-0.45 0.45"/>
+    <position name="head_roll_servo" joint="head_roll" kp="8" ctrlrange="-0.30 0.30"/>
+  </actuator>
+</mujoco>
