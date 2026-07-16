@@ -1,7 +1,13 @@
+ > [!WARNING]
+> **状态：历史实验文档，非当前运行时协议。**
+> 本文档描述的是早期 protobuf 玩具表演协议实验（`protocol/` 目录，仅 demo 使用），**未接入 Character Runtime**。
+> server / studio / Unity / gateway CharacterBridge 实际使用的权威运行时协议是 **Protocol 0.2（JSON over WebSocket）**，
+> 规格见 [`protocol_0.2_spec.md`](protocol_0.2_spec.md)，实现见 `engine/server/protocol.py`。接入方请勿以本文档为准。
+
 # Performance Primitive Protocol Specification
 
 **Version**: 1.0
-**Status**: Stable
+**Status**: Superseded（历史实验，见顶部警告）
 **Format**: Protocol Buffers (proto3)
 
 This document specifies the Performance Primitive Protocol used by SoulForge to describe character expression on physical toys. The protocol is inspired by Disney Research's "Olaf" system (arXiv:2512.16705) and defines standardized messages that translate high-level character intent into hardware-agnostic performance instructions.
