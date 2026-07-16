@@ -16,8 +16,8 @@ from typing import Any, Iterator, Protocol, runtime_checkable
 @dataclass
 class Frame:
     ts: float
-    ref: str                              # path/uri of the frame
-    data: bytes | None = None             # present for local providers only
+    ref: str  # path/uri of the frame
+    data: bytes | None = None  # present for local providers only
     sidecar: dict[str, Any] = field(default_factory=dict)
 
 
@@ -25,7 +25,7 @@ class Frame:
 class AudioChunk:
     ts: float
     ref: str
-    pcm: bytes | None = None              # 16k mono s16le when present
+    pcm: bytes | None = None  # 16k mono s16le when present
     format: str = "pcm_s16le_16k"
     sidecar: dict[str, Any] = field(default_factory=dict)
 
@@ -72,8 +72,12 @@ class FileCameraSource:
         for path in sorted(base.iterdir()) if base.exists() else []:
             if path.suffix.lower() not in _IMAGE_SUFFIXES:
                 continue
-            yield Frame(ts=ts, ref=str(path), data=path.read_bytes(),
-                        sidecar=_load_sidecar(path))
+            yield Frame(
+                ts=ts,
+                ref=str(path),
+                data=path.read_bytes(),
+                sidecar=_load_sidecar(path),
+            )
             ts += 1.0 / max(self.fps, 1e-6)
 
     def close(self) -> None:
@@ -92,8 +96,9 @@ class RecordedAudioSource:
         for path in sorted(base.iterdir()) if base.exists() else []:
             if path.suffix.lower() not in _AUDIO_SUFFIXES:
                 continue
-            yield AudioChunk(ts=ts, ref=str(path), pcm=path.read_bytes(),
-                             sidecar=_load_sidecar(path))
+            yield AudioChunk(
+                ts=ts, ref=str(path), pcm=path.read_bytes(), sidecar=_load_sidecar(path)
+            )
             ts += 1.0
 
     def close(self) -> None:
@@ -109,8 +114,12 @@ class MuJoCoStateSource:
 
     def frames(self) -> Iterator[Frame]:
         for index, state in enumerate(self.states):
-            yield Frame(ts=float(state.get("ts", index)), ref=f"mujoco://state/{index}",
-                        data=None, sidecar={"mujoco_state": state})
+            yield Frame(
+                ts=float(state.get("ts", index)),
+                ref=f"mujoco://state/{index}",
+                data=None,
+                sidecar={"mujoco_state": state},
+            )
 
     def close(self) -> None:
         return None

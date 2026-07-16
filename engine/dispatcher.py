@@ -39,7 +39,9 @@ class Dispatcher:
     def submit(self, intent: Intent, now: float | None = None) -> bool:
         current_time = self.executor.elapsed_s if now is None else now
         if intent.is_expired(current_time):
-            self.events.append(DispatchEvent("drop_expired", current_time, intent.intent_id))
+            self.events.append(
+                DispatchEvent("drop_expired", current_time, intent.intent_id)
+            )
             return False
 
         if self.current_intent is None:
@@ -61,17 +63,29 @@ class Dispatcher:
 
         if self.pending is None or intent.priority > self.pending.priority:
             self.pending = intent
-            self.events.append(DispatchEvent("queued_pending", current_time, intent.intent_id))
+            self.events.append(
+                DispatchEvent("queued_pending", current_time, intent.intent_id)
+            )
             return True
 
-        self.events.append(DispatchEvent("drop_lower_priority", current_time, intent.intent_id))
+        self.events.append(
+            DispatchEvent("drop_lower_priority", current_time, intent.intent_id)
+        )
         return False
 
-    def load(self, intent: Intent, units: list[ActionUnit] | None = None, cursor: int = 0) -> None:
+    def load(
+        self, intent: Intent, units: list[ActionUnit] | None = None, cursor: int = 0
+    ) -> None:
         self.current_intent = intent
-        self.unit_queue = units if units is not None else compile_to_units(intent, self.templates)
+        self.unit_queue = (
+            units if units is not None else compile_to_units(intent, self.templates)
+        )
         self.cursor = cursor
-        self.events.append(DispatchEvent("load", self.executor.elapsed_s, intent.intent_id, intent.source))
+        self.events.append(
+            DispatchEvent(
+                "load", self.executor.elapsed_s, intent.intent_id, intent.source
+            )
+        )
 
     @property
     def is_idle(self) -> bool:
@@ -119,7 +133,9 @@ class Dispatcher:
             )
         elif current:
             self.events.append(
-                DispatchEvent("drop_interrupted", self.executor.elapsed_s, current.intent_id)
+                DispatchEvent(
+                    "drop_interrupted", self.executor.elapsed_s, current.intent_id
+                )
             )
 
         self.pending = None
@@ -128,7 +144,9 @@ class Dispatcher:
     def _finish_current(self) -> None:
         finished = self.current_intent
         if finished is not None:
-            self.events.append(DispatchEvent("finish", self.executor.elapsed_s, finished.intent_id))
+            self.events.append(
+                DispatchEvent("finish", self.executor.elapsed_s, finished.intent_id)
+            )
 
         self.current_intent = None
         self.unit_queue = []

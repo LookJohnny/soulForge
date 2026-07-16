@@ -45,8 +45,9 @@ class BreathingBehavior(AmbientBehavior):
     Affects: body_pitch (slight forward/back lean)
     """
 
-    def __init__(self, rate_bpm: float = 15.0, amplitude: float = 0.03,
-                 asymmetry: float = 1.3):
+    def __init__(
+        self, rate_bpm: float = 15.0, amplitude: float = 0.03, asymmetry: float = 1.3
+    ):
         self.frequency = rate_bpm / 60.0  # Hz
         self.amplitude = amplitude
         self.asymmetry = asymmetry  # p > 1 → exhale slower
@@ -106,7 +107,9 @@ class EyeSaccadeBehavior(AmbientBehavior):
 
         # Smooth transition to target
         if self._transition_progress < 1.0:
-            self._transition_progress = min(1.0, self._transition_progress + dt / self._transition_duration)
+            self._transition_progress = min(
+                1.0, self._transition_progress + dt / self._transition_duration
+            )
             alpha = self._transition_progress
             self._current_yaw += (self._target_yaw - self._current_yaw) * alpha
             self._current_pitch += (self._target_pitch - self._current_pitch) * alpha
@@ -135,17 +138,32 @@ class IdleShiftBehavior(AmbientBehavior):
 
     def sample(self, t: float, dt: float) -> dict[str, float]:
         # Sum of sines at different frequencies → pseudo-random drift
-        body_yaw = sum(
-            math.sin(2 * math.pi * f * t + p) for f, p in zip(self._freqs[:2], self._phases[:2])
-        ) * self.amplitude * 0.5
+        body_yaw = (
+            sum(
+                math.sin(2 * math.pi * f * t + p)
+                for f, p in zip(self._freqs[:2], self._phases[:2])
+            )
+            * self.amplitude
+            * 0.5
+        )
 
-        body_roll = sum(
-            math.sin(2 * math.pi * f * t + p) for f, p in zip(self._freqs[1:3], self._phases[1:3])
-        ) * self.amplitude * 0.3
+        body_roll = (
+            sum(
+                math.sin(2 * math.pi * f * t + p)
+                for f, p in zip(self._freqs[1:3], self._phases[1:3])
+            )
+            * self.amplitude
+            * 0.3
+        )
 
-        head_yaw = sum(
-            math.sin(2 * math.pi * f * t + p) for f, p in zip(self._freqs[2:], self._phases[2:])
-        ) * self.amplitude * 0.4
+        head_yaw = (
+            sum(
+                math.sin(2 * math.pi * f * t + p)
+                for f, p in zip(self._freqs[2:], self._phases[2:])
+            )
+            * self.amplitude
+            * 0.4
+        )
 
         return {
             "body_yaw": body_yaw,
@@ -193,16 +211,66 @@ class MicroExpressionBehavior(AmbientBehavior):
 
 # Maps emotion type (int) to parameter multipliers
 _EMOTION_MODIFIERS: dict[int, dict[str, float]] = {
-    0:  {"breathing_rate": 1.0, "saccade_freq": 1.0, "shift_amp": 1.0, "micro_prob": 1.0},  # NEUTRAL
-    1:  {"breathing_rate": 1.3, "saccade_freq": 1.2, "shift_amp": 1.4, "micro_prob": 1.5},  # JOY
-    2:  {"breathing_rate": 0.7, "saccade_freq": 0.6, "shift_amp": 0.5, "micro_prob": 0.7},  # SADNESS
-    3:  {"breathing_rate": 1.5, "saccade_freq": 1.8, "shift_amp": 1.2, "micro_prob": 1.8},  # SURPRISE
-    4:  {"breathing_rate": 1.4, "saccade_freq": 1.5, "shift_amp": 1.3, "micro_prob": 0.5},  # ANGER
-    5:  {"breathing_rate": 1.6, "saccade_freq": 2.0, "shift_amp": 0.8, "micro_prob": 1.2},  # FEAR
-    7:  {"breathing_rate": 1.1, "saccade_freq": 1.4, "shift_amp": 1.1, "micro_prob": 1.3},  # CURIOSITY
-    8:  {"breathing_rate": 0.9, "saccade_freq": 0.8, "shift_amp": 0.6, "micro_prob": 1.0},  # AFFECTION
-    9:  {"breathing_rate": 0.5, "saccade_freq": 0.3, "shift_amp": 0.3, "micro_prob": 0.4},  # SLEEPY
-    10: {"breathing_rate": 1.5, "saccade_freq": 1.6, "shift_amp": 1.5, "micro_prob": 1.6},  # EXCITED
+    0: {
+        "breathing_rate": 1.0,
+        "saccade_freq": 1.0,
+        "shift_amp": 1.0,
+        "micro_prob": 1.0,
+    },  # NEUTRAL
+    1: {
+        "breathing_rate": 1.3,
+        "saccade_freq": 1.2,
+        "shift_amp": 1.4,
+        "micro_prob": 1.5,
+    },  # JOY
+    2: {
+        "breathing_rate": 0.7,
+        "saccade_freq": 0.6,
+        "shift_amp": 0.5,
+        "micro_prob": 0.7,
+    },  # SADNESS
+    3: {
+        "breathing_rate": 1.5,
+        "saccade_freq": 1.8,
+        "shift_amp": 1.2,
+        "micro_prob": 1.8,
+    },  # SURPRISE
+    4: {
+        "breathing_rate": 1.4,
+        "saccade_freq": 1.5,
+        "shift_amp": 1.3,
+        "micro_prob": 0.5,
+    },  # ANGER
+    5: {
+        "breathing_rate": 1.6,
+        "saccade_freq": 2.0,
+        "shift_amp": 0.8,
+        "micro_prob": 1.2,
+    },  # FEAR
+    7: {
+        "breathing_rate": 1.1,
+        "saccade_freq": 1.4,
+        "shift_amp": 1.1,
+        "micro_prob": 1.3,
+    },  # CURIOSITY
+    8: {
+        "breathing_rate": 0.9,
+        "saccade_freq": 0.8,
+        "shift_amp": 0.6,
+        "micro_prob": 1.0,
+    },  # AFFECTION
+    9: {
+        "breathing_rate": 0.5,
+        "saccade_freq": 0.3,
+        "shift_amp": 0.3,
+        "micro_prob": 0.4,
+    },  # SLEEPY
+    10: {
+        "breathing_rate": 1.5,
+        "saccade_freq": 1.6,
+        "shift_amp": 1.5,
+        "micro_prob": 1.6,
+    },  # EXCITED
 }
 
 

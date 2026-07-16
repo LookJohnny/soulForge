@@ -3,6 +3,7 @@
 import sys
 import os
 import math
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from believability.metrics import BelievabilityMetrics
@@ -12,14 +13,22 @@ class TestEmotionActionCoherence:
     def test_joy_warm_eyes_scores_higher(self):
         """JOY + warm/happy eyes should score higher than JOY + sad eyes."""
         m = BelievabilityMetrics
-        good = m.emotion_action_coherence(1, 0.8, {"eye_shape": 0.8, "eye_color_warmth": 0.9, "voice_speed": 0.3})
-        bad = m.emotion_action_coherence(1, 0.8, {"eye_shape": -0.8, "eye_color_warmth": -0.9, "voice_speed": -0.5})
+        good = m.emotion_action_coherence(
+            1, 0.8, {"eye_shape": 0.8, "eye_color_warmth": 0.9, "voice_speed": 0.3}
+        )
+        bad = m.emotion_action_coherence(
+            1, 0.8, {"eye_shape": -0.8, "eye_color_warmth": -0.9, "voice_speed": -0.5}
+        )
         assert good > bad
         assert good - bad >= 0.2
 
     def test_sadness_cool_eyes_coherent(self):
-        sad_match = BelievabilityMetrics.emotion_action_coherence(2, 0.7, {"eye_shape": -0.6, "eye_color_warmth": -0.8, "voice_speed": -0.5})
-        sad_mismatch = BelievabilityMetrics.emotion_action_coherence(2, 0.7, {"eye_shape": 0.8, "eye_color_warmth": 0.9, "voice_speed": 0.5})
+        sad_match = BelievabilityMetrics.emotion_action_coherence(
+            2, 0.7, {"eye_shape": -0.6, "eye_color_warmth": -0.8, "voice_speed": -0.5}
+        )
+        sad_mismatch = BelievabilityMetrics.emotion_action_coherence(
+            2, 0.7, {"eye_shape": 0.8, "eye_color_warmth": 0.9, "voice_speed": 0.5}
+        )
         assert sad_match > sad_mismatch
 
 
@@ -139,5 +148,7 @@ class TestCompositeScore:
         # Default weights: jitter=5, smoothness=3
         t1, _ = m.compute_total_score(state)
         # Custom: flip weights
-        t2, _ = m.compute_total_score(state, {"jitter_penalty": 1.0, "motion_smoothness": 10.0})
+        t2, _ = m.compute_total_score(
+            state, {"jitter_penalty": 1.0, "motion_smoothness": 10.0}
+        )
         assert t2 < t1  # smoothness=0 now weighs more

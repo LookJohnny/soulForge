@@ -27,9 +27,14 @@ def test_tts_echo_rejected_by_barge_in_is_not_delivered_to_planner():
     )
     controller.self_voice.on_tts_start("你好呀")
 
-    observations = list(run_audio_pipeline(
-        iter([_speech("你好呀")]), MockVAD(), MockASRProvider(), barge_in=controller,
-    ))
+    observations = list(
+        run_audio_pipeline(
+            iter([_speech("你好呀")]),
+            MockVAD(),
+            MockASRProvider(),
+            barge_in=controller,
+        )
+    )
 
     assert observations == []
     assert stopped == []
@@ -45,12 +50,14 @@ def test_real_user_barge_in_stops_tts_and_is_delivered_once():
     )
     controller.self_voice.on_tts_start("你好呀")
 
-    observations = list(run_audio_pipeline(
-        iter([_speech("等等，我有问题")]),
-        MockVAD(),
-        MockASRProvider(),
-        barge_in=controller,
-    ))
+    observations = list(
+        run_audio_pipeline(
+            iter([_speech("等等，我有问题")]),
+            MockVAD(),
+            MockASRProvider(),
+            barge_in=controller,
+        )
+    )
 
     assert [item.transcript for item in observations] == ["等等，我有问题"]
     assert stopped == [True]

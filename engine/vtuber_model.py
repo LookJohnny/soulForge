@@ -187,7 +187,9 @@ def build_proxy_mjcf(label: str = "vtuber_proxy") -> str:
 """.strip()
 
 
-def _servo(actuator_id: str, body_part: str, min_deg: float, max_deg: float, speed: float) -> dict:
+def _servo(
+    actuator_id: str, body_part: str, min_deg: float, max_deg: float, speed: float
+) -> dict:
     return {
         "id": actuator_id,
         "type": "servo",

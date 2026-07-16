@@ -14,20 +14,22 @@ from dataclasses import dataclass, field
 class BehaviorTemplate:
     template_id: str
     description: str
-    preconditions: list[str]                      # e.g. "at:kitchen", "prop:pan"
+    preconditions: list[str]  # e.g. "at:kitchen", "prop:pan"
     duration_range_s: tuple[float, float]
     required_props: list[str]
-    animation_clips: list[str]                    # renderer / Unity clip names
+    animation_clips: list[str]  # renderer / Unity clip names
     servo_channels: list[str] = field(default_factory=list)
     unity_command: str = ""
     mujoco_control: str = ""
     interruptible: bool = True
     soft_interrupt_points: str = "between_clips"  # where a pause is allowed
-    recovery: str = "resume_last_clip"            # how to continue after interruption
+    recovery: str = "resume_last_clip"  # how to continue after interruption
     dialogue_slots: list[str] = field(default_factory=list)
     micro_steps: list[str] = field(default_factory=list)
 
-    def check_preconditions(self, available_props: list[str], location: str) -> list[str]:
+    def check_preconditions(
+        self, available_props: list[str], location: str
+    ) -> list[str]:
         missing: list[str] = []
         for condition in self.preconditions:
             key, _, value = condition.partition(":")
@@ -47,7 +49,13 @@ TEMPLATE_REGISTRY: dict[str, BehaviorTemplate] = {
             preconditions=["at:kitchen", "prop:pan", "prop:stove"],
             duration_range_s=(300, 2400),
             required_props=["pan", "stove"],
-            animation_clips=["walk_to_kitchen", "chop", "stir_pan", "taste", "plate_up"],
+            animation_clips=[
+                "walk_to_kitchen",
+                "chop",
+                "stir_pan",
+                "taste",
+                "plate_up",
+            ],
             servo_channels=["arm_l", "arm_r", "torso_pitch", "head_yaw"],
             unity_command="Activity.Cooking",
             mujoco_control="ctrl_cooking_cycle",
@@ -55,7 +63,14 @@ TEMPLATE_REGISTRY: dict[str, BehaviorTemplate] = {
             soft_interrupt_points="between_clips",
             recovery="stir_pan",  # a safe holding clip: food never burns unattended
             dialogue_slots=["offer_taste", "ask_preference", "announce_ready"],
-            micro_steps=["walk_to_kitchen", "prep_ingredients", "stir_pan", "wait", "plate_up", "invite_user"],
+            micro_steps=[
+                "walk_to_kitchen",
+                "prep_ingredients",
+                "stir_pan",
+                "wait",
+                "plate_up",
+                "invite_user",
+            ],
         ),
         BehaviorTemplate(
             template_id="drawing",
@@ -63,7 +78,12 @@ TEMPLATE_REGISTRY: dict[str, BehaviorTemplate] = {
             preconditions=["at:desk", "prop:tablet"],
             duration_range_s=(300, 5400),
             required_props=["tablet", "pen"],
-            animation_clips=["sit_desk", "draw_stroke", "lean_back_review", "pen_tap_think"],
+            animation_clips=[
+                "sit_desk",
+                "draw_stroke",
+                "lean_back_review",
+                "pen_tap_think",
+            ],
             servo_channels=["arm_r", "head_pitch", "head_yaw"],
             unity_command="Activity.Drawing",
             mujoco_control="ctrl_arm_stroke",
@@ -78,7 +98,12 @@ TEMPLATE_REGISTRY: dict[str, BehaviorTemplate] = {
             preconditions=[],
             duration_range_s=(30, 1800),
             required_props=[],
-            animation_clips=["look_at_target", "talk_gesture", "listening_nod", "smile"],
+            animation_clips=[
+                "look_at_target",
+                "talk_gesture",
+                "listening_nod",
+                "smile",
+            ],
             servo_channels=["head_yaw", "head_pitch", "arm_l", "arm_r"],
             unity_command="Activity.Chat",
             mujoco_control="ctrl_idle_gesture",
@@ -86,7 +111,12 @@ TEMPLATE_REGISTRY: dict[str, BehaviorTemplate] = {
             soft_interrupt_points="any",
             recovery="look_at_target",
             dialogue_slots=["opener", "empathy", "follow_up", "closing"],
-            micro_steps=["look_at_user", "speak_line", "wait_for_response", "listening_nod"],
+            micro_steps=[
+                "look_at_user",
+                "speak_line",
+                "wait_for_response",
+                "listening_nod",
+            ],
         ),
         BehaviorTemplate(
             template_id="plant_care",
@@ -101,7 +131,13 @@ TEMPLATE_REGISTRY: dict[str, BehaviorTemplate] = {
             interruptible=True,
             recovery="scan_leaves",
             dialogue_slots=["humidity_report", "care_suggestion"],
-            micro_steps=["walk_to_plants", "scan_leaves", "probe_soil", "water_plant", "report"],
+            micro_steps=[
+                "walk_to_plants",
+                "scan_leaves",
+                "probe_soil",
+                "water_plant",
+                "report",
+            ],
         ),
         BehaviorTemplate(
             template_id="repair",
@@ -113,7 +149,7 @@ TEMPLATE_REGISTRY: dict[str, BehaviorTemplate] = {
             servo_channels=["arm_l", "arm_r", "torso_pitch"],
             unity_command="Activity.Repair",
             mujoco_control="ctrl_wrench_cycle",
-            interruptible=False,          # torque mid-turn: finish the unit first
+            interruptible=False,  # torque mid-turn: finish the unit first
             soft_interrupt_points="between_clips",
             recovery="kneel_inspect",
             dialogue_slots=["status_note"],

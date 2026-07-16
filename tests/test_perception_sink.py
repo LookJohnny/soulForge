@@ -22,17 +22,19 @@ async def test_runtime_perception_sink_sends_structured_wire_event():
         sink = RuntimePerceptionSink(f"ws://127.0.0.1:{port}")
         await sink.start()
         try:
-            sink.emit(PerceptionEvent(
-                kind="object_detected",
-                modality="vision",
-                timestamp=1.0,
-                captured_at=1.0,
-                source_body="camera",
-                target_agent="kai",
-                text="cup detected",
-                confidence=0.8,
-                media_ref="camera://frame/1",
-            ))
+            sink.emit(
+                PerceptionEvent(
+                    kind="object_detected",
+                    modality="vision",
+                    timestamp=1.0,
+                    captured_at=1.0,
+                    source_body="camera",
+                    target_agent="kai",
+                    text="cup detected",
+                    confidence=0.8,
+                    media_ref="camera://frame/1",
+                )
+            )
             await asyncio.wait_for(sink.drain(), timeout=1)
         finally:
             await sink.close()

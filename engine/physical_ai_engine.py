@@ -39,7 +39,9 @@ class PhysicalAIEngine:
         templates: dict[str, ActionTemplate] | None = None,
     ):
         self.templates = templates or DEFAULT_ACTION_TEMPLATES
-        self.executor = PhysicalExecutor(manifest=manifest, backend=backend, fps=control_hz)
+        self.executor = PhysicalExecutor(
+            manifest=manifest, backend=backend, fps=control_hz
+        )
         self.dispatcher = Dispatcher(executor=self.executor, templates=self.templates)
         self.llm_planner = LLMBehaviorPlanner(self.templates)
         self._submitted = 0
@@ -88,7 +90,9 @@ class PhysicalAIEngine:
         plan = self.plan_llm_response(response, context=context)
         intent = plan.to_intent(
             payload={
-                "llm_response": response if isinstance(response, dict) else str(response),
+                "llm_response": response
+                if isinstance(response, dict)
+                else str(response),
             }
         )
         intent.created_at = self.elapsed_s
@@ -120,12 +124,20 @@ class PhysicalAIEngine:
         schedule = sorted(reactive_schedule or [], key=lambda item: item[0])
         schedule_idx = 0
         next_plan_s = min(plan_interval_s, duration_s + 1)
-        plan_templates = ("greeting_wave", "daily_stretch", "happy_wiggle", "listening_nod")
+        plan_templates = (
+            "greeting_wave",
+            "daily_stretch",
+            "happy_wiggle",
+            "listening_nod",
+        )
         plan_idx = 0
         units_played = 0
 
         while self.elapsed_s < duration_s and units_played < max_units:
-            while schedule_idx < len(schedule) and schedule[schedule_idx][0] <= self.elapsed_s:
+            while (
+                schedule_idx < len(schedule)
+                and schedule[schedule_idx][0] <= self.elapsed_s
+            ):
                 _, template_id = schedule[schedule_idx]
                 self.submit_intent(
                     "reactive",
@@ -194,11 +206,16 @@ class PhysicalAIEngine:
 
         while self.elapsed_s < duration_s and units_played < max_units:
             if environment is not None:
-                for event in environment.events_between(last_event_poll_s + 1e-9, self.elapsed_s):
+                for event in environment.events_between(
+                    last_event_poll_s + 1e-9, self.elapsed_s
+                ):
                     self.submit_intent(
                         "reactive",
                         event_to_template(event),
-                        payload={"environment_event": event.payload, "event_type": event.event_type},
+                        payload={
+                            "environment_event": event.payload,
+                            "event_type": event.event_type,
+                        },
                         priority=Priority.REACTIVE,
                         preemptible=False,
                         ttl_ms=0,
@@ -230,7 +247,9 @@ class PhysicalAIEngine:
                 last_planned_minute = current_minute
 
             if self.dispatcher.is_idle:
-                self.submit_intent("idle", "idle_scan", priority=Priority.IDLE, ttl_ms=0)
+                self.submit_intent(
+                    "idle", "idle_scan", priority=Priority.IDLE, ttl_ms=0
+                )
 
             result = self.dispatcher.step_unit()
             if result is not None:

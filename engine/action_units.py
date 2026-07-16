@@ -52,11 +52,51 @@ DEFAULT_ACTION_TEMPLATES: dict[str, ActionTemplate] = {
         template_id="idle_scan",
         channels=["head_yaw", "head_pitch", "head_roll"],
         keyframes=[
-            (0.00, {"head_yaw": 0.0, "head_pitch": 0.0, "head_roll": 0.0, "body_roll": 0.0}),
-            (0.30, {"head_yaw": 14.0, "head_pitch": 2.0, "head_roll": 1.0, "body_roll": 1.5}),
-            (0.60, {"head_yaw": 5.0, "head_pitch": 4.5, "head_roll": -1.0, "body_roll": -1.0}),
-            (0.90, {"head_yaw": -9.0, "head_pitch": 1.5, "head_roll": 1.5, "body_roll": 1.0}),
-            (1.20, {"head_yaw": 0.0, "head_pitch": 0.0, "head_roll": 0.0, "body_roll": 0.0}),
+            (
+                0.00,
+                {
+                    "head_yaw": 0.0,
+                    "head_pitch": 0.0,
+                    "head_roll": 0.0,
+                    "body_roll": 0.0,
+                },
+            ),
+            (
+                0.30,
+                {
+                    "head_yaw": 14.0,
+                    "head_pitch": 2.0,
+                    "head_roll": 1.0,
+                    "body_roll": 1.5,
+                },
+            ),
+            (
+                0.60,
+                {
+                    "head_yaw": 5.0,
+                    "head_pitch": 4.5,
+                    "head_roll": -1.0,
+                    "body_roll": -1.0,
+                },
+            ),
+            (
+                0.90,
+                {
+                    "head_yaw": -9.0,
+                    "head_pitch": 1.5,
+                    "head_roll": 1.5,
+                    "body_roll": 1.0,
+                },
+            ),
+            (
+                1.20,
+                {
+                    "head_yaw": 0.0,
+                    "head_pitch": 0.0,
+                    "head_roll": 0.0,
+                    "body_roll": 0.0,
+                },
+            ),
         ],
         safe_breakpoints=[1, 2, 3, 4],
         loop=True,
@@ -111,10 +151,42 @@ DEFAULT_ACTION_TEMPLATES: dict[str, ActionTemplate] = {
         template_id="daily_stretch",
         channels=["left_arm_pitch", "right_arm_pitch", "head_pitch", "body_yaw"],
         keyframes=[
-            (0.00, {"left_arm_pitch": 0.0, "right_arm_pitch": 0.0, "head_pitch": 0.0, "body_yaw": 0.0}),
-            (0.60, {"left_arm_pitch": 45.0, "right_arm_pitch": 45.0, "head_pitch": 8.0, "body_yaw": -5.0}),
-            (1.20, {"left_arm_pitch": 60.0, "right_arm_pitch": 60.0, "head_pitch": 5.0, "body_yaw": 5.0}),
-            (1.80, {"left_arm_pitch": 0.0, "right_arm_pitch": 0.0, "head_pitch": 0.0, "body_yaw": 0.0}),
+            (
+                0.00,
+                {
+                    "left_arm_pitch": 0.0,
+                    "right_arm_pitch": 0.0,
+                    "head_pitch": 0.0,
+                    "body_yaw": 0.0,
+                },
+            ),
+            (
+                0.60,
+                {
+                    "left_arm_pitch": 45.0,
+                    "right_arm_pitch": 45.0,
+                    "head_pitch": 8.0,
+                    "body_yaw": -5.0,
+                },
+            ),
+            (
+                1.20,
+                {
+                    "left_arm_pitch": 60.0,
+                    "right_arm_pitch": 60.0,
+                    "head_pitch": 5.0,
+                    "body_yaw": 5.0,
+                },
+            ),
+            (
+                1.80,
+                {
+                    "left_arm_pitch": 0.0,
+                    "right_arm_pitch": 0.0,
+                    "head_pitch": 0.0,
+                    "body_yaw": 0.0,
+                },
+            ),
         ],
         safe_breakpoints=[1, 2, 3],
     ),
@@ -221,7 +293,10 @@ def sample_pose(keyframes: list[Keyframe], elapsed_s: float) -> Pose:
             channels = set(p0) | set(p1)
             return {
                 ch: float(p0.get(ch, p1.get(ch, 0.0)))
-                + (float(p1.get(ch, p0.get(ch, 0.0))) - float(p0.get(ch, p1.get(ch, 0.0))))
+                + (
+                    float(p1.get(ch, p0.get(ch, 0.0)))
+                    - float(p0.get(ch, p1.get(ch, 0.0)))
+                )
                 * alpha
                 for ch in channels
             }

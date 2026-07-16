@@ -61,38 +61,49 @@ async def test_ephemeral_runtime_voice_bridge_uses_two_phase_ack_and_rejects_for
         assert body.manifest.supported_steps == ["speak_line"]
         assert body.manifest.supported_templates == []
         assert body.manifest.features == {
-            "speech": True, "speech_only": True, "gaze": False, "nav": False,
+            "speech": True,
+            "speech_only": True,
+            "gaze": False,
+            "nav": False,
         }
 
         command_id = decision["commands"][0]["command_id"]
         # CharacterBridge has sent accepted, but accepted is not completion.
         await _wait_until(lambda: command_id in body.sent_commands)
         accepted = [
-            item for item in server.runtime.trace
+            item
+            for item in server.runtime.trace
             if item.kind == "observation" and item.detail.get("status") == "accepted"
         ]
         assert any(item.detail.get("step") == "speak_line" for item in accepted)
 
         # A forged cross-agent terminal receipt must not consume the command.
-        await bridge._socket.send(json.dumps({
-            "type": "observation",
-            "command_id": command_id,
-            "agent_id": "luna",
-            "status": "done",
-            "body_id": bridge.body_id,
-        }))
-        await _wait_until(lambda: any(
-            item.kind == "observation_rejected"
-            and item.detail.get("reason") == "agent_id mismatch"
-            for item in server.runtime.trace
-        ))
+        await bridge._socket.send(
+            json.dumps(
+                {
+                    "type": "observation",
+                    "command_id": command_id,
+                    "agent_id": "luna",
+                    "status": "done",
+                    "body_id": bridge.body_id,
+                }
+            )
+        )
+        await _wait_until(
+            lambda: any(
+                item.kind == "observation_rejected"
+                and item.detail.get("reason") == "agent_id mismatch"
+                for item in server.runtime.trace
+            )
+        )
         assert command_id in body.sent_commands
 
         # Only actual playback completion removes the pending command.
         await bridge.confirm_spoken(command_id)
         await _wait_until(lambda: command_id not in body.sent_commands)
         terminal = [
-            item for item in server.runtime.trace
+            item
+            for item in server.runtime.trace
             if item.kind == "observation" and item.detail.get("status") == "done"
         ]
         assert any(item.detail.get("step") == "speak_line" for item in terminal)
@@ -112,11 +123,13 @@ class _FakeBridge:
         return {
             "text": "我听到了。",
             "correlation_id": "turn-1",
-            "commands": [{
-                "command_id": "speech-1",
-                "dialogue": "我听到了。",
-                "correlation_id": "turn-1",
-            }],
+            "commands": [
+                {
+                    "command_id": "speech-1",
+                    "dialogue": "我听到了。",
+                    "correlation_id": "turn-1",
+                }
+            ],
         }
 
     async def confirm_spoken(self, command_id: str, *, played: bool, detail: str):
@@ -204,7 +217,8 @@ async def test_audio_fallback_is_asr_only_then_character_runtime(monkeypatch):
     monkeypatch.setattr(settings, "character_runtime_url", "ws://runtime")
 
     chunks = [
-        chunk async for chunk in orchestrator.process_audio_stream(
+        chunk
+        async for chunk in orchestrator.process_audio_stream(
             session, b"buffered-pcm", audio_format="pcm"
         )
     ]
@@ -227,7 +241,8 @@ async def test_asr_only_failure_drops_turn_without_legacy_llm(monkeypatch):
     monkeypatch.setattr(settings, "character_runtime_url", "ws://runtime")
 
     chunks = [
-        chunk async for chunk in orchestrator.process_audio_stream(session, b"bad-audio")
+        chunk
+        async for chunk in orchestrator.process_audio_stream(session, b"bad-audio")
     ]
     assert len(chunks) == 1 and chunks[0].is_done
     assert chunks[0].stages == {"asr_only": "no_transcript"}

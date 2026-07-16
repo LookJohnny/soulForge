@@ -74,10 +74,19 @@ class WallClock:
 
 def _local_midnight_epoch() -> float:
     now = time.localtime()
-    midnight = time.struct_time((
-        now.tm_year, now.tm_mon, now.tm_mday, 0, 0, 0,
-        now.tm_wday, now.tm_yday, now.tm_isdst,
-    ))
+    midnight = time.struct_time(
+        (
+            now.tm_year,
+            now.tm_mon,
+            now.tm_mday,
+            0,
+            0,
+            0,
+            now.tm_wday,
+            now.tm_yday,
+            now.tm_isdst,
+        )
+    )
     return time.mktime(midnight)
 
 
@@ -85,9 +94,9 @@ def _local_midnight_epoch() -> float:
 class GameClock:
     """Bridges a host engine's time source (e.g. Unity Time.time in seconds)."""
 
-    source: Callable[[], float]                 # returns host time
-    host_units_per_minute: float = 60.0         # seconds per minute by default
-    offset_minutes: float = 0.0                 # where the host's zero maps to
+    source: Callable[[], float]  # returns host time
+    host_units_per_minute: float = 60.0  # seconds per minute by default
+    offset_minutes: float = 0.0  # where the host's zero maps to
 
     def now_minutes(self) -> float:
         return self.offset_minutes + self.source() / self.host_units_per_minute

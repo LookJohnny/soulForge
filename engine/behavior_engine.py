@@ -64,8 +64,9 @@ class BehaviorEngine:
         )
     """
 
-    def __init__(self, hardware_manifest: dict | None = None,
-                 behavior_config: dict | None = None):
+    def __init__(
+        self, hardware_manifest: dict | None = None, behavior_config: dict | None = None
+    ):
         channels = dict(DEFAULT_CHANNELS)
 
         # Build channel list from hardware manifest if available
@@ -87,8 +88,12 @@ class BehaviorEngine:
         self._time = 0.0
         self._channel_sources: dict[str, str] = {}  # for debugging
 
-    def update(self, dt_ms: float, sensor_inputs: dict | None = None,
-               persona_intent: Any = None) -> dict[str, float]:
+    def update(
+        self,
+        dt_ms: float,
+        sensor_inputs: dict | None = None,
+        persona_intent: Any = None,
+    ) -> dict[str, float]:
         """Main frame update.
 
         Args:
@@ -155,9 +160,7 @@ class BehaviorEngine:
             ch_state = self.blender._channels.get(ch_id)
             if ch_state is None:
                 continue
-            active_layers = [
-                lid for lid, ls in ch_state.layers.items() if ls.active
-            ]
+            active_layers = [lid for lid, ls in ch_state.layers.items() if ls.active]
             result[ch_id] = {
                 "value": round(val, 4),
                 "active_layers": active_layers,
@@ -176,8 +179,8 @@ class BehaviorEngine:
             # High-intensity emotions trigger behaviors
             if intensity > 0.6:
                 emotion_behavior_map = {
-                    1: "happy_wiggle",   # JOY
-                    3: "surprised_jump", # SURPRISE
+                    1: "happy_wiggle",  # JOY
+                    3: "surprised_jump",  # SURPRISE
                     10: "happy_wiggle",  # EXCITED
                 }
                 bid = emotion_behavior_map.get(etype)
@@ -187,11 +190,11 @@ class BehaviorEngine:
         # Gesture → triggered behavior
         if hasattr(primitive, "gesture") and primitive.gesture.type != 0:
             gesture_behavior_map = {
-                1: "greeting_wave",    # WAVE
-                2: "listening_nod",    # NOD
-                4: "thinking_look_up", # TILT_HEAD
-                6: "happy_wiggle",     # BOUNCE → reuse wiggle
-                7: "happy_wiggle",     # WIGGLE
+                1: "greeting_wave",  # WAVE
+                2: "listening_nod",  # NOD
+                4: "thinking_look_up",  # TILT_HEAD
+                6: "happy_wiggle",  # BOUNCE → reuse wiggle
+                7: "happy_wiggle",  # WIGGLE
             }
             bid = gesture_behavior_map.get(primitive.gesture.type)
             if bid:

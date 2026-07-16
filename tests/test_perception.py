@@ -9,15 +9,26 @@ from pathlib import Path
 import pytest
 
 from engine.perception import (
-    BargeInController, FileCameraSource, MockASRProvider, MockVAD,
-    MockVisionProvider, PerceptionFusion, PerceptionRuntime, RecordedAudioSource,
+    BargeInController,
+    FileCameraSource,
+    MockASRProvider,
+    MockVAD,
+    MockVisionProvider,
+    PerceptionFusion,
+    PerceptionRuntime,
+    RecordedAudioSource,
     to_wire_event,
 )
 from engine.perception.models import PerceptionEvent
 from engine.perception.sources import Frame
 from engine.planner import (
-    CompanionRuntime, Event, EventKind, ImpactLevel, MockBehaviorLLM,
-    Persona, WorldState,
+    CompanionRuntime,
+    Event,
+    EventKind,
+    ImpactLevel,
+    MockBehaviorLLM,
+    Persona,
+    WorldState,
 )
 from engine.planner.llm_interface import BehaviorDecision
 
@@ -25,27 +36,36 @@ FIXTURES = Path(__file__).parent / "fixtures" / "perception"
 
 
 def persona(agent_id="kai"):
-    return Persona(agent_id, agent_id.title(), "steady_caretaker",
-                   relationships={"user": 0.75})
+    return Persona(
+        agent_id, agent_id.title(), "steady_caretaker", relationships={"user": 0.75}
+    )
 
 
 def make_runtime(llm=None):
     dispatched = []
-    runtime = CompanionRuntime([persona()], WorldState(sim_minute=19 * 60),
-                               llm=llm or MockBehaviorLLM())
+    runtime = CompanionRuntime(
+        [persona()], WorldState(sim_minute=19 * 60), llm=llm or MockBehaviorLLM()
+    )
     runtime.adapter = lambda agent_id, action: dispatched.append(action)
     return runtime, dispatched
 
 
 def planner_event_from(perception_event: PerceptionEvent, t_min: float) -> Event:
     wire = to_wire_event(perception_event)
-    return Event(t_min=t_min, kind=EventKind(wire.kind), source=wire.source,
-                 text=wire.text, payload=wire.payload, target_agent="kai")
+    return Event(
+        t_min=t_min,
+        kind=EventKind(wire.kind),
+        source=wire.source,
+        text=wire.text,
+        payload=wire.payload,
+        target_agent="kai",
+    )
 
 
 def make_perception(**kwargs):
-    fusion = PerceptionFusion(source_body="test-cam", target_agent="kai",
-                              debounce_s=0.0, **kwargs)
+    fusion = PerceptionFusion(
+        source_body="test-cam", target_agent="kai", debounce_s=0.0, **kwargs
+    )
     return PerceptionRuntime(fusion=fusion, vision_provider=MockVisionProvider())
 
 
@@ -53,7 +73,8 @@ def make_perception(**kwargs):
 def test_audio_fixture_to_look_action_and_dialogue():
     perception = make_perception()
     events = perception.run_microphone(
-        RecordedAudioSource(FIXTURES / "audio"), vad=MockVAD(), asr=MockASRProvider())
+        RecordedAudioSource(FIXTURES / "audio"), vad=MockVAD(), asr=MockASRProvider()
+    )
     utterance = next(e for e in events if "杯子" in e.text)
 
     runtime, dispatched = make_runtime()
@@ -90,7 +111,8 @@ def test_fusion_resolves_deixis_to_entity_and_previews_action():
     perception = make_perception()
     perception.run_camera(FileCameraSource(FIXTURES / "vision"))
     audio_events = perception.run_microphone(
-        RecordedAudioSource(FIXTURES / "audio"), vad=MockVAD(), asr=MockASRProvider())
+        RecordedAudioSource(FIXTURES / "audio"), vad=MockVAD(), asr=MockASRProvider()
+    )
     fused = next(e for e in audio_events if "递给我" in e.text)
     assert fused.kind == "multimodal_context"
     assert fused.payload.get("referent_label") == "cup"
@@ -106,33 +128,45 @@ def test_fusion_resolves_deixis_to_entity_and_previews_action():
     assert resumes and resumes[0].params.get("referent_entity_id") == referent_id
     # PREVIEW only — nothing may claim a completed grasp
     assert resumes[0].params.get("action_preview") == "hand_over"
-    assert not any("grasp" in (a.name or "") or "完成" in (a.dialogue or "")
-                   for a in dispatched)
+    assert not any(
+        "grasp" in (a.name or "") or "完成" in (a.dialogue or "") for a in dispatched
+    )
 
 
 # 4 ─ barge-in：说话中检测到用户语音 → 停 TTS + 暂停动作 + 重新决策 ----------
 def test_barge_in_stops_tts_and_pauses_motion():
     stopped, paused = [], []
-    controller = BargeInController(stop_tts=lambda: stopped.append(True),
-                                   pause_motion=lambda reason: paused.append(reason))
+    controller = BargeInController(
+        stop_tts=lambda: stopped.append(True),
+        pause_motion=lambda reason: paused.append(reason),
+    )
     controller.self_voice.on_tts_start("我正在给你讲今天的计划")
 
     perception = make_perception()
     events = perception.run_microphone(
-        RecordedAudioSource(FIXTURES / "audio"), vad=MockVAD(),
-        asr=MockASRProvider(), barge_in=controller)
+        RecordedAudioSource(FIXTURES / "audio"),
+        vad=MockVAD(),
+        asr=MockASRProvider(),
+        barge_in=controller,
+    )
     assert stopped and paused == ["user_barge_in"]
-    assert controller.triggered_count == 1          # second utterance: TTS already off
+    assert controller.triggered_count == 1  # second utterance: TTS already off
     # the interrupting utterance still reaches the runtime for a fresh decision
     assert any("杯子" in e.text for e in events)
 
     # self-voice/echo never triggers barge-in
-    controller2 = BargeInController(stop_tts=lambda: stopped.append("x"),
-                                    pause_motion=lambda r: paused.append(r))
+    controller2 = BargeInController(
+        stop_tts=lambda: stopped.append("x"), pause_motion=lambda r: paused.append(r)
+    )
     controller2.self_voice.on_tts_start("你好呀")
     from engine.perception.models import AuditoryObservation, SpeakerObservation
-    echo = AuditoryObservation(ts=0, kind="speech", transcript="你好呀",
-                               speaker=SpeakerObservation("kai", is_self_voice=True))
+
+    echo = AuditoryObservation(
+        ts=0,
+        kind="speech",
+        transcript="你好呀",
+        speaker=SpeakerObservation("kai", is_self_voice=True),
+    )
     assert controller2.on_speech_detected(echo) is False
 
 
@@ -146,21 +180,29 @@ def test_low_confidence_vision_cannot_escalate():
     # above fusion threshold but weak: deterministically clamped in the planner
     class ParanoidLLM(MockBehaviorLLM):
         def decide(self, event, persona_, world, current_template, interruptible):
-            decision = super().decide(event, persona_, world, current_template, interruptible)
-            decision.impact = ImpactLevel.CRITICAL          # a hostile/hallucinating LLM
+            decision = super().decide(
+                event, persona_, world, current_template, interruptible
+            )
+            decision.impact = ImpactLevel.CRITICAL  # a hostile/hallucinating LLM
             decision.plan_delta = "day"
             return decision
 
     runtime, dispatched = make_runtime(llm=ParanoidLLM())
-    weak = PerceptionEvent(kind="person_detected", modality="vision",
-                           timestamp=0, captured_at=0, source_body="cam",
-                           text="person detected", confidence=0.55)
+    weak = PerceptionEvent(
+        kind="person_detected",
+        modality="vision",
+        timestamp=0,
+        captured_at=0,
+        source_body="cam",
+        text="person detected",
+        confidence=0.55,
+    )
     runtime.push_event(planner_event_from(weak, 19 * 60 + 1))
     runtime.run(start_min=19 * 60, duration_min=2)
     clamped = [t.detail for t in runtime.trace if t.kind == "decision"]
     assert clamped and clamped[-1]["scope"] == "clamped"
     assert not any(a.name in ("safe_stop", "abort_all_templates") for a in dispatched)
-    assert runtime.day_plans["kai"].blocks[-1].end_min == 24 * 60   # day intact
+    assert runtime.day_plans["kai"].blocks[-1].end_min == 24 * 60  # day intact
 
 
 # 5b ─ hazard 确认策略：单帧疑似不上报，三帧确认才 CRITICAL ------------------
@@ -184,8 +226,9 @@ def test_hazard_requires_confirmation_then_safe_stop(monkeypatch):
     runtime.push_event(planner_event_from(confirmed[0], 19 * 60 + 1))
     runtime.run(start_min=19 * 60, duration_min=2)
     names = [a.name for a in dispatched]
-    assert "safe_stop" in names and "hold_safe_breakpoint" in names, \
+    assert "safe_stop" in names and "hold_safe_breakpoint" in names, (
         "confirmed hazard goes through the deterministic safe-stop flow"
+    )
 
 
 # 6 ─ provider 超时：不阻塞、出 perception_error ------------------------------
@@ -202,8 +245,9 @@ def test_vision_provider_timeout_yields_error_event_not_a_hang():
     perception = make_perception()
     perception.vision_provider = SlowProvider()
     perception.provider_timeout_s = 0.2
-    frame = Frame(ts=0.0, ref="x.png",
-                  data=(FIXTURES / "vision" / "frame_001.png").read_bytes())
+    frame = Frame(
+        ts=0.0, ref="x.png", data=(FIXTURES / "vision" / "frame_001.png").read_bytes()
+    )
     started = _time.monotonic()
     events = perception.process_frame(frame, now=0.0)
     assert _time.monotonic() - started < 1.5
@@ -215,7 +259,10 @@ def test_vision_provider_timeout_yields_error_event_not_a_hang():
 @pytest.mark.asyncio
 async def test_gateway_single_decision_path_bypasses_legacy_chat():
     import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent / "packages" / "gateway" / "src"))
+
+    sys.path.insert(
+        0, str(Path(__file__).parent.parent / "packages" / "gateway" / "src")
+    )
     gateway = pytest.importorskip("gateway.pipeline.orchestrator")
 
     class FakeBridge:
@@ -241,7 +288,9 @@ async def test_gateway_single_decision_path_bypasses_legacy_chat():
 
     gateway.settings.character_runtime_url = "ws://127.0.0.1:1"
     try:
-        result = await gateway.PipelineOrchestrator.process_text(orchestrator, S(), "你好")
+        result = await gateway.PipelineOrchestrator.process_text(
+            orchestrator, S(), "你好"
+        )
         assert result["text"] == "我来看看。"
         assert orchestrator._character_bridge.calls == ["你好"]
     finally:
@@ -253,8 +302,11 @@ def test_raw_media_never_enters_long_term_memory():
     class LeakyLLM(MockBehaviorLLM):
         def decide(self, event, persona_, world, current_template, interruptible):
             return BehaviorDecision(
-                selected_intent="remember", emotional_read="", plan_delta="insert",
-                impact=ImpactLevel.MEDIUM, template_to_call=current_template,
+                selected_intent="remember",
+                emotional_read="",
+                plan_delta="insert",
+                impact=ImpactLevel.MEDIUM,
+                template_to_call=current_template,
                 dialogue=[{"agent": "kai", "text": "记下了。", "emotion": "calm"}],
                 memory_update={
                     "summary": "user showed me a cup",
@@ -263,11 +315,19 @@ def test_raw_media_never_enters_long_term_memory():
                     "audio_ref": "/audio/u1.wav",
                     "huge_blob": "x" * 4096,
                 },
-                reason="test")
+                reason="test",
+            )
 
     runtime, _ = make_runtime(llm=LeakyLLM())
-    runtime.push_event(Event(t_min=19 * 60 + 1, kind=EventKind.USER_UTTERANCE,
-                             source="user", text="看看这个", target_agent="kai"))
+    runtime.push_event(
+        Event(
+            t_min=19 * 60 + 1,
+            kind=EventKind.USER_UTTERANCE,
+            source="user",
+            text="看看这个",
+            target_agent="kai",
+        )
+    )
     runtime.run(start_min=19 * 60, duration_min=2)
     episodic = runtime.memory_store.recall("kai", "episodic")
     assert episodic.get("summary") == "user showed me a cup"
@@ -278,9 +338,17 @@ def test_raw_media_never_enters_long_term_memory():
 # 9 ─ 协议扩展兼容 ------------------------------------------------------------
 def test_new_event_kinds_ride_the_wire():
     from engine.server.protocol import decode, encode
+
     perception_event = PerceptionEvent(
-        kind="object_detected", modality="vision", timestamp=1.0, captured_at=1.0,
-        source_body="cam", text="cup detected", confidence=0.9, media_ref="f.png")
+        kind="object_detected",
+        modality="vision",
+        timestamp=1.0,
+        captured_at=1.0,
+        source_body="cam",
+        text="cup detected",
+        confidence=0.9,
+        media_ref="f.png",
+    )
     wire = to_wire_event(perception_event)
     back = decode(encode(wire))
     assert back.kind == "object_detected"

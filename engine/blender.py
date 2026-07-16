@@ -68,6 +68,7 @@ def _eval_curve(t: float, curve: TransitionCurve) -> float:
 @dataclass
 class _LayerState:
     """State of one layer's claim on one channel."""
+
     value: float = 0.0
     weight: float = 1.0  # for BLENDED mode
     active: bool = False
@@ -102,10 +103,15 @@ class ChannelBlender:
             cid: _ChannelState(mode=mode) for cid, mode in channels.items()
         }
 
-    def set_layer_output(self, layer: int, channel_id: str, value: float,
-                         transition_ms: int = 100,
-                         curve: TransitionCurve = TransitionCurve.EASE_IN_OUT,
-                         weight: float = 1.0):
+    def set_layer_output(
+        self,
+        layer: int,
+        channel_id: str,
+        value: float,
+        transition_ms: int = 100,
+        curve: TransitionCurve = TransitionCurve.EASE_IN_OUT,
+        weight: float = 1.0,
+    ):
         """Set a layer's output for a channel (with optional transition)."""
         ch = self._channels.get(channel_id)
         if ch is None:
@@ -183,7 +189,9 @@ class ChannelBlender:
                 result[cid] = self._get_effective_layer_value(top)
 
             elif ch.mode == ChannelMode.ADDITIVE:
-                total = sum(self._get_effective_layer_value(ls) for _, ls in active_layers)
+                total = sum(
+                    self._get_effective_layer_value(ls) for _, ls in active_layers
+                )
                 result[cid] = max(-1.0, min(1.0, total))
 
             elif ch.mode == ChannelMode.BLENDED:

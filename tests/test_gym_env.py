@@ -3,6 +3,7 @@
 import sys
 import os
 import numpy as np
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from believability.gym_env import BelievabilityEnv
@@ -61,7 +62,9 @@ class TestBelievabilityEnv:
                 break
         # Rewards should be finite and in reasonable range
         assert all(not np.isnan(r) and not np.isinf(r) for r in rewards)
-        assert all(-10 <= r <= 10 for r in rewards), f"Reward out of range: {min(rewards):.2f} to {max(rewards):.2f}"
+        assert all(-10 <= r <= 10 for r in rewards), (
+            f"Reward out of range: {min(rewards):.2f} to {max(rewards):.2f}"
+        )
 
     def test_random_policy_1000_steps(self):
         """Random policy runs 1000 steps without error."""
@@ -99,6 +102,7 @@ class TestTrainer:
     def test_simple_train_short(self):
         """Simple ES trainer runs without crash."""
         import tempfile
+
         env = BelievabilityEnv(episode_length=50)
         trainer = BelievabilityTrainer(env=env)
         result = trainer._train_simple(1000, tempfile.mkdtemp())

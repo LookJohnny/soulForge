@@ -13,19 +13,31 @@ from typing import Any
 from engine.planner.templates import TEMPLATE_REGISTRY
 
 # micro-steps every body gets for free (pure timing/no-op on minimal hardware)
-_UNIVERSAL_STEPS = {"idle_breathing", "wait", "look_around", "resume_activity",
-                    "pause_template", "resume_template", "stop_current_activity",
-                    "abort_all_templates", "report"}
+_UNIVERSAL_STEPS = {
+    "idle_breathing",
+    "wait",
+    "look_around",
+    "resume_activity",
+    "pause_template",
+    "resume_template",
+    "stop_current_activity",
+    "abort_all_templates",
+    "report",
+}
 
 
 @dataclass
 class EmbodimentManifest:
     body_id: str
     backend: str
-    supported_steps: list[str] = field(default_factory=list)   # micro-step names
+    supported_steps: list[str] = field(default_factory=list)  # micro-step names
     supported_templates: list[str] = field(default_factory=list)
-    features: dict[str, bool] = field(default_factory=dict)    # speech, gaze, nav, arms ...
-    step_substitutions: dict[str, str] = field(default_factory=dict)  # walk_to_kitchen -> nav.goto
+    features: dict[str, bool] = field(
+        default_factory=dict
+    )  # speech, gaze, nav, arms ...
+    step_substitutions: dict[str, str] = field(
+        default_factory=dict
+    )  # walk_to_kitchen -> nav.goto
 
     def to_dict(self) -> dict[str, Any]:
         return {

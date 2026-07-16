@@ -37,7 +37,9 @@ async def _wait_until(predicate, timeout: float = 3.0) -> None:
 
 
 @pytest.mark.asyncio
-async def test_visual_event_reaches_tts_and_terminal_ack_over_real_websockets(monkeypatch):
+async def test_visual_event_reaches_tts_and_terminal_ack_over_real_websockets(
+    monkeypatch,
+):
     server = SoulForgeRuntimeServer(
         [Persona("kai", "Kai", "steady_caretaker")],
         start_minute=19 * 60,
@@ -72,26 +74,32 @@ async def test_visual_event_reaches_tts_and_terminal_ack_over_real_websockets(mo
         await bridge.start()
         await sink.start()
         perception = PerceptionRuntime(
-            fusion=PerceptionFusion(source_body="e2e-camera", target_agent="kai",
-                                    debounce_s=0.0),
+            fusion=PerceptionFusion(
+                source_body="e2e-camera", target_agent="kai", debounce_s=0.0
+            ),
             vision_provider=MockVisionProvider(),
             emit=sink.emit,
         )
-        events = perception.process_frame(Frame(
-            ts=1.0,
-            ref="memory://person.png",
-            data=b"\x89PNGfixture",
-            sidecar={
-                "scene": "room",
-                "entities": [{
-                    "entity_id": "provider-person",
-                    "label": "person",
-                    "confidence": 0.9,
-                    "bbox": [0.1, 0.1, 0.2, 0.4],
-                }],
-                "relations": [],
-            },
-        ), now=1.0)
+        events = perception.process_frame(
+            Frame(
+                ts=1.0,
+                ref="memory://person.png",
+                data=b"\x89PNGfixture",
+                sidecar={
+                    "scene": "room",
+                    "entities": [
+                        {
+                            "entity_id": "provider-person",
+                            "label": "person",
+                            "confidence": 0.9,
+                            "bbox": [0.1, 0.1, 0.2, 0.4],
+                        }
+                    ],
+                    "relations": [],
+                },
+            ),
+            now=1.0,
+        )
         assert len(events) == 1
         await asyncio.wait_for(sink.drain(), timeout=2)
 

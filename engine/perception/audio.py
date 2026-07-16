@@ -72,9 +72,11 @@ class MockASRProvider:
             confidence=float(sidecar.get("speaker_confidence", 0.95)),
         )
         return AuditoryObservation(
-            ts=chunk.ts, kind="speech",
+            ts=chunk.ts,
+            kind="speech",
             transcript=sidecar.get("transcript", ""),
-            speaker=speaker, audio_ref=chunk.ref,
+            speaker=speaker,
+            audio_ref=chunk.ref,
             provider=self.name,
             confidence=float(sidecar.get("confidence", 0.95)),
             is_final=bool(sidecar.get("final", True)),
@@ -87,8 +89,12 @@ class MockSoundEvents:
         if not label:
             return None
         return AuditoryObservation(
-            ts=chunk.ts, kind="sound", sound_label=label, audio_ref=chunk.ref,
-            provider="mock-sound", confidence=float(chunk.sidecar.get("confidence", 0.8)),
+            ts=chunk.ts,
+            kind="sound",
+            sound_label=label,
+            audio_ref=chunk.ref,
+            provider="mock-sound",
+            confidence=float(chunk.sidecar.get("confidence", 0.8)),
         )
 
 
@@ -112,9 +118,12 @@ class SelfVoiceFilter:
         speaker = observation.speaker
         if speaker and speaker.is_self_voice:
             return False
-        if (self.tts_active and observation.transcript
-                and observation.transcript.strip() == self.recent_tts_text.strip()):
-            return False                     # acoustic echo of our own sentence
+        if (
+            self.tts_active
+            and observation.transcript
+            and observation.transcript.strip() == self.recent_tts_text.strip()
+        ):
+            return False  # acoustic echo of our own sentence
         return True
 
 
@@ -127,7 +136,7 @@ class BargeInController:
     """
 
     stop_tts: Callable[[], None]
-    pause_motion: Callable[[str], None]           # reason -> safe pause request
+    pause_motion: Callable[[str], None]  # reason -> safe pause request
     self_voice: SelfVoiceFilter = field(default_factory=SelfVoiceFilter)
     triggered_count: int = 0
 
@@ -136,7 +145,7 @@ class BargeInController:
         if not self.self_voice.tts_active:
             return False
         if not self.self_voice.allow(observation):
-            return False                          # our own voice / echo
+            return False  # our own voice / echo
         self.stop_tts()
         self.self_voice.on_tts_end()
         self.pause_motion("user_barge_in")
@@ -144,11 +153,14 @@ class BargeInController:
         return True
 
 
-def run_audio_pipeline(chunks: Iterator[AudioChunk], vad: VADProvider,
-                       asr: ASRProvider, sounds: SoundEventProvider | None = None,
-                       self_voice: SelfVoiceFilter | None = None,
-                       barge_in: BargeInController | None = None,
-                       ) -> Iterator[AuditoryObservation]:
+def run_audio_pipeline(
+    chunks: Iterator[AudioChunk],
+    vad: VADProvider,
+    asr: ASRProvider,
+    sounds: SoundEventProvider | None = None,
+    self_voice: SelfVoiceFilter | None = None,
+    barge_in: BargeInController | None = None,
+) -> Iterator[AuditoryObservation]:
     """Fixture-friendly synchronous pipeline (the gateway runs its own async
     streaming version; contracts are identical)."""
     # One echo state must govern both barge-in and final delivery.  Previously

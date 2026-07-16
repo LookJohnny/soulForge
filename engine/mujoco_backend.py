@@ -114,4 +114,6 @@ class MuJoCoVideoBackend:
     def _record_joint_extrema(self) -> None:
         for joint_name, qpos_id in self._joint_qpos.items():
             value = abs(math.degrees(float(self.data.qpos[qpos_id])))
-            self.max_abs_deg[joint_name] = max(self.max_abs_deg.get(joint_name, 0.0), value)
+            self.max_abs_deg[joint_name] = max(
+                self.max_abs_deg.get(joint_name, 0.0), value
+            )

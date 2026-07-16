@@ -37,7 +37,10 @@ Never output servo angles, PWM values, raw motor speeds, or unbounded movement.
 
 
 TEMPLATE_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("look_at_user", ("看向", "望向", "转头", "look at", "turn to", "face user", "attention")),
+    (
+        "look_at_user",
+        ("看向", "望向", "转头", "look at", "turn to", "face user", "attention"),
+    ),
     ("listening_nod", ("点头", "nod", "listening", "倾听", "嗯嗯", "回应")),
     ("greeting_wave", ("挥手", "招手", "wave", "hello", "greet", "打招呼")),
     ("daily_stretch", ("伸懒腰", "stretch", "打哈欠", "yawn", "舒展")),
@@ -86,7 +89,9 @@ class LLMBehaviorPlanner:
     def prompt_contract(self) -> str:
         return PHYSICAL_PLANNER_PROMPT
 
-    def plan(self, response: Any, context: dict[str, Any] | None = None) -> BehaviorPlan:
+    def plan(
+        self, response: Any, context: dict[str, Any] | None = None
+    ) -> BehaviorPlan:
         data = self._normalize_response(response)
         ctx = context or {}
 
@@ -118,16 +123,22 @@ class LLMBehaviorPlanner:
         return plan.to_intent(payload=self._normalize_response(response))
 
     def _explicit_physical(self, data: dict[str, Any]) -> BehaviorPlan | None:
-        raw = data.get("physical") or data.get("behavior_plan") or data.get("motion_plan")
+        raw = (
+            data.get("physical") or data.get("behavior_plan") or data.get("motion_plan")
+        )
         if not isinstance(raw, dict):
             return None
 
-        template_id = str(raw.get("action_template_id") or raw.get("template") or "").strip()
+        template_id = str(
+            raw.get("action_template_id") or raw.get("template") or ""
+        ).strip()
         if template_id not in self.templates:
             return None
 
         source = str(raw.get("source") or "plan").lower()
-        priority = self._parse_priority(raw.get("priority"), self._priority_for_source(source))
+        priority = self._parse_priority(
+            raw.get("priority"), self._priority_for_source(source)
+        )
         preemptible = bool(raw.get("preemptible", source != "reactive"))
         confidence = _float(raw.get("confidence"), default=0.85, lo=0.0, hi=1.0)
 
@@ -142,14 +153,18 @@ class LLMBehaviorPlanner:
             raw=raw,
         )
 
-    def _infer_template(self, action_text: str, data: dict[str, Any], context: dict[str, Any]) -> str:
+    def _infer_template(
+        self, action_text: str, data: dict[str, Any], context: dict[str, Any]
+    ) -> str:
         for template_id, keywords in TEMPLATE_KEYWORDS:
             if any(keyword in action_text for keyword in keywords):
                 return template_id
 
         pad = _pad_dict(data.get("pad"))
         p, a, d = pad.get("p", 0.0), pad.get("a", 0.0), pad.get("d", 0.0)
-        event_type = str(context.get("event_type") or data.get("event_type") or "").lower()
+        event_type = str(
+            context.get("event_type") or data.get("event_type") or ""
+        ).lower()
 
         if event_type in {"user_interrupt", "voice", "touch", "proximity"}:
             return "look_at_user"
@@ -166,7 +181,9 @@ class LLMBehaviorPlanner:
         if explicit in {"idle", "plan", "reactive"}:
             return explicit
 
-        event_type = str(context.get("event_type") or data.get("event_type") or "").lower()
+        event_type = str(
+            context.get("event_type") or data.get("event_type") or ""
+        ).lower()
         if event_type in {"user_interrupt", "voice", "touch", "proximity", "barge_in"}:
             return "reactive"
         if event_type in {"timer", "reflection", "scheduled", "proactive"}:

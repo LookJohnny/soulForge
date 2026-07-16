@@ -68,7 +68,9 @@ class DailyAutonomyPlanner:
             ActivityBlock(540, 720, "curious", "morning curiosity", 0.70, 0.45),
             ActivityBlock(720, 840, "rest", "midday rest", 0.35, 0.25),
             ActivityBlock(840, 1080, "active", "afternoon active loop", 0.75, 0.55),
-            ActivityBlock(1080, 1320, "social", "evening social companionship", 0.65, 0.85),
+            ActivityBlock(
+                1080, 1320, "social", "evening social companionship", 0.65, 0.85
+            ),
             ActivityBlock(1320, 1440, "quiet", "night quiet mode", 0.20, 0.20),
         ]
         return DailyPlan(blocks=blocks, profile=dict(self.profile))

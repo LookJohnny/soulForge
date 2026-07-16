@@ -3,6 +3,7 @@
 import sys
 import os
 import time
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from engine.blender import ChannelBlender, ChannelMode, TransitionCurve
@@ -87,7 +88,9 @@ class TestTransitionCurves:
         b = ChannelBlender({"v": ChannelMode.EXCLUSIVE})
         b.set_layer_output(1, "v", 0.0, transition_ms=0)
         b.tick(0)
-        b.set_layer_output(1, "v", 100.0, transition_ms=500, curve=TransitionCurve.SPRING)
+        b.set_layer_output(
+            1, "v", 100.0, transition_ms=500, curve=TransitionCurve.SPRING
+        )
 
         values = []
         for _ in range(50):
@@ -104,7 +107,9 @@ class TestTransitionCurves:
         b = ChannelBlender({"v": ChannelMode.EXCLUSIVE})
         b.set_layer_output(1, "v", 0.0, transition_ms=0)
         b.tick(0)
-        b.set_layer_output(1, "v", 100.0, transition_ms=500, curve=TransitionCurve.CRITICAL_DAMP)
+        b.set_layer_output(
+            1, "v", 100.0, transition_ms=500, curve=TransitionCurve.CRITICAL_DAMP
+        )
 
         values = []
         for _ in range(50):

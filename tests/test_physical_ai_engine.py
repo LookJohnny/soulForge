@@ -30,7 +30,9 @@ def test_reactive_intent_preempts_idle_at_unit_boundary():
 
     idle = engine.submit_intent("idle", "idle_scan", priority=Priority.IDLE, ttl_ms=0)
     engine.step_unit()
-    reactive = engine.submit_intent("reactive", "look_at_user", priority=Priority.REACTIVE, ttl_ms=0)
+    reactive = engine.submit_intent(
+        "reactive", "look_at_user", priority=Priority.REACTIVE, ttl_ms=0
+    )
     engine.step_unit()
 
     event_kinds = [event.kind for event in engine.dispatcher.events]

@@ -18,8 +18,12 @@ from engine.perception.fusion import PerceptionFusion
 from engine.perception.models import Modality, PerceptionEvent
 from engine.perception.sources import CameraSource, Frame, MicrophoneSource
 from engine.perception.vision import (
-    ChangeDetector, InvalidImageError, VisionGate, VisionProvider,
-    analyze_with_timeout, validate_image,
+    ChangeDetector,
+    InvalidImageError,
+    VisionGate,
+    VisionProvider,
+    analyze_with_timeout,
+    validate_image,
 )
 from engine.perception import audio as audio_mod
 from engine.perception.models import HAZARD_LABELS
@@ -75,11 +79,12 @@ class PerceptionMetrics:
 class PerceptionRuntime:
     fusion: PerceptionFusion = field(default_factory=PerceptionFusion)
     vision_provider: VisionProvider | None = None
-    vision_gate: VisionGate = field(default_factory=lambda: VisionGate(
-        change=ChangeDetector(), min_interval_s=1.0))
+    vision_gate: VisionGate = field(
+        default_factory=lambda: VisionGate(change=ChangeDetector(), min_interval_s=1.0)
+    )
     provider_timeout_s: float = 5.0
     queue_limit: int = 128
-    emit: Callable[[PerceptionEvent], None] | None = None   # -> Character Runtime
+    emit: Callable[[PerceptionEvent], None] | None = None  # -> Character Runtime
     hazards: HazardConfirmationPolicy = field(default_factory=HazardConfirmationPolicy)
     metrics: PerceptionMetrics = field(default_factory=PerceptionMetrics)
     trace: deque = field(default_factory=lambda: deque(maxlen=2000))
@@ -96,17 +101,24 @@ class PerceptionRuntime:
         self._log("lifecycle", {"state": "stopped"})
 
     def health(self) -> dict[str, Any]:
-        return {"running": self._running, "queue_depth": len(self._queue),
-                **self.metrics.as_dict()}
+        return {
+            "running": self._running,
+            "queue_depth": len(self._queue),
+            **self.metrics.as_dict(),
+        }
 
     # --------------------------------------------------------------- vision
-    def process_frame(self, frame: Frame, *, now: float | None = None) -> list[PerceptionEvent]:
+    def process_frame(
+        self, frame: Frame, *, now: float | None = None
+    ) -> list[PerceptionEvent]:
         self.metrics.frames_seen += 1
         try:
             validate_image(frame)
         except InvalidImageError as exc:
             self.metrics.invalid_frames += 1
-            return self._emit_all([self._error_event(f"invalid image: {exc}", frame.ref)])
+            return self._emit_all(
+                [self._error_event(f"invalid image: {exc}", frame.ref)]
+            )
 
         if not self.vision_gate.should_analyze(frame, now=now):
             self.metrics.frames_gated_out += 1
@@ -118,8 +130,9 @@ class PerceptionRuntime:
         observation = analyze_with_timeout(provider, frame, self.provider_timeout_s)
         if observation is None:
             self.metrics.provider_timeouts += 1
-            return self._emit_all([self._error_event("vision provider timeout/failure",
-                                                     frame.ref)])
+            return self._emit_all(
+                [self._error_event("vision provider timeout/failure", frame.ref)]
+            )
         self.metrics.frames_analyzed += 1
         events = self.fusion.ingest_visual(observation)
         events = [self._apply_hazard_policy(e) for e in events]
@@ -138,16 +151,21 @@ class PerceptionRuntime:
             out.extend(self.process_frame(frame, now=frame.ts))
         return out
 
-    def run_microphone(self, microphone: MicrophoneSource,
-                       vad=None, asr=None, sounds=None,
-                       barge_in: audio_mod.BargeInController | None = None,
-                       ) -> list[PerceptionEvent]:
+    def run_microphone(
+        self,
+        microphone: MicrophoneSource,
+        vad=None,
+        asr=None,
+        sounds=None,
+        barge_in: audio_mod.BargeInController | None = None,
+    ) -> list[PerceptionEvent]:
         vad = vad or audio_mod.MockVAD()
         asr = asr or audio_mod.MockASRProvider()
         sounds = sounds if sounds is not None else audio_mod.MockSoundEvents()
         out: list[PerceptionEvent] = []
         for observation in audio_mod.run_audio_pipeline(
-                microphone.chunks(), vad, asr, sounds, barge_in=barge_in):
+            microphone.chunks(), vad, asr, sounds, barge_in=barge_in
+        ):
             out.extend(self.process_audio(observation))
         return out
 
@@ -160,7 +178,7 @@ class PerceptionRuntime:
         confirmed = self.hazards.observe(label, event.timestamp)
         if not confirmed:
             self._log("hazard_pending", {"label": label, "ts": event.timestamp})
-            return None                      # unconfirmed suspicion: not surfaced
+            return None  # unconfirmed suspicion: not surfaced
         event.kind = "scene_changed"
         event.payload["severity"] = "critical"
         event.payload["hazard_confirmed"] = label
@@ -169,10 +187,15 @@ class PerceptionRuntime:
 
     def _error_event(self, detail: str, media_ref: str) -> PerceptionEvent:
         return PerceptionEvent(
-            kind="perception_error", modality=Modality.VISION,
-            timestamp=time.monotonic(), captured_at=time.monotonic(),
-            source_body=self.fusion.source_body, text=detail,
-            confidence=1.0, media_ref=media_ref, privacy_class="ephemeral",
+            kind="perception_error",
+            modality=Modality.VISION,
+            timestamp=time.monotonic(),
+            captured_at=time.monotonic(),
+            source_body=self.fusion.source_body,
+            text=detail,
+            confidence=1.0,
+            media_ref=media_ref,
+            privacy_class="ephemeral",
         )
 
     def _emit_all(self, events: list[PerceptionEvent]) -> list[PerceptionEvent]:
@@ -182,7 +205,9 @@ class PerceptionRuntime:
         for event in events:
             if event.expires_at is not None and event.expires_at <= time.monotonic():
                 self.metrics.events_dropped_expired += 1
-                self._log("expired_drop", {"kind": event.kind, "event_id": event.event_id})
+                self._log(
+                    "expired_drop", {"kind": event.kind, "event_id": event.event_id}
+                )
                 continue
             if len(self._queue) >= self.queue_limit:
                 self.metrics.events_dropped_backpressure += 1
@@ -190,17 +215,26 @@ class PerceptionRuntime:
                 continue
             self._queue.append(event)
             self.metrics.events_emitted += 1
-            self._log("emit", {"kind": event.kind, "text": event.text[:60],
-                               "confidence": event.confidence})
+            self._log(
+                "emit",
+                {
+                    "kind": event.kind,
+                    "text": event.text[:60],
+                    "confidence": event.confidence,
+                },
+            )
             delivered.extend(self.drain(max_events=1, consumer=self.emit))
         # process_* is a synchronous API: its returned list is the pull
         # consumer.  A configured callback is the equivalent push consumer.
         # Either way accepted events leave the bounded queue exactly once.
         return delivered
 
-    def drain(self, max_events: int | None = None,
-              *, consumer: Callable[[PerceptionEvent], None] | None = None,
-              ) -> list[PerceptionEvent]:
+    def drain(
+        self,
+        max_events: int | None = None,
+        *,
+        consumer: Callable[[PerceptionEvent], None] | None = None,
+    ) -> list[PerceptionEvent]:
         """Consume queued events in FIFO order.
 
         ``process_frame``/``process_audio`` call this automatically, preserving

@@ -45,7 +45,10 @@ def _claim(payload: dict[str, Any], source: str, target_agent: str | None) -> by
     data["target_agent"] = target_agent
     data["version"] = ATTESTATION_VERSION
     return json.dumps(
-        data, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        data,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
     ).encode("utf-8")
 
 
@@ -69,7 +72,9 @@ def sign_hazard_claim(
         return None
     if required < 3 or hits < required:
         return None
-    return hmac.new(key, _claim(payload, source, target_agent), hashlib.sha256).hexdigest()
+    return hmac.new(
+        key, _claim(payload, source, target_agent), hashlib.sha256
+    ).hexdigest()
 
 
 def verify_hazard_claim(

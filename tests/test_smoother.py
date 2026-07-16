@@ -4,6 +4,7 @@ import sys
 import os
 import time
 import math
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from motion.smoother import MotionSmoother
@@ -14,8 +15,13 @@ from motion.profile_generator import MotionProfileGenerator
 class TestMotionSmoother:
     def test_step_response_settles(self):
         """Step input should settle to target within reasonable time."""
-        s = MotionSmoother(policy_rate=20, servo_rate=100, cutoff_hz=15.0,
-                          max_velocity=200, max_acceleration=600)
+        s = MotionSmoother(
+            policy_rate=20,
+            servo_rate=100,
+            cutoff_hz=15.0,
+            max_velocity=200,
+            max_acceleration=600,
+        )
         s.process(0.0)  # init
 
         all_samples = []
@@ -111,7 +117,9 @@ class TestImpactAnalyzer:
         for _ in range(5):
             new = list(smoothed)
             for i in range(1, len(smoothed) - 1):
-                new[i] = 0.25 * smoothed[i-1] + 0.5 * smoothed[i] + 0.25 * smoothed[i+1]
+                new[i] = (
+                    0.25 * smoothed[i - 1] + 0.5 * smoothed[i] + 0.25 * smoothed[i + 1]
+                )
             smoothed = new
 
         result = analyzer.compare(raw, smoothed, 0.02)

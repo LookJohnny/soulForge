@@ -50,8 +50,10 @@ _PRIORITY_MAP = {90: Priority.REACTIVE, 50: Priority.PLAN, 10: Priority.IDLE}
 class RobotEmbodimentAdapter:
     engine: PhysicalAIEngine
     body_id: str = "robot-0"
-    step_map: dict[str, str] = field(default_factory=lambda: dict(STEP_TO_ROBOT_TEMPLATE))
-    watchdog_wall_s: float = 5.0          # max wall time one command may execute
+    step_map: dict[str, str] = field(
+        default_factory=lambda: dict(STEP_TO_ROBOT_TEMPLATE)
+    )
+    watchdog_wall_s: float = 5.0  # max wall time one command may execute
     sim_minute: Callable[[], float] = lambda: 0.0
     wall_clock: Callable[[], float] = time.monotonic
 
@@ -60,25 +62,40 @@ class RobotEmbodimentAdapter:
     _executed: int = 0
 
     # ------------------------------------------------------------------ core
-    def execute(self, command: ActionCommand,
-                sensor_snapshot: dict[str, Any] | None = None) -> Observation:
+    def execute(
+        self, command: ActionCommand, sensor_snapshot: dict[str, Any] | None = None
+    ) -> Observation:
         """Run one IR command to completion (or failure) and report honestly."""
         started = self.sim_minute()
 
         if self.fault_latched:
-            return self._obs(command, "rejected", started,
-                             error_code="E_FAULT_LATCHED",
-                             detail=f"fault latched: {self.fault_reason}; manual reset required",
-                             recoverable=False)
+            return self._obs(
+                command,
+                "rejected",
+                started,
+                error_code="E_FAULT_LATCHED",
+                detail=f"fault latched: {self.fault_reason}; manual reset required",
+                recoverable=False,
+            )
 
         if command.deadline is not None and self.sim_minute() > command.deadline:
-            return self._obs(command, "rejected", started, error_code="E_EXPIRED",
-                             detail="deadline passed before execution")
+            return self._obs(
+                command,
+                "rejected",
+                started,
+                error_code="E_EXPIRED",
+                detail="deadline passed before execution",
+            )
 
         template_id = self.step_map.get(command.name)
         if template_id is None or template_id not in self.engine.templates:
-            return self._obs(command, "rejected", started, error_code="E_CAPABILITY",
-                             detail=f"no robot mapping for step {command.name!r}")
+            return self._obs(
+                command,
+                "rejected",
+                started,
+                error_code="E_CAPABILITY",
+                detail=f"no robot mapping for step {command.name!r}",
+            )
 
         priority = _PRIORITY_MAP.get(command.priority, Priority.PLAN)
         wall_started = self.wall_clock()
@@ -86,9 +103,11 @@ class RobotEmbodimentAdapter:
             self.engine.submit_intent(
                 source=f"ir:{command.agent_id}",
                 action_template_id=template_id,
-                payload={"command_id": command.command_id,
-                         "params": command.params,
-                         "trace": command.trace_context},
+                payload={
+                    "command_id": command.command_id,
+                    "params": command.params,
+                    "trace": command.trace_context,
+                },
                 priority=priority,
                 preemptible=command.interruptible,
                 ttl_ms=int(command.ttl_s * 1000),
@@ -100,38 +119,72 @@ class RobotEmbodimentAdapter:
                     break
                 results.append(result)
                 if self.wall_clock() - wall_started > self.watchdog_wall_s:
-                    self._latch(f"watchdog: {command.name} exceeded {self.watchdog_wall_s}s wall time")
+                    self._latch(
+                        f"watchdog: {command.name} exceeded {self.watchdog_wall_s}s wall time"
+                    )
                     self._enter_safe_pose()
-                    return self._obs(command, "failed", started, error_code="E_WATCHDOG",
-                                     detail=self.fault_reason or "", recoverable=False)
+                    return self._obs(
+                        command,
+                        "failed",
+                        started,
+                        error_code="E_WATCHDOG",
+                        detail=self.fault_reason or "",
+                        recoverable=False,
+                    )
         except (ConnectionError, TimeoutError, OSError) as exc:
             self._latch(f"comm loss during {command.name}: {exc}")
-            return self._obs(command, "failed", started, error_code="E_COMM_LOSS",
-                             detail=str(exc), recoverable=False)
+            return self._obs(
+                command,
+                "failed",
+                started,
+                error_code="E_COMM_LOSS",
+                detail=str(exc),
+                recoverable=False,
+            )
         except Exception as exc:
-            return self._obs(command, "failed", started, error_code="E_EXEC",
-                             detail=f"{type(exc).__name__}: {exc}")
+            return self._obs(
+                command,
+                "failed",
+                started,
+                error_code="E_EXEC",
+                detail=f"{type(exc).__name__}: {exc}",
+            )
 
         self._executed += 1
         if not results:
-            return self._obs(command, "failed", started, error_code="E_NO_UNITS",
-                             detail="dispatcher produced no executable units")
+            return self._obs(
+                command,
+                "failed",
+                started,
+                error_code="E_NO_UNITS",
+                detail="dispatcher produced no executable units",
+            )
 
         # SafetyManager vocabulary: normal | warning | critical
         safety = results[-1].safety_status
         if safety == "critical":
             self._latch(f"safety status critical after {command.name}")
             self._enter_safe_pose()
-            return self._obs(command, "failed", started, error_code="E_SAFETY",
-                             detail="safety manager reported critical",
-                             recoverable=False,
-                             sensor_snapshot=self._sensors(sensor_snapshot))
+            return self._obs(
+                command,
+                "failed",
+                started,
+                error_code="E_SAFETY",
+                detail="safety manager reported critical",
+                recoverable=False,
+                sensor_snapshot=self._sensors(sensor_snapshot),
+            )
 
         detail = f"{len(results)} units, safety={safety}"
         if safety == "warning":
             detail += " (degraded)"
-        return self._obs(command, "done", started, detail=detail,
-                         sensor_snapshot=self._sensors(sensor_snapshot))
+        return self._obs(
+            command,
+            "done",
+            started,
+            detail=detail,
+            sensor_snapshot=self._sensors(sensor_snapshot),
+        )
 
     # --------------------------------------------------------------- faults
     def _latch(self, reason: str) -> None:
@@ -161,9 +214,13 @@ class RobotEmbodimentAdapter:
     def _enter_safe_pose(self) -> None:
         """Best-effort commanded safe posture after a fault."""
         try:
-            self.engine.submit_intent("safety", "sleep_breathing",
-                                      priority=Priority.REACTIVE,
-                                      preemptible=False, ttl_ms=0)
+            self.engine.submit_intent(
+                "safety",
+                "sleep_breathing",
+                priority=Priority.REACTIVE,
+                preemptible=False,
+                ttl_ms=0,
+            )
             for _ in range(8):
                 if self.engine.step_unit() is None:
                     break
@@ -178,10 +235,17 @@ class RobotEmbodimentAdapter:
             snapshot.update(extra)
         return snapshot
 
-    def _obs(self, command: ActionCommand, status: str, started: float, *,
-             detail: str = "", error_code: str | None = None,
-             recoverable: bool = True,
-             sensor_snapshot: dict[str, Any] | None = None) -> Observation:
+    def _obs(
+        self,
+        command: ActionCommand,
+        status: str,
+        started: float,
+        *,
+        detail: str = "",
+        error_code: str | None = None,
+        recoverable: bool = True,
+        sensor_snapshot: dict[str, Any] | None = None,
+    ) -> Observation:
         return Observation(
             command_id=command.command_id,
             agent_id=command.agent_id,

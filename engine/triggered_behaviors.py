@@ -148,53 +148,116 @@ class TriggeredBehavior:
 
 BEHAVIOR_LIBRARY: dict[str, dict] = {
     "greeting_wave": {
-        "attack_ms": 200, "sustain_ms": 800, "release_ms": 300,
+        "attack_ms": 200,
+        "sustain_ms": 800,
+        "release_ms": 300,
         "channels": {
             "right_arm_pitch": {
-                "keyframes": [{"t": 0.0, "v": 0}, {"t": 0.3, "v": 45}, {"t": 0.5, "v": 30}, {"t": 0.7, "v": 45}, {"t": 1.0, "v": 0}],
+                "keyframes": [
+                    {"t": 0.0, "v": 0},
+                    {"t": 0.3, "v": 45},
+                    {"t": 0.5, "v": 30},
+                    {"t": 0.7, "v": 45},
+                    {"t": 1.0, "v": 0},
+                ],
             },
             "head_yaw": {
-                "keyframes": [{"t": 0.0, "v": 0}, {"t": 0.5, "v": 10}, {"t": 1.0, "v": 0}],
+                "keyframes": [
+                    {"t": 0.0, "v": 0},
+                    {"t": 0.5, "v": 10},
+                    {"t": 1.0, "v": 0},
+                ],
             },
         },
-        "interruptible": True, "priority": 5,
+        "interruptible": True,
+        "priority": 5,
     },
     "surprised_jump": {
-        "attack_ms": 80, "sustain_ms": 200, "release_ms": 400,
+        "attack_ms": 80,
+        "sustain_ms": 200,
+        "release_ms": 400,
         "channels": {
-            "body_pitch": {"keyframes": [{"t": 0.0, "v": 0}, {"t": 0.3, "v": -8}, {"t": 1.0, "v": 0}]},
-            "head_pitch": {"keyframes": [{"t": 0.0, "v": 0}, {"t": 0.2, "v": 15}, {"t": 1.0, "v": 0}]},
+            "body_pitch": {
+                "keyframes": [
+                    {"t": 0.0, "v": 0},
+                    {"t": 0.3, "v": -8},
+                    {"t": 1.0, "v": 0},
+                ]
+            },
+            "head_pitch": {
+                "keyframes": [
+                    {"t": 0.0, "v": 0},
+                    {"t": 0.2, "v": 15},
+                    {"t": 1.0, "v": 0},
+                ]
+            },
         },
-        "interruptible": False, "priority": 8,
+        "interruptible": False,
+        "priority": 8,
     },
     "listening_nod": {
-        "attack_ms": 100, "sustain_ms": 0, "release_ms": 200,
+        "attack_ms": 100,
+        "sustain_ms": 0,
+        "release_ms": 200,
         "channels": {
-            "head_pitch": {"keyframes": [{"t": 0.0, "v": 0}, {"t": 0.4, "v": 8}, {"t": 0.7, "v": -2}, {"t": 1.0, "v": 0}]},
+            "head_pitch": {
+                "keyframes": [
+                    {"t": 0.0, "v": 0},
+                    {"t": 0.4, "v": 8},
+                    {"t": 0.7, "v": -2},
+                    {"t": 1.0, "v": 0},
+                ]
+            },
         },
-        "interruptible": True, "priority": 3,
+        "interruptible": True,
+        "priority": 3,
     },
     "thinking_look_up": {
-        "attack_ms": 400, "sustain_ms": 1500, "release_ms": 300,
+        "attack_ms": 400,
+        "sustain_ms": 1500,
+        "release_ms": 300,
         "channels": {
             "head_pitch": {"keyframes": [{"t": 0.0, "v": 0}, {"t": 1.0, "v": 20}]},
-            "eye_pitch": {"keyframes": [{"t": 0.0, "v": 0}, {"t": 0.8, "v": 15}, {"t": 1.0, "v": 12}]},
+            "eye_pitch": {
+                "keyframes": [
+                    {"t": 0.0, "v": 0},
+                    {"t": 0.8, "v": 15},
+                    {"t": 1.0, "v": 12},
+                ]
+            },
         },
-        "interruptible": True, "priority": 4,
+        "interruptible": True,
+        "priority": 4,
     },
     "happy_wiggle": {
-        "attack_ms": 100, "sustain_ms": 600, "release_ms": 200,
+        "attack_ms": 100,
+        "sustain_ms": 600,
+        "release_ms": 200,
         "channels": {
             "body_roll": {
-                "keyframes": [{"t": 0.0, "v": 0}, {"t": 0.15, "v": 8}, {"t": 0.3, "v": -8},
-                              {"t": 0.45, "v": 6}, {"t": 0.6, "v": -6}, {"t": 0.75, "v": 3}, {"t": 1.0, "v": 0}],
+                "keyframes": [
+                    {"t": 0.0, "v": 0},
+                    {"t": 0.15, "v": 8},
+                    {"t": 0.3, "v": -8},
+                    {"t": 0.45, "v": 6},
+                    {"t": 0.6, "v": -6},
+                    {"t": 0.75, "v": 3},
+                    {"t": 1.0, "v": 0},
+                ],
             },
             "head_roll": {
-                "keyframes": [{"t": 0.0, "v": 0}, {"t": 0.2, "v": -5}, {"t": 0.4, "v": 5},
-                              {"t": 0.6, "v": -3}, {"t": 0.8, "v": 3}, {"t": 1.0, "v": 0}],
+                "keyframes": [
+                    {"t": 0.0, "v": 0},
+                    {"t": 0.2, "v": -5},
+                    {"t": 0.4, "v": 5},
+                    {"t": 0.6, "v": -3},
+                    {"t": 0.8, "v": 3},
+                    {"t": 1.0, "v": 0},
+                ],
             },
         },
-        "interruptible": True, "priority": 5,
+        "interruptible": True,
+        "priority": 5,
     },
 }
 
@@ -269,4 +332,7 @@ class BehaviorScheduler:
 
     @property
     def is_active(self) -> bool:
-        return self._active is not None and self._active.phase not in (BehaviorPhase.IDLE, BehaviorPhase.FINISHED)
+        return self._active is not None and self._active.phase not in (
+            BehaviorPhase.IDLE,
+            BehaviorPhase.FINISHED,
+        )

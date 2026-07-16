@@ -48,26 +48,31 @@ def _entity(label: str, bbox, confidence: float = 0.9) -> DetectedEntity:
 
 def test_tracker_keeps_spatially_distinct_same_label_objects_separate():
     tracker = EntityTracker(iou_threshold=0.3)
-    first = tracker.track([
-        _entity("cup", (0.05, 0.1, 0.1, 0.1)),
-        _entity("cup", (0.80, 0.1, 0.1, 0.1)),
-    ], ts=0.0)
+    first = tracker.track(
+        [
+            _entity("cup", (0.05, 0.1, 0.1, 0.1)),
+            _entity("cup", (0.80, 0.1, 0.1, 0.1)),
+        ],
+        ts=0.0,
+    )
     assert len({entity.entity_id for entity in first}) == 2
 
-    repeated = tracker.track([
-        _entity("cup", (0.06, 0.1, 0.1, 0.1)),
-        _entity("cup", (0.79, 0.1, 0.1, 0.1)),
-    ], ts=1.0)
+    repeated = tracker.track(
+        [
+            _entity("cup", (0.06, 0.1, 0.1, 0.1)),
+            _entity("cup", (0.79, 0.1, 0.1, 0.1)),
+        ],
+        ts=1.0,
+    )
     assert [entity.entity_id for entity in repeated] == [
         entity.entity_id for entity in first
     ]
 
     new_location = tracker.track(
-        [_entity("cup", (0.40, 0.75, 0.1, 0.1))], ts=2.0,
+        [_entity("cup", (0.40, 0.75, 0.1, 0.1))],
+        ts=2.0,
     )
-    assert new_location[0].entity_id not in {
-        entity.entity_id for entity in first
-    }
+    assert new_location[0].entity_id not in {entity.entity_id for entity in first}
 
 
 def test_deictic_fusion_confidence_is_bounded_by_visual_grounding():
@@ -79,13 +84,15 @@ def test_deictic_fusion_confidence_is_bounded_by_visual_grounding():
         confidence=0.51,
     )
     fusion.ingest_visual(visual)
-    event = fusion.ingest_auditory(AuditoryObservation(
-        ts=1.1,
-        kind="speech",
-        transcript="把那个递给我",
-        speaker=SpeakerObservation("user"),
-        confidence=0.99,
-    ))[0]
+    event = fusion.ingest_auditory(
+        AuditoryObservation(
+            ts=1.1,
+            kind="speech",
+            transcript="把那个递给我",
+            speaker=SpeakerObservation("user"),
+            confidence=0.99,
+        )
+    )[0]
 
     assert event.payload["referent_label"] == "cup"
     assert event.payload["grounding_confidence"] == pytest.approx(0.51)
@@ -94,25 +101,35 @@ def test_deictic_fusion_confidence_is_bounded_by_visual_grounding():
 
 def test_tracker_remaps_provider_relation_ids_before_deictic_resolution():
     fusion = PerceptionFusion(min_confidence=0.5, debounce_s=0.0)
-    fusion.ingest_visual(VisualObservation(
-        ts=1.0,
-        frame_ref="two-cups.png",
-        entities=[
-            DetectedEntity("provider-left", "cup", 0.9,
-                           bbox=(0.05, 0.2, 0.1, 0.1)),
-            DetectedEntity("provider-right", "cup", 0.8,
-                           bbox=(0.8, 0.2, 0.1, 0.1)),
-        ],
-        relations=[SpatialRelation(
-            "user-hand", "pointing_at", "provider-right", confidence=0.85,
-        )],
-        confidence=0.9,
-    ))
+    fusion.ingest_visual(
+        VisualObservation(
+            ts=1.0,
+            frame_ref="two-cups.png",
+            entities=[
+                DetectedEntity("provider-left", "cup", 0.9, bbox=(0.05, 0.2, 0.1, 0.1)),
+                DetectedEntity("provider-right", "cup", 0.8, bbox=(0.8, 0.2, 0.1, 0.1)),
+            ],
+            relations=[
+                SpatialRelation(
+                    "user-hand",
+                    "pointing_at",
+                    "provider-right",
+                    confidence=0.85,
+                )
+            ],
+            confidence=0.9,
+        )
+    )
 
-    event = fusion.ingest_auditory(AuditoryObservation(
-        ts=1.1, kind="speech", transcript="把那个递给我",
-        speaker=SpeakerObservation("user"), confidence=0.95,
-    ))[0]
+    event = fusion.ingest_auditory(
+        AuditoryObservation(
+            ts=1.1,
+            kind="speech",
+            transcript="把那个递给我",
+            speaker=SpeakerObservation("user"),
+            confidence=0.95,
+        )
+    )[0]
     tracked_ids = [entity.entity_id for entity in event.entities]
     assert len(set(tracked_ids)) == 2
     assert event.payload["referent_entity_id"] == tracked_ids[1]
@@ -124,10 +141,15 @@ def test_synchronous_pull_mode_does_not_fill_bounded_queue():
     speaker = SpeakerObservation("user")
 
     for index in range(10_000):
-        events = runtime.process_audio(AuditoryObservation(
-            ts=float(index), kind="speech", transcript=f"event {index}",
-            speaker=speaker, confidence=0.9,
-        ))
+        events = runtime.process_audio(
+            AuditoryObservation(
+                ts=float(index),
+                kind="speech",
+                transcript=f"event {index}",
+                speaker=speaker,
+                confidence=0.9,
+            )
+        )
         assert len(events) == 1
 
     assert runtime.health()["queue_depth"] == 0
@@ -138,8 +160,11 @@ def test_synchronous_pull_mode_does_not_fill_bounded_queue():
 def test_expired_ephemeral_event_is_not_delivered():
     runtime = PerceptionRuntime()
     observation = AuditoryObservation(
-        ts=0.0, kind="speech", transcript="stale",
-        speaker=SpeakerObservation("user"), confidence=0.9,
+        ts=0.0,
+        kind="speech",
+        transcript="stale",
+        speaker=SpeakerObservation("user"),
+        confidence=0.9,
     )
     event = runtime.fusion.ingest_auditory(observation)[0]
     event.expires_at = time.monotonic() - 1
@@ -156,8 +181,11 @@ def test_failed_push_consumer_leaves_one_retryable_fifo_event():
 
     runtime.emit = fail
     observation = AuditoryObservation(
-        ts=0.0, kind="speech", transcript="hello",
-        speaker=SpeakerObservation("user"), confidence=0.9,
+        ts=0.0,
+        kind="speech",
+        transcript="hello",
+        speaker=SpeakerObservation("user"),
+        confidence=0.9,
     )
     with pytest.raises(RuntimeError, match="sink offline"):
         runtime.process_audio(observation)
@@ -214,12 +242,14 @@ def test_local_provider_adapts_injected_detector_to_canonical_observation():
         calls.append(frame.ref)
         return {
             "scene": "workbench",
-            "entities": [{
-                "entity_id": "detector-cup",
-                "label": "cup",
-                "confidence": 0.87,
-                "bbox": [0.1, 0.2, 0.3, 0.4],
-            }],
+            "entities": [
+                {
+                    "entity_id": "detector-cup",
+                    "label": "cup",
+                    "confidence": 0.87,
+                    "bbox": [0.1, 0.2, 0.3, 0.4],
+                }
+            ],
             "relations": [],
         }
 
@@ -237,18 +267,25 @@ def test_remote_provider_uses_bounded_json_contract_without_network():
     captured = {}
 
     def fake_transport(url, headers, payload, timeout_s):
-        captured.update({
-            "url": url, "headers": headers,
-            "payload": payload, "timeout_s": timeout_s,
-        })
+        captured.update(
+            {
+                "url": url,
+                "headers": headers,
+                "payload": payload,
+                "timeout_s": timeout_s,
+            }
+        )
         return {
             "schema_version": REMOTE_VLM_SCHEMA_VERSION,
             "scene": "kitchen",
             "confidence": 0.84,
-            "entities": [{
-                "label": "cup", "confidence": 0.84,
-                "bbox": [0.5, 0.4, 0.1, 0.2],
-            }],
+            "entities": [
+                {
+                    "label": "cup",
+                    "confidence": 0.84,
+                    "bbox": [0.5, 0.4, 0.1, 0.2],
+                }
+            ],
             "relations": [],
         }
 

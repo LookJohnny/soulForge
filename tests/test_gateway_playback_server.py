@@ -112,7 +112,10 @@ async def test_text_playback_confirms_done_only_after_wait(monkeypatch):
 
     monkeypatch.setattr(gateway_server.asyncio, "sleep", fake_sleep)
     await _server(trace)._process_text_and_respond(
-        _Socket(trace), _Adapter(), _session(), "你好",
+        _Socket(trace),
+        _Adapter(),
+        _session(),
+        "你好",
     )
 
     send_index = next(i for i, item in enumerate(trace) if item[0] == "send_audio")
@@ -131,7 +134,10 @@ async def test_device_send_failure_marks_playback_interrupted(monkeypatch):
 
     monkeypatch.setattr(gateway_server.asyncio, "sleep", no_sleep)
     await _server(trace)._process_text_and_respond(
-        _Socket(trace, fail_audio=True), _Adapter(), _session(), "你好",
+        _Socket(trace, fail_audio=True),
+        _Adapter(),
+        _session(),
+        "你好",
     )
 
     assert ("confirm", "receipt-1", False, "gateway text playback error") in trace

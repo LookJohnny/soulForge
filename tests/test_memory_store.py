@@ -2,7 +2,14 @@
 
 import pytest
 
-from engine.planner import CompanionRuntime, Event, EventKind, MockBehaviorLLM, Persona, WorldState
+from engine.planner import (
+    CompanionRuntime,
+    Event,
+    EventKind,
+    MockBehaviorLLM,
+    Persona,
+    WorldState,
+)
 from engine.planner.memory_store import InMemoryMemoryStore, MEMORY_LAYERS, MemoryStore
 
 
@@ -26,23 +33,40 @@ def test_same_character_across_unity_and_robot_bodies_shares_memory():
     store = InMemoryMemoryStore()
 
     # --- session 1: the character lives in a Unity body ---
-    unity_session = CompanionRuntime([persona()], WorldState(sim_minute=19 * 60),
-                                     llm=MockBehaviorLLM(), memory_store=store)
-    unity_session.push_event(Event(t_min=19 * 60 + 1, kind=EventKind.USER_UTTERANCE,
-                                   source="user", text="我今天很难过", target_agent="kai"))
+    unity_session = CompanionRuntime(
+        [persona()],
+        WorldState(sim_minute=19 * 60),
+        llm=MockBehaviorLLM(),
+        memory_store=store,
+    )
+    unity_session.push_event(
+        Event(
+            t_min=19 * 60 + 1,
+            kind=EventKind.USER_UTTERANCE,
+            source="user",
+            text="我今天很难过",
+            target_agent="kai",
+        )
+    )
     unity_session.run(start_min=19 * 60, duration_min=3)
     grown = unity_session.personas["kai"].relationships["user"]
     assert grown > 0.75
     assert unity_session.memory["kai"].get("evening_mode") == "companion"
 
     # --- session 2: same character wakes up inside a robot ---
-    robot_session = CompanionRuntime([persona()], WorldState(sim_minute=20 * 60),
-                                     llm=MockBehaviorLLM(), memory_store=store)
+    robot_session = CompanionRuntime(
+        [persona()],
+        WorldState(sim_minute=20 * 60),
+        llm=MockBehaviorLLM(),
+        memory_store=store,
+    )
     hydrated = robot_session.personas["kai"]
-    assert hydrated.relationships["user"] == pytest.approx(grown), \
+    assert hydrated.relationships["user"] == pytest.approx(grown), (
         "relationship state must follow the character, not the body"
-    assert robot_session.memory["kai"].get("evening_mode") == "companion", \
+    )
+    assert robot_session.memory["kai"].get("evening_mode") == "companion", (
         "long-term memory must be readable from the new body"
+    )
     assert store.recall("kai", "episodic").get("user_mood") == "tired"
 
 
@@ -55,6 +79,7 @@ def test_memory_is_agent_scoped_not_shared_between_characters():
 
 
 def test_runtime_defaults_to_inmemory_store():
-    runtime = CompanionRuntime([persona()], WorldState(sim_minute=19 * 60),
-                               llm=MockBehaviorLLM())
+    runtime = CompanionRuntime(
+        [persona()], WorldState(sim_minute=19 * 60), llm=MockBehaviorLLM()
+    )
     assert isinstance(runtime.memory_store, InMemoryMemoryStore)

@@ -45,12 +45,16 @@ class InMemoryMemoryStore:
 
     def remember(self, agent_id: str, layer: str, key: str, value: Any) -> None:
         if layer not in MEMORY_LAYERS:
-            raise ValueError(f"unknown memory layer {layer!r}; expected one of {MEMORY_LAYERS}")
+            raise ValueError(
+                f"unknown memory layer {layer!r}; expected one of {MEMORY_LAYERS}"
+            )
         self._layers.setdefault((agent_id, layer), {})[key] = value
 
     def recall(self, agent_id: str, layer: str) -> dict[str, Any]:
         if layer not in MEMORY_LAYERS:
-            raise ValueError(f"unknown memory layer {layer!r}; expected one of {MEMORY_LAYERS}")
+            raise ValueError(
+                f"unknown memory layer {layer!r}; expected one of {MEMORY_LAYERS}"
+            )
         return dict(self._layers.get((agent_id, layer), {}))
 
 
@@ -63,10 +67,14 @@ class AICoreMemoryStore:
     planner needs no second relationship system.
     """
 
-    def __init__(self, base_url: str, character_map: dict[str, str] | None = None,
-                 timeout_s: float = 5.0):
+    def __init__(
+        self,
+        base_url: str,
+        character_map: dict[str, str] | None = None,
+        timeout_s: float = 5.0,
+    ):
         self.base_url = base_url.rstrip("/")
-        self.character_map = character_map or {}   # agent_id -> ai-core character_id
+        self.character_map = character_map or {}  # agent_id -> ai-core character_id
         self.timeout_s = timeout_s
 
     def _character(self, agent_id: str) -> str:
@@ -82,11 +90,14 @@ class AICoreMemoryStore:
             return json.loads(response.read().decode("utf-8"))
 
     def get_relationships(self, agent_id: str) -> dict[str, float]:
-        data = self._post("/memory/retrieve", {
-            "character_id": self._character(agent_id),
-            "query": "relationship_state",
-            "layers": ["RELATIONAL"],
-        })
+        data = self._post(
+            "/memory/retrieve",
+            {
+                "character_id": self._character(agent_id),
+                "query": "relationship_state",
+                "layers": ["RELATIONAL"],
+            },
+        )
         relationships: dict[str, float] = {}
         for memory in data.get("memories", []):
             content = memory.get("content", "")
@@ -99,25 +110,34 @@ class AICoreMemoryStore:
         return relationships
 
     def set_relationship(self, agent_id: str, other: str, value: float) -> None:
-        self._post("/memory", {
-            "character_id": self._character(agent_id),
-            "layer": "RELATIONAL",
-            "content": f"relationship:{other}:{max(0.0, min(1.0, value)):.4f}",
-        })
+        self._post(
+            "/memory",
+            {
+                "character_id": self._character(agent_id),
+                "layer": "RELATIONAL",
+                "content": f"relationship:{other}:{max(0.0, min(1.0, value)):.4f}",
+            },
+        )
 
     def remember(self, agent_id: str, layer: str, key: str, value: Any) -> None:
-        self._post("/memory", {
-            "character_id": self._character(agent_id),
-            "layer": layer.upper() if layer != "compiled_behavior" else "SEMANTIC",
-            "content": f"{key}: {json.dumps(value, ensure_ascii=False)}",
-        })
+        self._post(
+            "/memory",
+            {
+                "character_id": self._character(agent_id),
+                "layer": layer.upper() if layer != "compiled_behavior" else "SEMANTIC",
+                "content": f"{key}: {json.dumps(value, ensure_ascii=False)}",
+            },
+        )
 
     def recall(self, agent_id: str, layer: str) -> dict[str, Any]:
-        data = self._post("/memory/retrieve", {
-            "character_id": self._character(agent_id),
-            "query": "*",
-            "layers": [layer.upper()],
-        })
+        data = self._post(
+            "/memory/retrieve",
+            {
+                "character_id": self._character(agent_id),
+                "query": "*",
+                "layers": [layer.upper()],
+            },
+        )
         out: dict[str, Any] = {}
         for memory in data.get("memories", []):
             content = memory.get("content", "")

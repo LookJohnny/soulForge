@@ -2,6 +2,7 @@
 
 import sys
 import os
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from safety.cbf_constraint import CBFConstraint
@@ -38,7 +39,9 @@ class TestCBFConstraint:
         _, rate_slow = c_slow.compute_safe_rate(80.0)
         _, rate_fast = c_fast.compute_safe_rate(80.0)
 
-        assert rate_fast > rate_slow * 50  # gamma=20 should be ~67x faster than gamma=0.3
+        assert (
+            rate_fast > rate_slow * 50
+        )  # gamma=20 should be ~67x faster than gamma=0.3
 
     def test_margin(self):
         """Margin shrinks the effective safe range."""
@@ -127,7 +130,9 @@ class TestServoThermalModel:
         """fit_from_data recovers known parameters from synthetic data."""
 
         alpha_true, beta_true, t_amb_true = 0.03, 0.4, 36.0
-        m = ServoThermalModel(alpha=alpha_true, beta=beta_true, t_ambient=t_amb_true, t_initial=36.0)
+        m = ServoThermalModel(
+            alpha=alpha_true, beta=beta_true, t_ambient=t_amb_true, t_initial=36.0
+        )
 
         dt = 0.1
         timestamps = [i * dt for i in range(200)]

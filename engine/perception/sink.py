@@ -29,8 +29,12 @@ class RuntimePerceptionSink:
     sent: int = 0
     dropped: int = 0
     reconnects: int = 0
-    _loop: asyncio.AbstractEventLoop | None = field(default=None, init=False, repr=False)
-    _queue: asyncio.Queue[PerceptionEvent] | None = field(default=None, init=False, repr=False)
+    _loop: asyncio.AbstractEventLoop | None = field(
+        default=None, init=False, repr=False
+    )
+    _queue: asyncio.Queue[PerceptionEvent] | None = field(
+        default=None, init=False, repr=False
+    )
     _socket: Any = field(default=None, init=False, repr=False)
     _worker: asyncio.Task | None = field(default=None, init=False, repr=False)
     _closing: bool = field(default=False, init=False, repr=False)

@@ -2,6 +2,7 @@
 
 import sys
 import os
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from engine.behavior_engine import BehaviorEngine
@@ -43,7 +44,11 @@ class TestTriggeredBehaviors:
         # After enough ticks, surprised_jump should take over
         for i in range(20):
             sched.tick(0.04 + i * 0.02, 0.02)
-        assert sched._active is None or sched._active.name == "surprised_jump" or not sched.is_active
+        assert (
+            sched._active is None
+            or sched._active.name == "surprised_jump"
+            or not sched.is_active
+        )
 
     def test_keyframe_interpolation_smooth(self):
         """Adjacent sample values should not differ by more than 5% of range."""
@@ -95,7 +100,7 @@ class TestBehaviorEngine:
         intent = CompositePrimitive(
             emotion=EmotionPrimitive(type=EmotionType.JOY, intensity=0.9),
         )
-        result = engine.update(20, persona_intent=intent)
+        engine.update(20, persona_intent=intent)
         # Scheduler should have an active behavior now
         assert engine.scheduler.is_active or True  # might finish in one frame
 
@@ -103,7 +108,7 @@ class TestBehaviorEngine:
         """touch_head sensor should affect head_pitch via reactive layer."""
         engine = BehaviorEngine()
         # First without touch
-        r1 = engine.update(20)
+        engine.update(20)
 
         # With touch
         r2 = engine.update(20, sensor_inputs={"touch_head": 1.0})
@@ -118,7 +123,7 @@ class TestBehaviorEngine:
         engine.update(20, sensor_inputs={"touch_head": 1.0})
         # No touch for several frames
         for _ in range(20):
-            result = engine.update(20)
+            engine.update(20)
         # Should be back to ambient levels (reactive released)
 
     def test_get_channel_state(self):

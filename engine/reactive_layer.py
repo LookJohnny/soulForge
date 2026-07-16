@@ -31,24 +31,36 @@ class ReactiveRule:
 # Default reactive rules (configurable via YAML)
 DEFAULT_RULES: list[dict] = [
     {
-        "sensor_id": "touch_head", "threshold_min": 0.5, "threshold_max": 999,
+        "sensor_id": "touch_head",
+        "threshold_min": 0.5,
+        "threshold_max": 999,
         "channel_outputs": {"head_pitch": -5.0},
-        "trigger_behavior": None, "cooldown_s": 0.5,
+        "trigger_behavior": None,
+        "cooldown_s": 0.5,
     },
     {
-        "sensor_id": "touch_belly", "threshold_min": 0.5, "threshold_max": 999,
+        "sensor_id": "touch_belly",
+        "threshold_min": 0.5,
+        "threshold_max": 999,
         "channel_outputs": {},
-        "trigger_behavior": "happy_wiggle", "cooldown_s": 2.0,
+        "trigger_behavior": "happy_wiggle",
+        "cooldown_s": 2.0,
     },
     {
-        "sensor_id": "proximity_front", "threshold_min": 0.0, "threshold_max": 0.3,
+        "sensor_id": "proximity_front",
+        "threshold_min": 0.0,
+        "threshold_max": 0.3,
         "channel_outputs": {"body_pitch": -5.0, "head_pitch": 8.0},
-        "trigger_behavior": None, "cooldown_s": 1.0,
+        "trigger_behavior": None,
+        "cooldown_s": 1.0,
     },
     {
-        "sensor_id": "imu_shake", "threshold_min": 2.0, "threshold_max": 999,
+        "sensor_id": "imu_shake",
+        "threshold_min": 2.0,
+        "threshold_max": 999,
         "channel_outputs": {},
-        "trigger_behavior": "surprised_jump", "cooldown_s": 3.0,
+        "trigger_behavior": "surprised_jump",
+        "cooldown_s": 3.0,
     },
 ]
 
@@ -60,16 +72,20 @@ class ReactiveLayer:
         configs = rules_config or DEFAULT_RULES
         self.rules: list[ReactiveRule] = []
         for rc in configs:
-            self.rules.append(ReactiveRule(
-                sensor_id=rc["sensor_id"],
-                threshold_min=rc.get("threshold_min", 0),
-                threshold_max=rc.get("threshold_max", 999),
-                channel_outputs=rc.get("channel_outputs", {}),
-                trigger_behavior=rc.get("trigger_behavior"),
-                cooldown_s=rc.get("cooldown_s", 1.0),
-            ))
+            self.rules.append(
+                ReactiveRule(
+                    sensor_id=rc["sensor_id"],
+                    threshold_min=rc.get("threshold_min", 0),
+                    threshold_max=rc.get("threshold_max", 999),
+                    channel_outputs=rc.get("channel_outputs", {}),
+                    trigger_behavior=rc.get("trigger_behavior"),
+                    cooldown_s=rc.get("cooldown_s", 1.0),
+                )
+            )
 
-    def process(self, sensor_inputs: dict[str, float], t: float) -> tuple[dict[str, float], list[str]]:
+    def process(
+        self, sensor_inputs: dict[str, float], t: float
+    ) -> tuple[dict[str, float], list[str]]:
         """Process sensor inputs, return direct channel values and triggered behavior IDs.
 
         Args:

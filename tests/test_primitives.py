@@ -2,14 +2,20 @@
 
 import sys
 import os
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "protocol"))
 
 from primitives_pb2 import (
-    EmotionType, EmotionPrimitive,
-    AttentionMode, AttentionPrimitive,
-    GestureType, GesturePrimitive,
-    VocalizationPrimitive, PhonemeTiming,
-    RhythmPrimitive, IdlePrimitive,
+    EmotionType,
+    EmotionPrimitive,
+    AttentionMode,
+    AttentionPrimitive,
+    GestureType,
+    GesturePrimitive,
+    VocalizationPrimitive,
+    PhonemeTiming,
+    RhythmPrimitive,
+    IdlePrimitive,
     CompositePrimitive,
 )
 
@@ -29,8 +35,10 @@ class TestEmotionPrimitive:
 
     def test_blend(self):
         ep = EmotionPrimitive(
-            type=EmotionType.JOY, intensity=0.7,
-            blend_with=EmotionType.CURIOSITY, blend_ratio=0.3,
+            type=EmotionType.JOY,
+            intensity=0.7,
+            blend_with=EmotionType.CURIOSITY,
+            blend_ratio=0.3,
         )
         data = ep.SerializeToString()
         ep2 = EmotionPrimitive()
@@ -51,8 +59,12 @@ class TestAttentionPrimitive:
 
     def test_serialize(self):
         ap = AttentionPrimitive(
-            mode=AttentionMode.TRACKING, yaw=45.0, pitch=-10.0,
-            tracking_speed=0.8, hold_duration_ms=2000, saccade_frequency=2.5,
+            mode=AttentionMode.TRACKING,
+            yaw=45.0,
+            pitch=-10.0,
+            tracking_speed=0.8,
+            hold_duration_ms=2000,
+            saccade_frequency=2.5,
         )
         data = ap.SerializeToString()
         ap2 = AttentionPrimitive()
@@ -68,8 +80,11 @@ class TestGesturePrimitive:
 
     def test_serialize(self):
         gp = GesturePrimitive(
-            type=GestureType.WAVE, amplitude=0.7, speed=0.5,
-            repeat_count=3, expressiveness=0.8,
+            type=GestureType.WAVE,
+            amplitude=0.7,
+            speed=0.5,
+            repeat_count=3,
+            expressiveness=0.8,
         )
         data = gp.SerializeToString()
         gp2 = GesturePrimitive()
@@ -83,7 +98,9 @@ class TestVocalizationPrimitive:
         vp = VocalizationPrimitive(
             speech_text="你好呀",
             emotion_overlay=EmotionType.JOY,
-            volume=0.7, pitch_shift=0.1, speed_ratio=1.1,
+            volume=0.7,
+            pitch_shift=0.1,
+            speed_ratio=1.1,
             sync_gestures=True,
             phonemes=[
                 PhonemeTiming(phoneme="n", start_ms=0, end_ms=80),
@@ -102,7 +119,12 @@ class TestVocalizationPrimitive:
 
 class TestRhythmPrimitive:
     def test_serialize(self):
-        rp = RhythmPrimitive(bpm=120.0, body_sway_amplitude=0.3, head_bob_intensity=0.5, sync_to_audio=True)
+        rp = RhythmPrimitive(
+            bpm=120.0,
+            body_sway_amplitude=0.3,
+            head_bob_intensity=0.5,
+            sync_to_audio=True,
+        )
         data = rp.SerializeToString()
         rp2 = RhythmPrimitive()
         rp2.ParseFromString(data)
@@ -112,7 +134,12 @@ class TestRhythmPrimitive:
 
 class TestIdlePrimitive:
     def test_serialize(self):
-        ip = IdlePrimitive(breathing_rate=15.0, micro_movement_intensity=0.2, fidget_probability=0.1, personality_preset="calm")
+        ip = IdlePrimitive(
+            breathing_rate=15.0,
+            micro_movement_intensity=0.2,
+            fidget_probability=0.1,
+            personality_preset="calm",
+        )
         data = ip.SerializeToString()
         ip2 = IdlePrimitive()
         ip2.ParseFromString(data)
@@ -131,7 +158,9 @@ class TestCompositePrimitive:
             vocalization=VocalizationPrimitive(speech_text="太棒了!"),
             rhythm=RhythmPrimitive(bpm=140),
             idle=IdlePrimitive(breathing_rate=20),
-            timestamp_ms=9999999, priority=8, source="llm",
+            timestamp_ms=9999999,
+            priority=8,
+            source="llm",
         )
         data = cp.SerializeToString()
         cp2 = CompositePrimitive()
@@ -156,7 +185,9 @@ class TestCompositePrimitive:
         assert cp2.priority == 0
 
     def test_metadata_fields(self):
-        cp = CompositePrimitive(timestamp_ms=1711234567890, priority=10, source="sensor")
+        cp = CompositePrimitive(
+            timestamp_ms=1711234567890, priority=10, source="sensor"
+        )
         assert cp.timestamp_ms == 1711234567890
         assert cp.priority == 10
         assert cp.source == "sensor"

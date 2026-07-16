@@ -14,7 +14,9 @@ from typing import Any
 
 from engine.planner.models import Persona
 
-_DEFAULT_PATH = Path(__file__).resolve().parent.parent.parent / "configs" / "characters.json"
+_DEFAULT_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "configs" / "characters.json"
+)
 
 
 class CharacterConfigError(ValueError):
@@ -28,13 +30,19 @@ def _load_raw(path: str) -> dict[str, Any]:
     except FileNotFoundError as exc:
         raise CharacterConfigError(f"character config not found: {path}") from exc
     except json.JSONDecodeError as exc:
-        raise CharacterConfigError(f"character config is not valid JSON: {exc}") from exc
+        raise CharacterConfigError(
+            f"character config is not valid JSON: {exc}"
+        ) from exc
     if not isinstance(data.get("characters"), list) or not data["characters"]:
-        raise CharacterConfigError("character config needs a non-empty 'characters' list")
+        raise CharacterConfigError(
+            "character config needs a non-empty 'characters' list"
+        )
     for entry in data["characters"]:
         for key in ("id", "name", "archetype"):
             if not entry.get(key):
-                raise CharacterConfigError(f"character entry missing required field {key!r}: {entry}")
+                raise CharacterConfigError(
+                    f"character entry missing required field {key!r}: {entry}"
+                )
     return data
 
 
@@ -46,23 +54,25 @@ def load_characters(path: str | Path = _DEFAULT_PATH) -> dict[str, Any]:
 def load_personas(path: str | Path = _DEFAULT_PATH) -> list[Persona]:
     personas = []
     for entry in load_characters(path)["characters"]:
-        personas.append(Persona(
-            agent_id=entry["id"],
-            name=entry["name"],
-            archetype=entry["archetype"],
-            traits=list(entry.get("traits", [])),
-            voice=entry.get("voice", {}).get("edge", {}).get("voice", ""),
-            energy=float(entry.get("energy", 0.8)),
-            relationships=dict(entry.get("relationships", {})),
-            daily_goals=list(entry.get("daily_goals", [])),
-            meta={
-                "role_label": entry.get("role_label", ""),
-                "color": entry.get("color", "#8ecae6"),
-                "comfort_line": entry.get("comfort_line", ""),
-                "voice": entry.get("voice", {}),
-                "embodiment": entry.get("embodiment", {}),
-            },
-        ))
+        personas.append(
+            Persona(
+                agent_id=entry["id"],
+                name=entry["name"],
+                archetype=entry["archetype"],
+                traits=list(entry.get("traits", [])),
+                voice=entry.get("voice", {}).get("edge", {}).get("voice", ""),
+                energy=float(entry.get("energy", 0.8)),
+                relationships=dict(entry.get("relationships", {})),
+                daily_goals=list(entry.get("daily_goals", [])),
+                meta={
+                    "role_label": entry.get("role_label", ""),
+                    "color": entry.get("color", "#8ecae6"),
+                    "comfort_line": entry.get("comfort_line", ""),
+                    "voice": entry.get("voice", {}),
+                    "embodiment": entry.get("embodiment", {}),
+                },
+            )
+        )
     return personas
 
 
@@ -70,7 +80,9 @@ def load_archetypes(path: str | Path = _DEFAULT_PATH) -> dict[str, Any]:
     """Archetype day-plan profiles with a guaranteed `default` entry."""
     archetypes = dict(load_characters(path).get("archetypes", {}))
     archetypes.pop("$note", None)
-    archetypes.setdefault("default", {"focus": [["study", "自由学习"]], "evening": "chatting"})
+    archetypes.setdefault(
+        "default", {"focus": [["study", "自由学习"]], "evening": "chatting"}
+    )
     return archetypes
 
 

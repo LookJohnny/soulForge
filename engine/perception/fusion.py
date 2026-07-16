@@ -12,8 +12,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from engine.perception.models import (
-    AuditoryObservation, DetectedEntity, Modality, PerceptionEvent, SceneState,
-    SpatialRelation, VisualObservation,
+    AuditoryObservation,
+    DetectedEntity,
+    Modality,
+    PerceptionEvent,
+    SceneState,
+    SpatialRelation,
+    VisualObservation,
 )
 
 _DEICTIC_MARKERS = ("那个", "这个", "那只", "这只", "it", "that", "this")
@@ -32,7 +37,8 @@ class EntityTracker:
         # Expire before matching so an object absent beyond max_age_s cannot
         # silently resurrect an ancient identity.
         for entity_id in [
-            key for key, value in self._known.items()
+            key
+            for key, value in self._known.items()
             if ts - value.last_seen_ts > self.max_age_s
         ]:
             del self._known[entity_id]
@@ -53,8 +59,10 @@ class EntityTracker:
                 self._counter += 1
                 tracked = DetectedEntity(
                     entity_id=f"{entity.label}_{self._counter}",
-                    label=entity.label, confidence=entity.confidence,
-                    bbox=entity.bbox, attributes=dict(entity.attributes),
+                    label=entity.label,
+                    confidence=entity.confidence,
+                    bbox=entity.bbox,
+                    attributes=dict(entity.attributes),
                     last_seen_ts=ts,
                 )
                 self._known[tracked.entity_id] = tracked
@@ -62,11 +70,15 @@ class EntityTracker:
                 assigned_ids.add(tracked.entity_id)
         return resolved
 
-    def _match(self, entity: DetectedEntity,
-               excluded_ids: set[str] | None = None) -> DetectedEntity | None:
+    def _match(
+        self, entity: DetectedEntity, excluded_ids: set[str] | None = None
+    ) -> DetectedEntity | None:
         excluded_ids = excluded_ids or set()
-        candidates = [e for e in self._known.values()
-                      if e.label == entity.label and e.entity_id not in excluded_ids]
+        candidates = [
+            e
+            for e in self._known.values()
+            if e.label == entity.label and e.entity_id not in excluded_ids
+        ]
         if not candidates:
             return None
         if entity.bbox is None:
@@ -84,7 +96,7 @@ class EntityTracker:
 
 def _iou(a, b) -> float:
     if a is None or b is None:
-        return 0.5                          # same label, unknown boxes: weak match
+        return 0.5  # same label, unknown boxes: weak match
     ax, ay, aw, ah = a
     bx, by, bw, bh = b
     x1, y1 = max(ax, bx), max(ay, by)
@@ -98,9 +110,9 @@ def _iou(a, b) -> float:
 class PerceptionFusion:
     source_body: str = "perception-0"
     target_agent: str | None = None
-    fusion_window_s: float = 3.0            # audio↔vision join window
-    min_confidence: float = 0.5             # below this nothing is emitted
-    debounce_s: float = 5.0                 # per (kind,label) re-emission gap
+    fusion_window_s: float = 3.0  # audio↔vision join window
+    min_confidence: float = 0.5  # below this nothing is emitted
+    debounce_s: float = 5.0  # per (kind,label) re-emission gap
     tracker: EntityTracker = field(default_factory=EntityTracker)
     scene: SceneState = field(default_factory=SceneState)
     _recent_visual: list[VisualObservation] = field(default_factory=list)
@@ -109,7 +121,7 @@ class PerceptionFusion:
     # ------------------------------------------------------------- ingest
     def ingest_visual(self, observation: VisualObservation) -> list[PerceptionEvent]:
         if observation.confidence < self.min_confidence:
-            return []                        # low confidence never surfaces
+            return []  # low confidence never surfaces
         source_entity_ids = [entity.entity_id for entity in observation.entities]
         tracked = self.tracker.track(observation.entities, observation.ts)
         observation.entities = tracked
@@ -117,27 +129,39 @@ class PerceptionFusion:
             source_id: entity.entity_id
             for source_id, entity in zip(source_entity_ids, tracked, strict=True)
         }
-        observation.relations = [SpatialRelation(
-            subject_id=tracked_id_by_source.get(relation.subject_id,
-                                                relation.subject_id),
-            relation=relation.relation,
-            object_id=tracked_id_by_source.get(relation.object_id,
-                                               relation.object_id),
-            confidence=relation.confidence,
-        ) for relation in observation.relations]
+        observation.relations = [
+            SpatialRelation(
+                subject_id=tracked_id_by_source.get(
+                    relation.subject_id, relation.subject_id
+                ),
+                relation=relation.relation,
+                object_id=tracked_id_by_source.get(
+                    relation.object_id, relation.object_id
+                ),
+                confidence=relation.confidence,
+            )
+            for relation in observation.relations
+        ]
         self._recent_visual.append(observation)
-        self._recent_visual = [v for v in self._recent_visual
-                               if observation.ts - v.ts <= self.fusion_window_s]
+        self._recent_visual = [
+            v
+            for v in self._recent_visual
+            if observation.ts - v.ts <= self.fusion_window_s
+        ]
 
         previous_ids = set(self.scene.entities)
-        self.scene.entities = {e.entity_id: e for e in
-                               list(self.scene.entities.values()) + tracked
-                               if observation.ts - e.last_seen_ts <= self.tracker.max_age_s}
+        self.scene.entities = {
+            e.entity_id: e
+            for e in list(self.scene.entities.values()) + tracked
+            if observation.ts - e.last_seen_ts <= self.tracker.max_age_s
+        }
         self.scene.relations = observation.relations
         self.scene.updated_ts = observation.ts
         if observation.scene_label:
             self.scene.scene_label = observation.scene_label
-        self.scene.user_present = any(e.label == "person" for e in self.scene.entities.values())
+        self.scene.user_present = any(
+            e.label == "person" for e in self.scene.entities.values()
+        )
 
         from engine.perception.models import HAZARD_LABELS
 
@@ -145,38 +169,62 @@ class PerceptionFusion:
         for entity in tracked:
             is_hazard = entity.label in HAZARD_LABELS
             if entity.entity_id in previous_ids and not is_hazard:
-                continue                     # not novel (hazards keep counting)
-            kind = ("person_detected" if entity.label == "person" else
-                    "gesture_detected" if entity.label == "gesture" else
-                    "object_detected")
-            if not is_hazard and not self._debounced(kind, entity.label, observation.ts):
+                continue  # not novel (hazards keep counting)
+            kind = (
+                "person_detected"
+                if entity.label == "person"
+                else "gesture_detected"
+                if entity.label == "gesture"
+                else "object_detected"
+            )
+            if not is_hazard and not self._debounced(
+                kind, entity.label, observation.ts
+            ):
                 continue
-            events.append(PerceptionEvent(
-                kind=kind, modality=Modality.VISION,
-                timestamp=observation.ts, captured_at=observation.ts,
-                source_body=self.source_body, target_agent=self.target_agent,
-                text=f"{entity.label} detected",
-                entities=[entity], spatial_relations=observation.relations,
-                confidence=min(observation.confidence, entity.confidence),
-                media_ref=observation.frame_ref,
-                payload={"scene": observation.scene_label,
-                         "ocr_text_untrusted": observation.ocr_text},
-            ))
+            events.append(
+                PerceptionEvent(
+                    kind=kind,
+                    modality=Modality.VISION,
+                    timestamp=observation.ts,
+                    captured_at=observation.ts,
+                    source_body=self.source_body,
+                    target_agent=self.target_agent,
+                    text=f"{entity.label} detected",
+                    entities=[entity],
+                    spatial_relations=observation.relations,
+                    confidence=min(observation.confidence, entity.confidence),
+                    media_ref=observation.frame_ref,
+                    payload={
+                        "scene": observation.scene_label,
+                        "ocr_text_untrusted": observation.ocr_text,
+                    },
+                )
+            )
         return events
 
-    def ingest_auditory(self, observation: AuditoryObservation) -> list[PerceptionEvent]:
+    def ingest_auditory(
+        self, observation: AuditoryObservation
+    ) -> list[PerceptionEvent]:
         if observation.confidence < self.min_confidence:
             return []
         if observation.kind == "sound":
-            if not self._debounced("sound_event", observation.sound_label, observation.ts):
+            if not self._debounced(
+                "sound_event", observation.sound_label, observation.ts
+            ):
                 return []
-            return [PerceptionEvent(
-                kind="sound_event", modality=Modality.AUDIO,
-                timestamp=observation.ts, captured_at=observation.ts,
-                source_body=self.source_body, target_agent=self.target_agent,
-                text=observation.sound_label, confidence=observation.confidence,
-                media_ref=observation.audio_ref,
-            )]
+            return [
+                PerceptionEvent(
+                    kind="sound_event",
+                    modality=Modality.AUDIO,
+                    timestamp=observation.ts,
+                    captured_at=observation.ts,
+                    source_body=self.source_body,
+                    target_agent=self.target_agent,
+                    text=observation.sound_label,
+                    confidence=observation.confidence,
+                    media_ref=observation.audio_ref,
+                )
+            ]
 
         speaker = observation.speaker.speaker_id if observation.speaker else "user"
         self.scene.active_speaker = speaker
@@ -185,8 +233,11 @@ class PerceptionFusion:
 
     # --------------------------------------------------------------- fusion
     def _fuse_with_vision(self, speech: AuditoryObservation) -> PerceptionEvent:
-        window = [v for v in self._recent_visual
-                  if abs(v.ts - speech.ts) <= self.fusion_window_s]
+        window = [
+            v
+            for v in self._recent_visual
+            if abs(v.ts - speech.ts) <= self.fusion_window_s
+        ]
         entities: list[DetectedEntity] = []
         relations: list[SpatialRelation] = []
         referent: DetectedEntity | None = None
@@ -205,9 +256,13 @@ class PerceptionFusion:
             # observation that supports the context.  Audio confidence must never
             # launder weak visual evidence into a high-confidence grounded event.
             visual_support = max(
-                min(visual.confidence,
-                    max((entity.confidence for entity in visual.entities),
-                        default=visual.confidence))
+                min(
+                    visual.confidence,
+                    max(
+                        (entity.confidence for entity in visual.entities),
+                        default=visual.confidence,
+                    ),
+                )
                 for visual in window
             )
             confidence = min(confidence, visual_support)
@@ -215,15 +270,21 @@ class PerceptionFusion:
             payload["referent_entity_id"] = referent.entity_id
             payload["referent_label"] = referent.label
             referent_support = max(
-                (min(visual.confidence, entity.confidence)
-                 for visual in window for entity in visual.entities
-                 if entity.entity_id == referent.entity_id),
+                (
+                    min(visual.confidence, entity.confidence)
+                    for visual in window
+                    for entity in visual.entities
+                    if entity.entity_id == referent.entity_id
+                ),
                 default=0.0,
             )
             pointing_support = max(
-                (relation.confidence for relation in relations
-                 if relation.relation == "pointing_at"
-                 and relation.object_id == referent.entity_id),
+                (
+                    relation.confidence
+                    for relation in relations
+                    if relation.relation == "pointing_at"
+                    and relation.object_id == referent.entity_id
+                ),
                 default=1.0,
             )
             grounding_confidence = min(referent_support, pointing_support)
@@ -233,8 +294,10 @@ class PerceptionFusion:
         return PerceptionEvent(
             kind="user_utterance" if not window else "multimodal_context",
             modality=Modality.AUDIO if not window else Modality.MULTIMODAL,
-            timestamp=speech.ts, captured_at=speech.ts,
-            source_body=self.source_body, target_agent=self.target_agent,
+            timestamp=speech.ts,
+            captured_at=speech.ts,
+            source_body=self.source_body,
+            target_agent=self.target_agent,
             text=speech.transcript,
             entities=list({e.entity_id: e for e in entities}.values()),
             spatial_relations=relations,
@@ -243,8 +306,9 @@ class PerceptionFusion:
             payload=payload,
         )
 
-    def _resolve_deixis(self, entities: list[DetectedEntity],
-                        relations: list[SpatialRelation]) -> DetectedEntity | None:
+    def _resolve_deixis(
+        self, entities: list[DetectedEntity], relations: list[SpatialRelation]
+    ) -> DetectedEntity | None:
         by_id = {e.entity_id: e for e in entities}
         # 1) explicit pointing relation wins
         for relation in relations:

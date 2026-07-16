@@ -107,7 +107,7 @@ class ChangeDetector:
 
     def score(self, frame: Frame) -> float:
         if frame.data is None:
-            return 1.0                     # state-based frames: caller gates
+            return 1.0  # state-based frames: caller gates
         sample = self._sample(frame.data)
         size = len(frame.data)
         if self._last_sample is None:
@@ -117,9 +117,9 @@ class ChangeDetector:
         previous = self._last_sample
         paired = min(len(sample), len(previous))
         content_diff = (
-            sum(sample[index] != previous[index] for index in range(paired))
-            / paired
-            if paired else 1.0
+            sum(sample[index] != previous[index] for index in range(paired)) / paired
+            if paired
+            else 1.0
         )
         previous_size = self._last_size or 0
         size_diff = abs(size - previous_size) / max(size, previous_size, 1)
@@ -161,7 +161,9 @@ class LocalVisionProvider:
 
     name = "local"
 
-    def __init__(self, detector: Callable[[Frame], Mapping[str, Any] | VisualObservation]):
+    def __init__(
+        self, detector: Callable[[Frame], Mapping[str, Any] | VisualObservation]
+    ):
         if not callable(detector):
             raise TypeError("LocalVisionProvider detector must be callable")
         self.detector = detector
@@ -189,10 +191,17 @@ class RemoteVLMProvider:
 
     name = "remote-vlm"
 
-    def __init__(self, api_key: str | None = None, base_url: str = "",
-                 model: str = "", timeout_s: float = 8.0,
-                 transport: Callable[[str, Mapping[str, str], Mapping[str, Any], float],
-                                     Mapping[str, Any]] | None = None):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        base_url: str = "",
+        model: str = "",
+        timeout_s: float = 8.0,
+        transport: Callable[
+            [str, Mapping[str, str], Mapping[str, Any], float], Mapping[str, Any]
+        ]
+        | None = None,
+    ):
         api_key = api_key or os.environ.get("VLM_API_KEY", "")
         if not api_key:
             raise RuntimeError("RemoteVLMProvider requires VLM_API_KEY")
@@ -232,10 +241,16 @@ class RemoteVLMProvider:
             "Accept": "application/json",
         }
         response = self.transport(
-            self.base_url, headers, request_payload, self.timeout_s,
+            self.base_url,
+            headers,
+            request_payload,
+            self.timeout_s,
         )
         return _observation_from_payload(
-            response, frame, self.name, require_schema_version=True,
+            response,
+            frame,
+            self.name,
+            require_schema_version=True,
         )
 
 
@@ -248,17 +263,25 @@ def _confidence(value: Any, field_name: str) -> float:
     return confidence
 
 
-def _observation_from_payload(payload: Mapping[str, Any], frame: Frame,
-                              provider_name: str, *,
-                              require_schema_version: bool = False,
-                              ) -> VisualObservation:
+def _observation_from_payload(
+    payload: Mapping[str, Any],
+    frame: Frame,
+    provider_name: str,
+    *,
+    require_schema_version: bool = False,
+) -> VisualObservation:
     if not isinstance(payload, Mapping):
         raise ValueError("vision provider response must be a JSON object")
-    if require_schema_version and payload.get("schema_version") != REMOTE_VLM_SCHEMA_VERSION:
+    if (
+        require_schema_version
+        and payload.get("schema_version") != REMOTE_VLM_SCHEMA_VERSION
+    ):
         raise ValueError(
-            f"vision response schema_version must be {REMOTE_VLM_SCHEMA_VERSION!r}")
+            f"vision response schema_version must be {REMOTE_VLM_SCHEMA_VERSION!r}"
+        )
     if require_schema_version and (
-            "entities" not in payload or "relations" not in payload):
+        "entities" not in payload or "relations" not in payload
+    ):
         raise ValueError("vision response must include entities and relations")
 
     raw_entities = payload.get("entities", [])
@@ -280,9 +303,14 @@ def _observation_from_payload(payload: Mapping[str, Any], frame: Frame,
             raise ValueError(f"entities[{index}].entity_id must be a string")
         bbox = raw.get("bbox")
         if bbox is not None:
-            if (not isinstance(bbox, (list, tuple)) or len(bbox) != 4
-                    or any(isinstance(value, bool)
-                           or not isinstance(value, (int, float)) for value in bbox)):
+            if (
+                not isinstance(bbox, (list, tuple))
+                or len(bbox) != 4
+                or any(
+                    isinstance(value, bool) or not isinstance(value, (int, float))
+                    for value in bbox
+                )
+            ):
                 raise ValueError(f"entities[{index}].bbox must contain four numbers")
             bbox = tuple(float(value) for value in bbox)
             if any(value < 0.0 or value > 1.0 for value in bbox):
@@ -290,15 +318,18 @@ def _observation_from_payload(payload: Mapping[str, Any], frame: Frame,
         attributes = raw.get("attributes", {})
         if not isinstance(attributes, Mapping):
             raise ValueError(f"entities[{index}].attributes must be an object")
-        entities.append(DetectedEntity(
-            entity_id=entity_id,
-            label=label,
-            confidence=_confidence(raw.get("confidence", 0.9),
-                                   f"entities[{index}].confidence"),
-            bbox=bbox,
-            attributes=dict(attributes),
-            last_seen_ts=frame.ts,
-        ))
+        entities.append(
+            DetectedEntity(
+                entity_id=entity_id,
+                label=label,
+                confidence=_confidence(
+                    raw.get("confidence", 0.9), f"entities[{index}].confidence"
+                ),
+                bbox=bbox,
+                attributes=dict(attributes),
+                last_seen_ts=frame.ts,
+            )
+        )
 
     relations: list[SpatialRelation] = []
     for index, raw in enumerate(raw_relations):
@@ -307,14 +338,20 @@ def _observation_from_payload(payload: Mapping[str, Any], frame: Frame,
         values = [raw.get("subject"), raw.get("relation"), raw.get("object")]
         if any(not isinstance(value, str) or not value for value in values):
             raise ValueError(
-                f"relations[{index}] subject/relation/object must be non-empty strings")
+                f"relations[{index}] subject/relation/object must be non-empty strings"
+            )
         if require_schema_version and "confidence" not in raw:
             raise ValueError(f"relations[{index}].confidence is required")
-        relations.append(SpatialRelation(
-            values[0], values[1], values[2],
-            _confidence(raw.get("confidence", 0.9),
-                        f"relations[{index}].confidence"),
-        ))
+        relations.append(
+            SpatialRelation(
+                values[0],
+                values[1],
+                values[2],
+                _confidence(
+                    raw.get("confidence", 0.9), f"relations[{index}].confidence"
+                ),
+            )
+        )
 
     scene = payload.get("scene", "")
     ocr_text = payload.get("ocr_text", "")
@@ -329,13 +366,15 @@ def _observation_from_payload(payload: Mapping[str, Any], frame: Frame,
         scene_label=scene,
         ocr_text=ocr_text,
         provider=provider_name,
-        confidence=_confidence(payload.get("confidence", default_confidence),
-                               "confidence"),
+        confidence=_confidence(
+            payload.get("confidence", default_confidence), "confidence"
+        ),
     )
 
 
-def _post_json(url: str, headers: Mapping[str, str], payload: Mapping[str, Any],
-               timeout_s: float) -> Mapping[str, Any]:
+def _post_json(
+    url: str, headers: Mapping[str, str], payload: Mapping[str, Any], timeout_s: float
+) -> Mapping[str, Any]:
     request = urllib.request.Request(
         url,
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -360,29 +399,41 @@ class VisionGate:
     """Decides whether a frame deserves (expensive) semantic analysis."""
 
     change: ChangeDetector = field(default_factory=ChangeDetector)
-    min_interval_s: float = 1.0            # provider rate limit
+    min_interval_s: float = 1.0  # provider rate limit
     _last_call_ts: float = -1e9
-    planner_request: bool = False          # planner asked "look now"
+    planner_request: bool = False  # planner asked "look now"
 
     def request_observation(self) -> None:
         self.planner_request = True
 
-    def should_analyze(self, frame: Frame, *, novel_entity: bool = False,
-                       gesture: bool = False, low_local_confidence: bool = False,
-                       now: float | None = None) -> bool:
+    def should_analyze(
+        self,
+        frame: Frame,
+        *,
+        novel_entity: bool = False,
+        gesture: bool = False,
+        low_local_confidence: bool = False,
+        now: float | None = None,
+    ) -> bool:
         now = time.monotonic() if now is None else now
         if now - self._last_call_ts < self.min_interval_s:
             return False
-        trigger = (self.planner_request or novel_entity or gesture
-                   or low_local_confidence or self.change.changed(frame))
+        trigger = (
+            self.planner_request
+            or novel_entity
+            or gesture
+            or low_local_confidence
+            or self.change.changed(frame)
+        )
         if trigger:
             self._last_call_ts = now
             self.planner_request = False
         return trigger
 
 
-def analyze_with_timeout(provider: VisionProvider, frame: Frame,
-                         timeout_s: float = 5.0) -> VisualObservation | None:
+def analyze_with_timeout(
+    provider: VisionProvider, frame: Frame, timeout_s: float = 5.0
+) -> VisualObservation | None:
     """Run a provider in an isolated process with a hard timeout.
 
     Threads cannot be killed in Python: cancelling a running Future merely
@@ -400,10 +451,12 @@ def analyze_with_timeout(provider: VisionProvider, frame: Frame,
         return None
     methods = multiprocessing.get_all_start_methods()
     context = multiprocessing.get_context(
-        "forkserver" if "forkserver" in methods else "spawn")
+        "forkserver" if "forkserver" in methods else "spawn"
+    )
     receive, send = context.Pipe(duplex=False)
-    process = context.Process(target=_provider_process_entry,
-                              args=(provider, frame, send), daemon=True)
+    process = context.Process(
+        target=_provider_process_entry, args=(provider, frame, send), daemon=True
+    )
     started = False
     try:
         process.start()
