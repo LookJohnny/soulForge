@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -89,34 +89,31 @@ class Settings(BaseSettings):
             warnings.warn("DASHSCOPE_API_KEY is empty — LLM/TTS/ASR calls will fail", stacklevel=2)
         return v
 
-    @field_validator("master_secret")
-    @classmethod
-    def master_secret_not_default(cls, v: str, info) -> str:
-        if v == "change-me-in-production":
-            env = info.data.get("environment", "development")
-            if env == "production":
-                raise ValueError(
-                    "MASTER_SECRET must not be 'change-me-in-production' in production"
-                )
-        return v
+    @model_validator(mode="after")
+    def production_secrets_must_be_set(self) -> "Settings":
+        """Refuse to boot production with default/dev credentials.
 
-    @field_validator("auth_secret")
-    @classmethod
-    def auth_secret_required_in_prod(cls, v: str, info) -> str:
-        if not v:
-            env = info.data.get("environment", "development")
-            if env == "production":
-                raise ValueError("AUTH_SECRET is required in production")
-        return v
+        NOTE: must be a model_validator — the old per-field validators read
+        ``info.data["environment"]`` before that field was validated (it is
+        declared later in the class), so they silently never fired.
+        """
+        if self.environment != "production":
+            return self
 
-    @field_validator("service_token")
-    @classmethod
-    def service_token_required_in_prod(cls, v: str, info) -> str:
-        if not v:
-            env = info.data.get("environment", "development")
-            if env == "production":
-                raise ValueError("SERVICE_TOKEN is required in production")
-        return v
+        problems: list[str] = []
+        if self.master_secret == "change-me-in-production":
+            problems.append("MASTER_SECRET must not be the default value")
+        if not self.auth_secret:
+            problems.append("AUTH_SECRET is required")
+        if not self.service_token:
+            problems.append("SERVICE_TOKEN is required")
+        if self.minio_access_key == "minioadmin" or self.minio_secret_key == "minioadmin":
+            problems.append("MINIO_ACCESS_KEY/MINIO_SECRET_KEY must not be the default")
+        if "soulforge:soulforge_dev@" in self.database_url:
+            problems.append("DATABASE_URL must not use the dev credentials")
+        if problems:
+            raise ValueError("production config: " + "; ".join(problems))
+        return self
 
     def get_allowed_origins(self) -> list[str]:
         """Parse allowed_origins into a list."""

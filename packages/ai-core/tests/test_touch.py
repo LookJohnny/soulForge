@@ -237,6 +237,7 @@ class TestTouchDefinitions:
 
     def test_emotion_hints_are_valid_emotions(self):
         from ai_core.services.emotion import EMOTIONS
+
         for gesture, emotion in TOUCH_EMOTION_MAP.items():
             assert emotion in EMOTIONS, f"{gesture} maps to invalid emotion {emotion}"
 

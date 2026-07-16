@@ -155,7 +155,8 @@ class TestPersonalityAffectsMatching:
     def test_high_humor_reduces_gravity(self):
         """Characters with high humor should get less grave voices."""
         vec = _build_character_vector(
-            "狗", age_setting=None,
+            "狗",
+            age_setting=None,
             personality={"warmth": 50, "energy": 50, "extrovert": 50, "humor": 90, "curiosity": 50},
             relationship=None,
         )
@@ -163,7 +164,8 @@ class TestPersonalityAffectsMatching:
 
     def test_low_humor_increases_gravity(self):
         vec = _build_character_vector(
-            "狗", age_setting=None,
+            "狗",
+            age_setting=None,
             personality={"warmth": 50, "energy": 50, "extrovert": 50, "humor": 10, "curiosity": 50},
             relationship=None,
         )
@@ -171,12 +173,14 @@ class TestPersonalityAffectsMatching:
 
     def test_high_curiosity_reduces_maturity(self):
         vec = _build_character_vector(
-            "狗", age_setting=None,
+            "狗",
+            age_setting=None,
             personality={"warmth": 50, "energy": 50, "extrovert": 50, "humor": 50, "curiosity": 90},
             relationship=None,
         )
         vec_low_curiosity = _build_character_vector(
-            "狗", age_setting=None,
+            "狗",
+            age_setting=None,
             personality={"warmth": 50, "energy": 50, "extrovert": 50, "humor": 50, "curiosity": 30},
             relationship=None,
         )
@@ -189,7 +193,8 @@ class TestPersonalityAffectsMatching:
 class TestAgeAffectsMatching:
     def test_young_child_gets_child_voice(self):
         result = match_voice(
-            species="兔子", age_setting=3,
+            species="兔子",
+            age_setting=3,
             personality={"warmth": 70, "energy": 80, "extrovert": 70, "humor": 60, "curiosity": 80},
         )
         voice = VOICES[result["voice_id"]]
@@ -197,7 +202,8 @@ class TestAgeAffectsMatching:
 
     def test_elderly_gets_mature_voice(self):
         result = match_voice(
-            species="熊", age_setting=80,
+            species="熊",
+            age_setting=80,
             personality={"warmth": 70, "energy": 20, "extrovert": 30, "humor": 40, "curiosity": 30},
         )
         voice = VOICES[result["voice_id"]]
@@ -205,7 +211,9 @@ class TestAgeAffectsMatching:
 
     def test_age_5_reduces_maturity(self):
         vec = _build_character_vector("狗", age_setting=5, personality=None, relationship=None)
-        vec_none = _build_character_vector("狗", age_setting=None, personality=None, relationship=None)
+        vec_none = _build_character_vector(
+            "狗", age_setting=None, personality=None, relationship=None
+        )
         assert vec["m"] < vec_none["m"]
         assert vec["g"] < vec_none["g"]
 
@@ -216,12 +224,16 @@ class TestAgeAffectsMatching:
 
     def test_age_30_increases_maturity(self):
         vec = _build_character_vector("狗", age_setting=30, personality=None, relationship=None)
-        vec_none = _build_character_vector("狗", age_setting=None, personality=None, relationship=None)
+        vec_none = _build_character_vector(
+            "狗", age_setting=None, personality=None, relationship=None
+        )
         assert vec["m"] > vec_none["m"]
 
     def test_age_60_increases_both(self):
         vec = _build_character_vector("狗", age_setting=60, personality=None, relationship=None)
-        vec_none = _build_character_vector("狗", age_setting=None, personality=None, relationship=None)
+        vec_none = _build_character_vector(
+            "狗", age_setting=None, personality=None, relationship=None
+        )
         assert vec["m"] > vec_none["m"]
         assert vec["g"] > vec_none["g"]
 
@@ -372,7 +384,8 @@ class TestSSMLParams:
     def test_young_age_boosts_pitch_and_adds_lolita(self):
         """Age <= 5 should push pitch +0.1 and prefer lolita effect."""
         result = match_voice(
-            species="熊", age_setting=3,
+            species="熊",
+            age_setting=3,
             personality={"warmth": 70, "energy": 80, "extrovert": 70, "humor": 60, "curiosity": 80},
         )
         # Even bears get lolita at age 3 (baby bear)
@@ -383,13 +396,37 @@ class TestSSMLParams:
     def test_ssml_pitch_clamped(self):
         """SSML pitch should always be in [0.5, 2.0]."""
         test_cases = [
-            {"species": "小猫", "age_setting": 3, "personality": {"warmth": 100, "energy": 100, "extrovert": 100, "humor": 100, "curiosity": 100}},
-            {"species": "龙", "age_setting": 100, "personality": {"warmth": 0, "energy": 0, "extrovert": 0, "humor": 0, "curiosity": 0}},
+            {
+                "species": "小猫",
+                "age_setting": 3,
+                "personality": {
+                    "warmth": 100,
+                    "energy": 100,
+                    "extrovert": 100,
+                    "humor": 100,
+                    "curiosity": 100,
+                },
+            },
+            {
+                "species": "龙",
+                "age_setting": 100,
+                "personality": {
+                    "warmth": 0,
+                    "energy": 0,
+                    "extrovert": 0,
+                    "humor": 0,
+                    "curiosity": 0,
+                },
+            },
         ]
         for tc in test_cases:
             result = match_voice(**tc)
-            assert 0.5 <= result["ssml_pitch"] <= 2.0, f"pitch {result['ssml_pitch']} out of range for {tc}"
-            assert 0.5 <= result["ssml_rate"] <= 2.0, f"rate {result['ssml_rate']} out of range for {tc}"
+            assert 0.5 <= result["ssml_pitch"] <= 2.0, (
+                f"pitch {result['ssml_pitch']} out of range for {tc}"
+            )
+            assert 0.5 <= result["ssml_rate"] <= 2.0, (
+                f"rate {result['ssml_rate']} out of range for {tc}"
+            )
 
     def test_unknown_species_gets_defaults(self):
         """Unknown species should get default SSML (pitch=1.0, rate=1.0, no effect)."""
@@ -420,7 +457,16 @@ class TestSSMLParams:
 class TestReturnShape:
     def test_all_keys_present(self):
         result = match_voice(species="猫")
-        expected_keys = {"voice_id", "ssml_pitch", "ssml_rate", "ssml_effect", "speed", "pitch_rate", "speech_rate", "reason"}
+        expected_keys = {
+            "voice_id",
+            "ssml_pitch",
+            "ssml_rate",
+            "ssml_effect",
+            "speed",
+            "pitch_rate",
+            "speech_rate",
+            "reason",
+        }
         assert set(result.keys()) == expected_keys
 
     def test_speed_default(self):
@@ -469,8 +515,15 @@ class TestVectorClamping:
     def test_values_clamped_to_0_100(self):
         """Even extreme inputs should result in clamped vectors."""
         vec = _build_character_vector(
-            "龙", age_setting=200,
-            personality={"warmth": 100, "energy": 100, "extrovert": 100, "humor": 0, "curiosity": 0},
+            "龙",
+            age_setting=200,
+            personality={
+                "warmth": 100,
+                "energy": 100,
+                "extrovert": 100,
+                "humor": 0,
+                "curiosity": 0,
+            },
             relationship="导师",
         )
         for key in ("w", "e", "m", "g"):
@@ -478,7 +531,8 @@ class TestVectorClamping:
 
     def test_extreme_low_inputs_clamped(self):
         vec = _build_character_vector(
-            "小猫", age_setting=1,
+            "小猫",
+            age_setting=1,
             personality={"warmth": 0, "energy": 0, "extrovert": 0, "humor": 100, "curiosity": 100},
             relationship="小跟班",
         )

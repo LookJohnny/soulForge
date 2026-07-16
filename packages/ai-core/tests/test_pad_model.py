@@ -25,6 +25,7 @@ from ai_core.services.emotion import EmotionEngine, EMOTIONS
 # PADState basics
 # ──────────────────────────────────────────────
 
+
 class TestPADState:
     def test_default_values(self):
         s = PADState()
@@ -89,6 +90,7 @@ class TestPADState:
 # Emotion ↔ PAD mapping
 # ──────────────────────────────────────────────
 
+
 class TestEmotionPADMapping:
     def test_all_emotions_have_anchors(self):
         for emotion in EMOTIONS:
@@ -139,6 +141,7 @@ class TestEmotionPADMapping:
 # ──────────────────────────────────────────────
 # Transition dynamics
 # ──────────────────────────────────────────────
+
 
 class TestTransition:
     def test_no_inputs_decays_toward_neutral(self):
@@ -213,6 +216,7 @@ class TestTransition:
 # PAD → TTS offsets
 # ──────────────────────────────────────────────
 
+
 class TestPADToTTS:
     def test_neutral_near_zero(self):
         offsets = pad_to_tts_offsets(PADState.neutral())
@@ -240,6 +244,7 @@ class TestPADToTTS:
 # ──────────────────────────────────────────────
 # PAD → Prompt description
 # ──────────────────────────────────────────────
+
 
 class TestPADToPrompt:
     def test_happy_state(self):
@@ -271,6 +276,7 @@ class TestPADToPrompt:
 # PAD Engine (with cache)
 # ──────────────────────────────────────────────
 
+
 class TestPADEngine:
     def setup_method(self):
         self.store = {}
@@ -281,10 +287,12 @@ class TestPADEngine:
             if raw is None:
                 return None
             import json
+
             return json.loads(raw)
 
         async def mock_set_json(key, value, ttl=3600):
             import json
+
             self.store[key] = json.dumps(value)
 
         self.cache.get_json = AsyncMock(side_effect=mock_get_json)
@@ -348,6 +356,7 @@ class TestPADEngine:
 # EmotionEngine PAD integration
 # ──────────────────────────────────────────────
 
+
 class TestEmotionEnginePAD:
     def setup_method(self):
         self.store = {}
@@ -364,10 +373,12 @@ class TestEmotionEnginePAD:
             if raw is None:
                 return None
             import json
+
             return json.loads(raw)
 
         async def mock_set_json(key, value, ttl=3600):
             import json
+
             self.store[key] = json.dumps(value)
 
         self.cache.get = AsyncMock(side_effect=mock_get)
@@ -402,7 +413,7 @@ class TestEmotionEnginePAD:
         pad = PADState(0.8, 0.5, 0.3)  # happy-like state
         pitch, rate = self.engine.apply_tts_offsets_pad(pad, 1.0, 1.0)
         assert pitch > 1.0  # happy → higher pitch
-        assert rate > 1.0   # excited → faster rate
+        assert rate > 1.0  # excited → faster rate
 
     def test_get_prompt_text_pad(self):
         pad = PADState(0.8, 0.6, 0.3)
@@ -414,7 +425,9 @@ class TestEmotionEnginePAD:
         """Touch should visibly shift PAD when text is neutral."""
         # Establish a neutral baseline
         pad_no_touch, _ = await self.engine.update_with_pad("sess-a", text_emotion="calm")
-        pad_with_pat, _ = await self.engine.update_with_pad("sess-b", text_emotion="calm", touch_gesture="pat")
+        pad_with_pat, _ = await self.engine.update_with_pad(
+            "sess-b", text_emotion="calm", touch_gesture="pat"
+        )
         # Pat adds positive pleasure impulse, so with-pat should have higher P
         assert pad_with_pat.p > pad_no_touch.p
 
@@ -436,14 +449,17 @@ class TestEmotionEnginePAD:
 # Data integrity
 # ──────────────────────────────────────────────
 
+
 class TestPADDataIntegrity:
     def test_all_touch_gestures_have_impulse(self):
         from ai_core.services.touch import TOUCH_GESTURES
+
         for gesture in TOUCH_GESTURES:
             assert gesture in TOUCH_PAD_IMPULSE
 
     def test_all_user_moods_have_pad(self):
         from ai_core.services.emotion import _USER_MOOD_KEYWORDS
+
         for mood in _USER_MOOD_KEYWORDS:
             assert mood in USER_MOOD_PAD
 
@@ -455,5 +471,5 @@ class TestPADDataIntegrity:
 
     def test_impulse_reasonable_magnitude(self):
         for gesture, impulse in TOUCH_PAD_IMPULSE.items():
-            mag = math.sqrt(impulse.p ** 2 + impulse.a ** 2 + impulse.d ** 2)
+            mag = math.sqrt(impulse.p**2 + impulse.a**2 + impulse.d**2)
             assert mag < 1.5, f"{gesture} impulse too large: {mag}"

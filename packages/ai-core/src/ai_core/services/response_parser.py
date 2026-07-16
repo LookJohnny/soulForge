@@ -127,6 +127,17 @@ def parse_llm_response(raw_text: str) -> StructuredResponse:
         if not _has_top_level:
             data = None  # Matched a sub-object (e.g. PAD), not the full response
 
+    # A reply like '晚安啦{"action":"挥挥手"}{"pad":{...}}' matches the bare-JSON
+    # regex on the first fragment (it has a top-level key) but drops the spoken
+    # text before the brace. When the matched dict carries no dialogue and the
+    # raw reply has leading text, prefer the concatenated-fragments parse so
+    # the character's words aren't lost.
+    if isinstance(data, dict) and not str(data.get("dialogue", data.get("text", ""))).strip():
+        concat_data = _parse_concat_json(raw_text)
+        if concat_data and concat_data.get("dialogue"):
+            data = {**data, **concat_data}
+            logger.debug("response_parser.concat_rescued_dialogue")
+
     # Fallback 1: YAML-like format (key: value lines)
     if not isinstance(data, dict):
         yaml_data = _parse_yaml_like(raw_text)
@@ -142,7 +153,9 @@ def parse_llm_response(raw_text: str) -> StructuredResponse:
             logger.debug("response_parser.concat_fallback_used")
 
     if not isinstance(data, dict):
-        logger.debug("response_parser.no_structured_data")
+        # Visible at info so structured-output regressions surface in logs —
+        # every occurrence means the LLM reply fell back to plain text.
+        logger.info("response_parser.no_structured_data", snippet=raw_text[:120])
         resp.dialogue = _clean_legacy_text(raw_text)
         resp.parsed_ok = False
         return resp
@@ -210,8 +223,8 @@ def _try_fix_json(s: str) -> dict | None:
 
     try:
         return json.loads(fixed)
-    except json.JSONDecodeError:
-        pass
+    except json.JSONDecodeError as e:
+        logger.debug("response_parser.fix_json_failed", error=str(e), snippet=fixed[:120])
 
     return None
 
@@ -267,8 +280,12 @@ def _parse_concat_json(raw: str) -> dict | None:
                         obj = json.loads(fragment)
                         if isinstance(obj, dict):
                             result.update(obj)
-                    except json.JSONDecodeError:
-                        pass
+                    except json.JSONDecodeError as e:
+                        logger.debug(
+                            "response_parser.concat_fragment_skipped",
+                            error=str(e),
+                            snippet=fragment[:120],
+                        )
                     pos = i + 1
                     break
         else:

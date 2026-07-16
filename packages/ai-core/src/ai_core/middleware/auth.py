@@ -152,9 +152,9 @@ async def _verify_api_key(key: str) -> dict | None:
 # ──────────────────────────────────────────────
 
 # Paths that skip authentication
-PUBLIC_PATHS = frozenset(
-    {"/health", "/metrics", "/metrics/latency", "/docs", "/openapi.json", "/redoc"}
-)
+PUBLIC_PATHS = frozenset({"/health"})
+# Introspection/metrics endpoints leak schema and usage data — public only in dev
+DEV_PUBLIC_PATHS = frozenset({"/metrics", "/metrics/latency", "/docs", "/openapi.json", "/redoc"})
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -170,11 +170,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Skip auth for public endpoints
         if path in PUBLIC_PATHS:
             return await call_next(request)
+        if settings.environment != "production" and path in DEV_PUBLIC_PATHS:
+            return await call_next(request)
 
         # --- 1. Internal service token ---
         service_token = request.headers.get("x-service-token")
         if service_token:
-            if service_token == settings.service_token:
+            if settings.service_token and hmac.compare_digest(
+                service_token, settings.service_token
+            ):
                 request.state.auth = AuthInfo(
                     user_id=None,
                     brand_id=request.headers.get("x-brand-id", ""),

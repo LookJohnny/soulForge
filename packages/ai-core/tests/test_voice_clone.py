@@ -89,32 +89,32 @@ def test_is_safe_ip_allows_public_v4():
 
 def test_is_safe_ip_rejects_rfc1918_and_friends():
     for bad in [
-        "127.0.0.1",       # loopback
-        "10.0.0.1",        # private A
-        "192.168.1.1",     # private C
-        "169.254.169.254", # link-local (AWS metadata)
-        "100.64.1.1",      # CGNAT
-        "224.0.0.1",       # multicast
-        "0.0.0.0",         # unspecified
-        "::1",             # loopback v6
-        "fc00::1",         # unique-local v6
-        "fe80::1",         # link-local v6
+        "127.0.0.1",  # loopback
+        "10.0.0.1",  # private A
+        "192.168.1.1",  # private C
+        "169.254.169.254",  # link-local (AWS metadata)
+        "100.64.1.1",  # CGNAT
+        "224.0.0.1",  # multicast
+        "0.0.0.0",  # unspecified
+        "::1",  # loopback v6
+        "fc00::1",  # unique-local v6
+        "fe80::1",  # link-local v6
     ]:
         assert not _is_safe_ip(bad), f"{bad} should be rejected"
 
 
 def test_rewrite_to_ip_preserves_path_and_query():
-    assert _rewrite_to_ip(
-        "https://example.com/path?a=1", "93.184.216.34"
-    ) == "https://93.184.216.34/path?a=1"
+    assert (
+        _rewrite_to_ip("https://example.com/path?a=1", "93.184.216.34")
+        == "https://93.184.216.34/path?a=1"
+    )
     # Port preserved
-    assert _rewrite_to_ip(
-        "https://example.com:8443/x", "1.2.3.4"
-    ) == "https://1.2.3.4:8443/x"
+    assert _rewrite_to_ip("https://example.com:8443/x", "1.2.3.4") == "https://1.2.3.4:8443/x"
     # IPv6 gets bracketed
-    assert _rewrite_to_ip(
-        "https://example.com/x", "2606:4700:4700::1111"
-    ) == "https://[2606:4700:4700::1111]/x"
+    assert (
+        _rewrite_to_ip("https://example.com/x", "2606:4700:4700::1111")
+        == "https://[2606:4700:4700::1111]/x"
+    )
 
 
 def test_audio_sniffer_accepts_wav_and_mp3():

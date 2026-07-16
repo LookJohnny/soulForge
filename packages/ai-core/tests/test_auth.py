@@ -19,6 +19,7 @@ import ai_core.middleware.auth as auth_mod
 from ai_core.middleware.auth import (
     AuthInfo,
     AuthMiddleware,
+    DEV_PUBLIC_PATHS,
     PUBLIC_PATHS,
     _verify_api_key,
     decrypt_nextauth_jwe,
@@ -237,26 +238,30 @@ class TestAPIKeyVerification:
 
 class TestAuthMiddlewarePaths:
     def test_health_skips_auth(self):
-        """GET /health should not require authentication."""
+        """GET /health should not require authentication anywhere."""
         assert "/health" in PUBLIC_PATHS
 
-    def test_metrics_skips_auth(self):
-        """GET /metrics should not require authentication."""
-        assert "/metrics" in PUBLIC_PATHS
+    def test_metrics_public_only_in_dev(self):
+        """Metrics leak usage data — public in dev, authenticated in prod."""
+        assert "/metrics" not in PUBLIC_PATHS
+        assert "/metrics" in DEV_PUBLIC_PATHS
+        assert "/metrics/latency" in DEV_PUBLIC_PATHS
 
-    def test_docs_skips_auth(self):
-        """Docs endpoints skip auth."""
-        assert "/docs" in PUBLIC_PATHS
-        assert "/openapi.json" in PUBLIC_PATHS
+    def test_docs_public_only_in_dev(self):
+        """API schema introspection is an information-disclosure surface in prod."""
+        assert "/docs" not in PUBLIC_PATHS
+        assert "/docs" in DEV_PUBLIC_PATHS
+        assert "/openapi.json" in DEV_PUBLIC_PATHS
 
     def test_non_public_path_not_in_set(self):
         """Arbitrary paths should NOT be in public paths."""
-        assert "/api/chat" not in PUBLIC_PATHS
-        assert "/prompt/build" not in PUBLIC_PATHS
+        assert "/api/chat" not in PUBLIC_PATHS | DEV_PUBLIC_PATHS
+        assert "/prompt/build" not in PUBLIC_PATHS | DEV_PUBLIC_PATHS
 
 
 class _FakeHeaders(dict):
     """A dict subclass that behaves like Starlette's Headers for .get()."""
+
     pass
 
 
@@ -288,9 +293,11 @@ class TestAuthMiddlewareBlocking:
 
         mock_request = MagicMock()
         mock_request.url.path = "/api/chat"
-        mock_request.headers = _FakeHeaders({
-            "authorization": "Bearer invalid-token-not-jwe-not-sk",
-        })
+        mock_request.headers = _FakeHeaders(
+            {
+                "authorization": "Bearer invalid-token-not-jwe-not-sk",
+            }
+        )
 
         # Clear the key cache
         auth_mod._jwe_key_cache = None

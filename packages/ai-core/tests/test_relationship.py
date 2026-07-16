@@ -5,8 +5,11 @@ from unittest.mock import AsyncMock, MagicMock
 from datetime import date, timedelta
 
 from ai_core.services.relationship import (
-    RelationshipEngine, _affinity_to_stage,
-    STAGE_PROMPTS, STAGE_MEMORY_DEPTH, STAGE_TRIGGER_PROB,
+    RelationshipEngine,
+    _affinity_to_stage,
+    STAGE_PROMPTS,
+    STAGE_MEMORY_DEPTH,
+    STAGE_TRIGGER_PROB,
 )
 
 
@@ -75,8 +78,13 @@ class TestRelationshipEngineGetState:
 
     @pytest.mark.asyncio
     async def test_cached_state_returned(self):
-        cached = {"affinity": 500, "stage": "FAMILIAR", "streak_days": 3,
-                  "last_interaction_date": "2026-03-17", "turn_count_today": 5}
+        cached = {
+            "affinity": 500,
+            "stage": "FAMILIAR",
+            "streak_days": 3,
+            "last_interaction_date": "2026-03-17",
+            "turn_count_today": 5,
+        }
         self.cache.get_json = AsyncMock(return_value=cached)
         state = await self.engine.get_state("user-1", "char-1")
         assert state["affinity"] == 500

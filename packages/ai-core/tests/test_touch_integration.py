@@ -20,10 +20,12 @@ from ai_core.services.emotion import EmotionEngine
 # Fixtures
 # ──────────────────────────────────────────────
 
+
 @pytest.fixture
 def redis_cache():
     """Real Redis-backed cache for integration tests."""
     import redis.asyncio as aioredis
+
     client = aioredis.from_url("redis://localhost:6379/1", decode_responses=True)
     cache = CacheService(redis_client=client)
     yield cache
@@ -68,6 +70,7 @@ def mock_cache():
 # ──────────────────────────────────────────────
 # Integration: Touch → Emotion chain
 # ──────────────────────────────────────────────
+
 
 class TestTouchEmotionChain:
     """Test: touch event → emotion state update → prompt text generation."""
@@ -139,6 +142,7 @@ class TestTouchEmotionChain:
 # Integration: Touch → Cache → Pipeline retrieval
 # ──────────────────────────────────────────────
 
+
 class TestTouchCacheChain:
     """Test: touch event stored → pipeline reads it → context cleared after use."""
 
@@ -190,6 +194,7 @@ class TestTouchCacheChain:
 # ──────────────────────────────────────────────
 # Integration: Touch → Mood hint chain
 # ──────────────────────────────────────────────
+
 
 class TestTouchMoodChain:
     """Test: touch mood_hint fills in neutral user mood."""
@@ -244,6 +249,7 @@ class TestTouchMoodChain:
 # ──────────────────────────────────────────────
 # Integration: Touch prompt injection
 # ──────────────────────────────────────────────
+
 
 class TestTouchPromptInjection:
     """Test: touch context appears correctly in system prompt template."""
@@ -328,6 +334,7 @@ class TestTouchPromptInjection:
 # ──────────────────────────────────────────────
 # Full scenario: simulate a complete interaction
 # ──────────────────────────────────────────────
+
 
 class TestFullTouchScenario:
     """Simulate: user hugs toy → toy detects hug → says something → user speaks → LLM gets touch context."""

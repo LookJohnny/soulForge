@@ -4,8 +4,11 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 
 from ai_core.services.emotion import (
-    EmotionEngine, EMOTIONS, DEFAULT_EMOTION,
-    EMOTION_DESCRIPTIONS, EMOTION_TTS_OFFSETS,
+    EmotionEngine,
+    EMOTIONS,
+    DEFAULT_EMOTION,
+    EMOTION_DESCRIPTIONS,
+    EMOTION_TTS_OFFSETS,
 )
 
 

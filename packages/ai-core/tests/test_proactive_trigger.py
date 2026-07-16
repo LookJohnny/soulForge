@@ -31,9 +31,9 @@ class TestTriggerEligibility:
     @pytest.mark.asyncio
     async def test_not_first_message_returns_none(self):
         self.cache.get = AsyncMock(return_value="1")  # already started
-        result = await self.svc.maybe_generate_trigger("u1", "c1", "s1", "BESTFRIEND", [
-            {"type": "PREFERENCE", "content": "喜欢恐龙"}
-        ])
+        result = await self.svc.maybe_generate_trigger(
+            "u1", "c1", "s1", "BESTFRIEND", [{"type": "PREFERENCE", "content": "喜欢恐龙"}]
+        )
         assert result is None
 
 

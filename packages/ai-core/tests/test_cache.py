@@ -103,9 +103,7 @@ class TestCacheInvalidatePattern:
     async def test_invalidate_pattern_deletes_matching_keys(self):
         mock_redis = _make_mock_redis()
         # Simulate scan returning keys then finishing
-        mock_redis.scan = AsyncMock(
-            return_value=(0, ["char:abc", "char:def"])
-        )
+        mock_redis.scan = AsyncMock(return_value=(0, ["char:abc", "char:def"]))
         cache = CacheService(redis_client=mock_redis)
 
         await cache.invalidate_pattern("char:*")
