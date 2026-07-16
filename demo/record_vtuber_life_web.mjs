@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright';
 
@@ -12,12 +12,14 @@ const width = Number(args.width ?? 1280);
 const height = Number(args.height ?? 720);
 const totalFrames = Math.max(1, Math.round(durationMinutes * 60 * fps));
 const port = Number(args.port ?? 5178);
+const page_ = String(args.page ?? 'index.html');
 const clean = args.clean === true || args.clean === 'true' || args.clean === '1';
+const resume = args.resume === true || args.resume === 'true';
 const simStartMinutes = Number(args.simStartMinutes ?? 0);
 const simDurationMinutes = Number(args.simDurationMinutes ?? durationMinutes);
 
 mkdirSync(resolve('outputs/webgl'), { recursive: true });
-rmSync(framesDir, { recursive: true, force: true });
+if (!resume) rmSync(framesDir, { recursive: true, force: true });
 mkdirSync(framesDir, { recursive: true });
 
 const vite = spawn(
@@ -30,7 +32,7 @@ try {
   await waitForServer(port);
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
-  const url = `http://127.0.0.1:${port}/demo/vtuber_life_web/index.html${clean ? '?clean=1' : ''}`;
+  const url = `http://127.0.0.1:${port}/demo/vtuber_life_web/${page_}${clean ? '?clean=1' : ''}`;
   await page.goto(url, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => window.__soulforge?.ready?.() === true, null, { timeout: 120000 });
 
@@ -38,10 +40,9 @@ try {
     const progress = totalFrames <= 1 ? 0 : frame / (totalFrames - 1);
     const simTime = (simStartMinutes + progress * simDurationMinutes) * 60;
     await page.evaluate((t) => window.__soulforge.setTime(t), simTime);
-    await page.screenshot({
-      path: join(framesDir, `frame_${String(frame).padStart(6, '0')}.png`),
-      animations: 'disabled',
-    });
+    const framePath = join(framesDir, `frame_${String(frame).padStart(6, '0')}.png`);
+    if (resume && existsSync(framePath)) continue;  // state advanced; screenshot present
+    await page.screenshot({ path: framePath, animations: 'disabled' });
     if (frame % 300 === 0) {
       console.log(`captured ${frame}/${totalFrames}`);
     }

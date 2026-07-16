@@ -117,6 +117,52 @@ kbd {
   font-weight: 640;
 }
 
+.perception-panel {
+  right: 22px;
+  bottom: 58px;
+  width: 310px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.perception-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.perception-heading span {
+  color: rgba(224, 235, 255, 0.72);
+}
+
+.perception-panel p {
+  margin: 8px 0;
+  color: rgba(224, 235, 255, 0.72);
+  line-height: 1.35;
+}
+
+.perception-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.perception-actions button {
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid rgba(151, 187, 221, 0.35);
+  border-radius: 6px;
+  color: #f6f8ff;
+  background: rgba(255, 255, 255, 0.09);
+  cursor: pointer;
+}
+
+.perception-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .relations-panel {
   top: 156px;
   right: 56px;
@@ -551,6 +597,7 @@ kbd {
 
 body.clean .top-left,
 body.clean .source,
+body.clean .perception-panel,
 body.clean .cards,
 body.clean .queue,
 body.clean .bubble,
@@ -576,7 +623,8 @@ body.clean .shortcuts-panel {
   .top-left,
   .queue,
   .goal-panel,
-  .source {
+  .source,
+  .perception-panel {
     display: none;
   }
 

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 
@@ -7,53 +7,53 @@ const video = resolve(args.video ?? 'outputs/webgl/vtuber_life_true_vrm_activity
 const out = resolve(args.out ?? 'outputs/webgl/vtuber_life_true_vrm_activity_voiceover.mp4');
 const workDir = resolve(args.workDir ?? 'outputs/webgl/voice_demo');
 const aiCoreUrl = String(args.aiCoreUrl ?? process.env.AI_CORE_URL ?? '').replace(/\/$/, '');
-const mode = String(args.mode ?? 'auto'); // auto | ai-core | edge | say
+const mode = String(args.mode ?? 'auto'); // auto | fish | ai-core | edge | say
+const dotenv = loadDotEnv(resolve('.env'));
+const fishApiKey = process.env.FISH_AUDIO_API_KEY ?? dotenv.FISH_AUDIO_API_KEY ?? '';
+const fishModel = process.env.FISH_AUDIO_MODEL ?? dotenv.FISH_AUDIO_MODEL ?? 's1';
 const duration = Number(args.duration ?? 12);
 const eventsJson = args.eventsJson ? resolve(args.eventsJson) : null;
+const skipMux = args.skipMux === true || args.skipMux === 'true';
+const skipFit = args.skipFit === true || args.skipFit === 'true';
 
-if (!existsSync(video)) {
+if (!skipMux && !existsSync(video)) {
   throw new Error(`Video not found: ${video}`);
 }
-if (!['auto', 'ai-core', 'edge', 'say'].includes(mode)) {
-  throw new Error(`Unsupported --mode ${mode}; expected auto, ai-core, edge, or say`);
+if (!['auto', 'fish', 'ai-core', 'edge', 'say'].includes(mode)) {
+  throw new Error(`Unsupported --mode ${mode}; expected auto, fish, ai-core, edge, or say`);
+}
+if (mode === 'fish' && !fishApiKey) {
+  throw new Error('--mode fish requires FISH_AUDIO_API_KEY (env or .env)');
 }
 
 rmSync(workDir, { recursive: true, force: true });
 mkdirSync(workDir, { recursive: true });
 mkdirSync(dirname(out), { recursive: true });
 
-const agents = {
-  'Astra-F': {
-    plannedProvider: 'fish',
-    fishVoice: 'a6b29d0ef2404ca1aa8d1fdd8d7a2a90',
-    fishLabel: '女性仿生陪伴机器人 / 温暖低饱和',
-    edgeVoice: 'zh-CN-XiaoxiaoNeural',
-    sayVoice: 'Tingting',
-    rate: 164,
-    pitch: 0.98,
-    post: 'soft',
-  },
-  'Mason-M': {
-    plannedProvider: 'fish',
-    fishVoice: 'd99547e2dad64ce0aa085319a3c9cc56',
-    fishLabel: '男性双足服务机器人 / 稳定低频',
-    edgeVoice: 'zh-CN-YunyangNeural',
-    sayVoice: 'Reed (中文（中国大陆）)',
-    rate: 158,
-    pitch: 0.92,
-    post: 'warm',
-  },
-  'Hex-01': {
-    plannedProvider: 'fish',
-    fishVoice: '15896f78e288417db16cc34da8fc6f09',
-    fishLabel: '非人形侦察机器人 / 合成机械音',
-    edgeVoice: 'zh-CN-YunjianNeural',
-    sayVoice: 'Rocko (中文（中国大陆）)',
-    rate: 148,
-    pitch: 0.82,
-    post: 'robot',
-  },
-};
+// voice map is built from configs/characters.json — the single source of truth
+const agents = loadAgentsFromCharacterConfig(resolve('configs/characters.json'));
+
+function loadAgentsFromCharacterConfig(configPath) {
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  const map = {};
+  for (const character of config.characters) {
+    const voice = character.voice ?? {};
+    const fish = voice.fish ?? {};
+    const edge = voice.edge ?? {};
+    map[character.name] = {
+      plannedProvider: fish.reference_id ? 'fish' : 'edge',
+      fishVoice: fish.reference_id ?? null,
+      fishLabel: fish.label ?? character.role_label ?? '',
+      fishSpeed: fish.speed ?? 1.0,
+      edgeVoice: edge.voice ?? 'zh-CN-XiaoxiaoNeural',
+      sayVoice: voice.say ?? 'Tingting',
+      rate: edge.rate ?? 160,
+      pitch: edge.pitch ?? 1.0,
+      post: voice.post ?? 'soft',
+    };
+  }
+  return map;
+}
 
 const defaultEvents = [
   { t: 0.55, agent: 'Astra-F', text: '早间陪伴模式启动，我先校准表情和动作。', emotion: 'warm' },
@@ -79,7 +79,10 @@ for (let i = 0; i < events.length; i += 1) {
   const wavPath = join(workDir, `clip_${String(i).padStart(2, '0')}.wav`);
   let provider = mode;
 
-  if (mode === 'ai-core') {
+  if (mode === 'fish') {
+    await synthesizeWithFish(event, agent, rawPath);
+    provider = 'fish';
+  } else if (mode === 'ai-core') {
     if (!aiCoreUrl) {
       throw new Error('--mode ai-core requires --ai-core-url or AI_CORE_URL');
     }
@@ -93,11 +96,11 @@ for (let i = 0; i < events.length; i += 1) {
     provider = 'say-fallback';
   } else {
     try {
-      if (!aiCoreUrl) {
-        throw new Error('AI Core URL not configured');
+      if (!fishApiKey) {
+        throw new Error('Fish Audio key not configured');
       }
-      await synthesizeWithAiCore(event, agent, rawPath);
-      provider = 'ai-core';
+      await synthesizeWithFish(event, agent, rawPath);
+      provider = 'fish';
     } catch {
       try {
         await synthesizeWithEdge(event, agent, rawPath);
@@ -109,7 +112,12 @@ for (let i = 0; i < events.length; i += 1) {
     }
   }
 
-  await postProcessClip(rawPath, wavPath, agent);
+  await postProcessClip(rawPath, wavPath, agent, provider);
+  if (!skipFit) {
+    const nextT = events[i + 1]?.t;
+    const windowEnd = (nextT != null ? nextT : duration) - 0.12;
+    await fitClipToWindow(wavPath, Math.max(1.0, windowEnd - event.t));
+  }
   resolved.push({ ...event, clip: wavPath, provider });
 }
 
@@ -153,12 +161,69 @@ writeFileSync(
   'utf8',
 );
 
-await mux(video, audioPath, srtPath, out);
+if (!skipMux) await mux(video, audioPath, srtPath, out);
 
 console.log(`wrote ${out}`);
 console.log(`audio ${audioPath}`);
 console.log(`srt ${srtPath}`);
 console.log(`manifest ${manifestPath}`);
+
+async function synthesizeWithFish(event, agent, targetPath) {
+  const response = await fetch('https://api.fish.audio/v1/tts', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${fishApiKey}`,
+      model: fishModel,
+    },
+    body: JSON.stringify({
+      text: event.text,
+      reference_id: agent.fishVoice,
+      format: 'mp3',
+      mp3_bitrate: 128,
+      normalize: true,
+      temperature: 0.7,
+      top_p: 0.8,
+      latency: 'normal',
+      prosody: { speed: agent.fishSpeed ?? 1.0, volume: 0 },
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Fish Audio TTS failed: ${response.status} ${(await response.text()).slice(0, 200)}`);
+  }
+  const audio = Buffer.from(await response.arrayBuffer());
+  if (audio.length < 100) {
+    throw new Error('Fish Audio returned empty audio');
+  }
+  const mp3Path = targetPath.replace(/\.aiff$/, '.fish.mp3');
+  writeFileSync(mp3Path, audio);
+  await run('ffmpeg', ['-y', '-i', mp3Path, targetPath]);
+}
+
+async function probeDuration(path) {
+  return new Promise((resolveProbe, rejectProbe) => {
+    const child = spawn('ffprobe', ['-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', path]);
+    let out = '';
+    child.stdout.on('data', (d) => { out += d.toString(); });
+    child.on('exit', (code) => {
+      if (code === 0) resolveProbe(Number(out.trim()));
+      else rejectProbe(new Error(`ffprobe exited ${code}`));
+    });
+  });
+}
+
+async function fitClipToWindow(wavPath, maxDuration) {
+  // real voices pace themselves; if a line overruns its visual beat window,
+  // compress up to 12% with atempo (imperceptible) instead of colliding
+  const clipDuration = await probeDuration(wavPath);
+  if (!Number.isFinite(clipDuration) || clipDuration <= maxDuration) return;
+  const tempo = Math.min(1.18, clipDuration / maxDuration);
+  const tmpPath = wavPath.replace(/\.wav$/, '.fit.wav');
+  await run('ffmpeg', ['-y', '-i', wavPath, '-af', `atempo=${tempo.toFixed(4)}`, tmpPath]);
+  rmSync(wavPath, { force: true });
+  renameSync(tmpPath, wavPath);
+  console.log(`fit ${wavPath.split('/').pop()} ${clipDuration.toFixed(2)}s -> <=${maxDuration.toFixed(2)}s (atempo ${tempo.toFixed(3)})`);
+}
 
 async function synthesizeWithAiCore(event, agent, targetPath) {
   const response = await fetch(`${aiCoreUrl}/tts/synthesize`, {
@@ -235,15 +300,26 @@ async function synthesizeWithSay(event, agent, targetPath) {
   throw lastError ?? new Error('say synthesis failed');
 }
 
-async function postProcessClip(inputPath, outputPath, agent) {
+async function postProcessClip(inputPath, outputPath, agent, provider = 'edge-tts') {
   const filters = [];
-  if (agent.pitch !== 1) {
-    filters.push(`asetrate=44100*${agent.pitch.toFixed(3)}`, 'aresample=44100', `atempo=${(1 / agent.pitch).toFixed(3)}`);
+  // pitch compensation is for neural-TTS voices only; fish references are final
+  const pitch = provider === 'fish' ? 1 : agent.pitch;
+  if (pitch !== 1) {
+    filters.push(`asetrate=44100*${pitch.toFixed(3)}`, 'aresample=44100', `atempo=${(1 / pitch).toFixed(3)}`);
   } else {
     filters.push('aresample=44100');
   }
-  if (agent.post === 'robot') {
-    filters.push('aecho=0.60:0.42:34:0.14', 'chorus=0.28:0.55:38:0.20:0.16:2', 'bass=g=2');
+  if (agent.post === 'robot' && provider === 'fish') {
+    // the fish reference already sounds synthetic; only a whisper of sparkle
+    filters.push('treble=g=1');
+  } else if (agent.post === 'robot') {
+    // subtle digital tinge: gentle flanger + mild bit reduction, no warbly chorus
+    filters.push(
+      'flanger=delay=1.5:depth=0.6:regen=12:speed=0.6',
+      'acrusher=level_in=1:level_out=1:bits=14:mode=log:aa=1:mix=0.14',
+      'highpass=f=120',
+      'treble=g=1',
+    );
   }
   if (agent.post === 'bright') {
     filters.push('treble=g=1', 'acompressor=threshold=-18dB:ratio=2.2:attack=12:release=80');
@@ -370,6 +446,19 @@ function loadEventsFromJson(path, totalDuration) {
     }))
     .filter((event) => event.text && Number.isFinite(event.t) && event.t < totalDuration)
     .sort((a, b) => a.t - b.t);
+}
+
+function loadDotEnv(path) {
+  const parsed = {};
+  try {
+    for (const line of readFileSync(path, 'utf8').split('\n')) {
+      const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*"?([^"#]*)"?\s*(?:#.*)?$/);
+      if (match) parsed[match[1]] = match[2].trim();
+    }
+  } catch {
+    // no .env is fine
+  }
+  return parsed;
 }
 
 function parseArgs(argv) {

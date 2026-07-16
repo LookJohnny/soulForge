@@ -7,6 +7,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { VRMHumanBoneName, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+import { WebPerception } from './perception_webcam.js';
 import './style.css';
 
 const canvas = document.querySelector('#scene');
@@ -20,11 +21,47 @@ const dialogueSpeakerEl = document.querySelector('#dialogue-speaker');
 const dialogueLineEl = document.querySelector('#dialogue-line');
 const dialogueMetaEl = document.querySelector('#dialogue-meta');
 const loadingEl = document.querySelector('#loading');
+const perceptionStartEl = document.querySelector('#perception-start');
+const perceptionStopEl = document.querySelector('#perception-stop');
+const perceptionStatusEl = document.querySelector('#perception-status');
 
 const searchParams = new URLSearchParams(window.location.search);
 if (searchParams.get('clean') === '1') {
   document.body.classList.add('clean');
 }
+
+const perceptionProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const perceptionServerUrl = searchParams.get('perception_ws')
+  || `${perceptionProtocol}//${window.location.hostname}:8765`;
+const webPerception = new WebPerception({
+  serverUrl: perceptionServerUrl,
+  agentId: searchParams.get('perception_agent') || 'kai',
+});
+
+perceptionStartEl.addEventListener('click', async () => {
+  perceptionStartEl.disabled = true;
+  perceptionStatusEl.textContent = 'Requesting permission…';
+  try {
+    await webPerception.start();
+    perceptionStatusEl.textContent = 'On';
+    perceptionStopEl.disabled = false;
+  } catch (error) {
+    perceptionStatusEl.textContent = `Off · ${error.message}`;
+    perceptionStartEl.disabled = false;
+    perceptionStopEl.disabled = true;
+  }
+});
+
+perceptionStopEl.addEventListener('click', async () => {
+  perceptionStopEl.disabled = true;
+  await webPerception.stop();
+  perceptionStatusEl.textContent = 'Off';
+  perceptionStartEl.disabled = false;
+});
+
+window.addEventListener('pagehide', () => {
+  void webPerception.stop();
+});
 
 const AGENTS = [
   {

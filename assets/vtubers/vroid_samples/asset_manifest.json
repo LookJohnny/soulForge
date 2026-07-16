@@ -1,0 +1,64 @@
+{
+  "generated": "2026-07-06",
+  "used_in": "demo/vtuber_life_web/dinner.html (SoulForge evening companion demo)",
+  "assets": [
+    {
+      "name": "AvatarSample_B",
+      "file": "AvatarSample_B.vrm",
+      "role": "Luna — female VTuber / creative companion",
+      "author": "VRoid Project (pixiv)",
+      "license": "VRoid sample-model conditions of use: anyone may use in any activity (commercial or not), no credit required; not CC0, copyright retained by VRoid Project",
+      "license_url": "https://vroid.pixiv.help/hc/en-us/articles/4402614652569",
+      "download_url": "https://github.com/madjin/vrm-samples/raw/master/vroid/stable/AvatarSample_B.vrm",
+      "original_source": "https://hub.vroid.com/en/characters/7939147878897061040/models/2292219474373673889"
+    },
+    {
+      "name": "AvatarSample_C",
+      "file": "AvatarSample_C.vrm",
+      "role": "Kai — male caretaker / cooking companion",
+      "author": "VRoid Project (pixiv)",
+      "license": "VRoid sample-model conditions of use: anyone may use in any activity (commercial or not), no credit required; not CC0, copyright retained by VRoid Project",
+      "license_url": "https://vroid.pixiv.help/hc/en-us/articles/4402614652569",
+      "download_url": "https://github.com/madjin/vrm-samples/raw/master/vroid/stable/AvatarSample_C.vrm",
+      "original_source": "https://hub.vroid.com/en/characters/1248981995540129234/models/8640547963669442173"
+    },
+    {
+      "name": "Sendagaya Shibu",
+      "file": "Sendagaya_Shibu.vrm",
+      "role": "backup male candidate (not used in final demo — reads too feminine on camera)",
+      "author": "VRoid Project (pixiv)",
+      "license": "CC0 (declared in VRM meta licenseName)",
+      "download_url": "https://github.com/madjin/vrm-samples/raw/master/vroid/beta/Sendagaya_Shibu.vrm"
+    },
+    {
+      "name": "RobotExpressive",
+      "file": "RobotExpressive.glb",
+      "role": "Pipo — non-human care robot (plant care / environment scan)",
+      "author": "Tomás Laulhé (quaternius.com), modifications by Don McCurdy",
+      "license": "CC0 / public domain",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "download_url": "https://github.com/mrdoob/three.js/raw/dev/examples/models/gltf/RobotExpressive/RobotExpressive.glb",
+      "notes": "ships with animation clips: Idle, Walking, Wave, Yes, ThumbsUp, Dance ... used via AnimationMixer"
+    }
+  ],
+  "audio": {
+    "tts": "Microsoft Edge TTS neural voices via edge-tts CLI (Luna: zh-CN-XiaoxiaoNeural / Kai: zh-CN-YunxiNeural / Pipo: zh-CN-YunxiaNeural)",
+    "post_processing": "ffmpeg filters (pitch, EQ, light flanger+bitcrush robotization for Pipo), see demo/synthesize_vtuber_voice_track.mjs",
+    "music": {
+      "title": "Wholesome",
+      "artist": "Kevin MacLeod (incompetech.com)",
+      "file": "assets/audio/wholesome_kevin_macleod.ogg",
+      "license": "CC BY 4.0 — attribution required: 'Wholesome' Kevin MacLeod (incompetech.com), Licensed under Creative Commons: By Attribution 4.0, https://creativecommons.org/licenses/by/4.0/",
+      "source": "https://commons.wikimedia.org/wiki/File:Wholesome_by_Kevin_MacLeod.ogg",
+      "usage": "background bed at -18dB with fades, first ~30s"
+    }
+  },
+  "fonts_and_hud": "system fonts (PingFang SC) rendered in-browser; HUD is part of the page, no external assets",
+  "scene": "procedural three.js apartment (RoundedBox furniture, canvas-generated floor/city/neon textures) — no external scene assets",
+  "animations": {
+    "source": "https://github.com/tk256ailab/vrm-viewer (VRMA/ 目录)",
+    "license": "MIT (repo license)",
+    "files": "assets/animations/vrma_*.vrma (11 个情绪/动作动捕) + vrma_test_idle.vrma (pixiv/three-vrm MIT)",
+    "usage": "Studio 动作面板 + 表演系统 PERF_TO_VRMA 映射"
+  }
+}

@@ -24,6 +24,17 @@
         <strong>Build wonderful memories together</strong>
       </div>
       <div class="hud source">SoulForge v0.3.0 · WebGL · VRM · Voice</div>
+      <div class="hud perception-panel" aria-label="microphone perception controls">
+        <div class="perception-heading">
+          <strong>Microphone perception</strong>
+          <span id="perception-status" role="status" aria-live="polite">Off</span>
+        </div>
+        <p>Opt-in. Sends voice-activity metadata only; raw audio stays in this browser.</p>
+        <div class="perception-actions">
+          <button id="perception-start" type="button">Enable microphone</button>
+          <button id="perception-stop" type="button" disabled>Stop</button>
+        </div>
+      </div>
       <div class="hud relations-panel">
         <div class="panel-tabs"><span>Relations</span><span>Activity</span></div>
         <div class="relation-row"><b>Astra-F</b><small>Planning</small><em>92</em></div>

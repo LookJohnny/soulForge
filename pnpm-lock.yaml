@@ -11,6 +11,9 @@ importers:
       '@pixiv/three-vrm':
         specifier: ^3.5.4
         version: 3.5.4(three@0.185.1)
+      '@pixiv/three-vrm-animation':
+        specifier: 3.5.4
+        version: 3.5.4(three@0.185.1)
       playwright:
         specifier: ^1.61.1
         version: 1.61.1
@@ -672,6 +675,11 @@ packages:
   '@panva/hkdf@1.2.1':
     resolution: {integrity: sha512-6oclG6Y3PiDFcoyk8srjLfVKyMfVCKJ27JwNPViuXziFpmdz+MZnZN/aKY0JGXgYuO/VghU0jcOAZgWXZ1Dmrw==}
 
+  '@pixiv/three-vrm-animation@3.5.4':
+    resolution: {integrity: sha512-yVJL7LoVwZ0fsW2SJhfa0bqIMcfTzBKyc1q/LeKqAtEv63BEQ9VUudx5ikd4zIkgvXwjxw7vGl2zvedrexFisg==}
+    peerDependencies:
+      three: '>=0.137'
+
   '@pixiv/three-vrm-core@3.5.4':
     resolution: {integrity: sha512-CgaxZ4qX6JmE2oKsOVGGlheT011qP4bBZGUaMJJ5iQINI999+cveIdISe459B+AMYD1dU5h1+xCtDthLQNH1Bg==}
     peerDependencies:
@@ -727,6 +735,9 @@ packages:
 
   '@pixiv/types-vrmc-vrm-1.0@3.5.4':
     resolution: {integrity: sha512-pkjT4QXT/Hp6rcq8J8EFEHIldbtPGYWOTaWdoRGMA8/KzJI5PdekZ6AUYbnSP6ElfJ3BSZ01DxxpQZa/UNsFqA==}
+
+  '@pixiv/types-vrmc-vrm-animation-1.0@3.5.4':
+    resolution: {integrity: sha512-qIl/RO+WnWcBlu/PdTpPtm+YRum8RNtNNigndd/V9dJ9mWeFVI6TThc5i+qbFQjTF/I5ka0HojfeujesIYc1IA==}
 
   '@prisma/client@6.19.2':
     resolution: {integrity: sha512-gR2EMvfK/aTxsuooaDA32D8v+us/8AAet+C3J1cc04SW35FPdZYgLF+iN4NDLUgAaUGTKdAB0CYenu1TAgGdMg==}
@@ -3201,6 +3212,13 @@ snapshots:
 
   '@panva/hkdf@1.2.1': {}
 
+  '@pixiv/three-vrm-animation@3.5.4(three@0.185.1)':
+    dependencies:
+      '@pixiv/three-vrm-core': 3.5.4(three@0.185.1)
+      '@pixiv/types-vrmc-vrm-1.0': 3.5.4
+      '@pixiv/types-vrmc-vrm-animation-1.0': 3.5.4
+      three: 0.185.1
+
   '@pixiv/three-vrm-core@3.5.4(three@0.185.1)':
     dependencies:
       '@pixiv/types-vrm-0.0': 3.5.4
@@ -3259,6 +3277,10 @@ snapshots:
   '@pixiv/types-vrmc-springbone-extended-collider-1.0@3.5.4': {}
 
   '@pixiv/types-vrmc-vrm-1.0@3.5.4': {}
+
+  '@pixiv/types-vrmc-vrm-animation-1.0@3.5.4':
+    dependencies:
+      '@pixiv/types-vrmc-vrm-1.0': 3.5.4
 
   '@prisma/client@6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)':
     optionalDependencies:

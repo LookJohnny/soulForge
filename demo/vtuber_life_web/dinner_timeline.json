@@ -1,0 +1,352 @@
+{
+  "meta": {
+    "title": "SoulForge · Evening Companion Replanning Demo (unscripted)",
+    "duration_s": 38.5,
+    "sim_clock_start": "20:47",
+    "generated_by": "engine.planner CompanionRuntime + deepseek-chat (live decisions + live dialogue, unscripted)",
+    "hour_goal_after_rewrite": "晚餐时段：做饭/收尾一天的创作/照料环境"
+  },
+  "agents": [
+    {
+      "id": "luna",
+      "name": "Luna",
+      "archetype": "creative_care",
+      "voice": "zh-CN-XiaoxiaoNeural",
+      "role_label": "创作陪伴",
+      "color": "#ff9ec7",
+      "embodiment": {
+        "kind": "vrm",
+        "model": "/assets/vtubers/vroid_samples/AvatarSample_B.vrm",
+        "target_height": 1.58,
+        "pose": {
+          "upperZ": 1.3,
+          "upperX": -0.08,
+          "lowerX": -0.3
+        }
+      }
+    },
+    {
+      "id": "kai",
+      "name": "Kai",
+      "archetype": "steady_caretaker",
+      "voice": "zh-CN-YunxiNeural",
+      "role_label": "生活照料",
+      "color": "#7fb4ff",
+      "embodiment": {
+        "kind": "vrm",
+        "model": "/assets/vtubers/vroid_samples/AvatarSample_C.vrm",
+        "target_height": 1.72,
+        "pose": {
+          "upperZ": 1.3,
+          "upperX": -0.1,
+          "lowerX": -0.26
+        }
+      }
+    },
+    {
+      "id": "pipo",
+      "name": "Pipo",
+      "archetype": "utility_robot",
+      "voice": "zh-CN-YunxiaNeural",
+      "role_label": "环境照护",
+      "color": "#63e6c8",
+      "embodiment": {
+        "kind": "robot",
+        "model": "/assets/vtubers/vroid_samples/RobotExpressive.glb",
+        "target_height": 1.02
+      }
+    }
+  ],
+  "plan_before": [
+    "20:00 画画/做饭/植物巡检",
+    "21:00 一起复盘今天",
+    "22:30 休息"
+  ],
+  "plan_after": [
+    "20:47 晚餐时段：做饭/收尾一天的创作/照料环境",
+    "计划变更: micro 级重写",
+    "明早 盆栽浇水（Pipo 插入）"
+  ],
+  "beats": [
+    {
+      "start": 1.0,
+      "end": 4.44,
+      "speaker": "kai",
+      "targets": [
+        "luna"
+      ],
+      "camera": "kitchen",
+      "text": "Luna，晚饭想吃点什么？我这边快好了。",
+      "text_en": "Luna, what do you want for dinner? I'm almost done here.",
+      "emotion": "calm",
+      "template": "cooking",
+      "step": "stir_pan",
+      "audio_dur": 3.19
+    },
+    {
+      "start": 6.0,
+      "end": 10.4,
+      "speaker": "luna",
+      "targets": [
+        "kai"
+      ],
+      "camera": "desk",
+      "text": "嗯…清淡一点的就好，今天画了一天有点累。",
+      "text_en": "Hmm… something light. I've been drawing all day and I'm a bit tired.",
+      "emotion": "soft",
+      "template": "drawing",
+      "step": "lean_back_review",
+      "audio_dur": 4.15
+    },
+    {
+      "start": 11.0,
+      "end": 19.35,
+      "speaker": "luna",
+      "targets": [
+        "user"
+      ],
+      "camera": "luna_close",
+      "text": "累了吗？那我们可以放慢一点节奏。要不要一起画一幅安静的夜空？不用太费神，就随意的线条就好。",
+      "text_en": "Tired? We can slow down a bit. How about we draw a quiet night sky together? No need to overthink, just casual strokes.",
+      "emotion": "warm",
+      "template": "chatting",
+      "step": "look_at_user",
+      "event": {
+        "t": 9.8,
+        "source": "user",
+        "text": "我今天有点累……",
+        "impact": "LOW",
+        "scope": "micro",
+        "decision": "comfort → 重规划 micro → 晚餐时段：做饭/收尾一天的创作/照料环境"
+      },
+      "audio_dur": 8.1
+    },
+    {
+      "start": 19.55,
+      "end": 24.0,
+      "speaker": "kai",
+      "targets": [
+        "user",
+        "luna"
+      ],
+      "camera": "kitchen_close",
+      "text": "好主意，那今晚就放松一下。饭马上就好，你先休息会儿。",
+      "text_en": "Good idea, let's take it easy tonight. Dinner's almost ready, you rest for a bit.",
+      "emotion": "calm",
+      "template": "cooking",
+      "step": "plate_up",
+      "audio_dur": 4.21
+    },
+    {
+      "start": 24.2,
+      "end": 30.62,
+      "speaker": "pipo",
+      "targets": [
+        "kai",
+        "luna"
+      ],
+      "camera": "plant",
+      "text": "嘿，我刚注意到右边花盆的土壤湿度是22%——有点干了。需要我现在浇水，还是稍后提醒你？",
+      "text_en": "Hey, I just noticed the right potted plant's soil moisture is at 22% — a bit on the dry side. Would you like me to water it now, or shall I remind you later?",
+      "emotion": "robot",
+      "template": "plant_care",
+      "step": "scan_leaves",
+      "event": {
+        "t": 23.6,
+        "source": "plant_sensor",
+        "text": "右侧盆栽湿度 22%",
+        "impact": "LOW",
+        "scope": "micro",
+        "decision": "inform_environment → micro → 不打断当前活动"
+      },
+      "audio_dur": 6.16
+    },
+    {
+      "start": 30.82,
+      "end": 33.0,
+      "speaker": "kai",
+      "targets": [
+        "pipo"
+      ],
+      "camera": "two_shot",
+      "text": "现在浇吧，谢谢Pipo。",
+      "text_en": "Water it now, thanks Pipo.",
+      "emotion": "calm",
+      "template": "cooking",
+      "step": "announce_ready",
+      "audio_dur": 1.93
+    },
+    {
+      "start": 33.2,
+      "end": 36.48,
+      "speaker": "luna",
+      "targets": [
+        "kai",
+        "pipo"
+      ],
+      "camera": "group",
+      "text": "谢谢你们，有你们在身边真好。",
+      "text_en": "Thank you both, it's so nice to have you around.",
+      "emotion": "moved",
+      "template": "chatting",
+      "step": "perform:Clapping",
+      "audio_dur": 3.03
+    },
+    {
+      "start": 36.58,
+      "end": 38.5,
+      "speaker": "luna",
+      "targets": [
+        "user"
+      ],
+      "camera": "wide_end",
+      "text": "",
+      "text_en": "",
+      "emotion": "moved",
+      "template": "chatting",
+      "step": "look_at_user"
+    }
+  ],
+  "events": [
+    {
+      "t": 9.8,
+      "source": "user",
+      "text": "我今天有点累……",
+      "impact": "LOW",
+      "scope": "micro",
+      "decision": "comfort → 重规划 micro → 晚餐时段：做饭/收尾一天的创作/照料环境"
+    },
+    {
+      "t": 23.6,
+      "source": "plant_sensor",
+      "text": "右侧盆栽湿度 22%",
+      "impact": "LOW",
+      "scope": "micro",
+      "decision": "inform_environment → micro → 不打断当前活动"
+    }
+  ],
+  "decision_trace": [
+    {
+      "t_min": 1247,
+      "agent": "luna",
+      "kind": "plan_change",
+      "detail": {
+        "level": "hour",
+        "goal": "晚餐时段：做饭/收尾一天的创作/照料环境",
+        "activities": [
+          "drawing",
+          "rest",
+          "drawing"
+        ]
+      }
+    },
+    {
+      "t_min": 1247,
+      "agent": "kai",
+      "kind": "plan_change",
+      "detail": {
+        "level": "hour",
+        "goal": "晚餐时段：做饭/收尾一天的创作/照料环境",
+        "activities": [
+          "cooking",
+          "cooking",
+          "cooking",
+          "cooking",
+          "chatting"
+        ]
+      }
+    },
+    {
+      "t_min": 1247,
+      "agent": "pipo",
+      "kind": "plan_change",
+      "detail": {
+        "level": "hour",
+        "goal": "晚餐时段：做饭/收尾一天的创作/照料环境",
+        "activities": [
+          "plant_care",
+          "plant_care",
+          "cleaning"
+        ]
+      }
+    },
+    {
+      "t_min": 1248.0,
+      "agent": "luna",
+      "kind": "event",
+      "detail": {
+        "kind": "user_utterance",
+        "source": "user",
+        "text": "我今天有点累……"
+      }
+    },
+    {
+      "t_min": 1248.0,
+      "agent": "luna",
+      "kind": "decision",
+      "detail": {
+        "impact": "LOW",
+        "scope": "micro",
+        "reason": "User expressed fatigue. A micro adjustment to the current drawing template (soothe_with_art) keeps the activity but lowers pressure, making the user feel heard without disrupting the plan.",
+        "intent": "comfort",
+        "emotional_read": "tired and possibly drained after a long day",
+        "interrupt_policy": "resume"
+      }
+    },
+    {
+      "t_min": 1249.0,
+      "agent": "pipo",
+      "kind": "event",
+      "detail": {
+        "kind": "environment",
+        "source": "plant_sensor",
+        "text": "右侧盆栽湿度偏低 22%"
+      }
+    },
+    {
+      "t_min": 1249.0,
+      "agent": "pipo",
+      "kind": "decision",
+      "detail": {
+        "impact": "LOW",
+        "scope": "micro",
+        "reason": "Minimal interruption: I'm currently cleaning, but this is a quick heads-up that doesn't require immediate action. The user can decide without breaking my cleaning flow.",
+        "intent": "inform_environment",
+        "emotional_read": "The user might not have noticed the plant's soil is drying out, but I should mention it gently.",
+        "interrupt_policy": "resume"
+      }
+    }
+  ],
+  "llm_decisions_full": {
+    "luna": {
+      "selected_intent": "comfort",
+      "impact": "LOW",
+      "plan_delta": "micro",
+      "template_to_call": "drawing",
+      "interrupt_policy": "resume",
+      "reason": "User expressed fatigue. A micro adjustment to the current drawing template (soothe_with_art) keeps the activity but lowers pressure, making the user feel heard without disrupting the plan.",
+      "decision_dialogue": [
+        {
+          "agent": "Luna",
+          "text": "累了吗？那我们可以放慢一点节奏。要不要一起画一幅安静的夜空？不用太费神，就随意的线条就好。",
+          "emotion": "warm"
+        }
+      ]
+    },
+    "pipo": {
+      "selected_intent": "inform_environment",
+      "impact": "LOW",
+      "plan_delta": "micro",
+      "template_to_call": "cleaning",
+      "interrupt_policy": "resume",
+      "reason": "Minimal interruption: I'm currently cleaning, but this is a quick heads-up that doesn't require immediate action. The user can decide without breaking my cleaning flow.",
+      "decision_dialogue": [
+        {
+          "agent": "Pipo",
+          "text": "Hey, I just noticed the right potted plant's soil moisture is at 22% — a bit on the dry side. Would you like me to water it now, or shall I remind you later?",
+          "emotion": "attentive"
+        }
+      ]
+    }
+  }
+}

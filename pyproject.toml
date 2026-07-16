@@ -23,3 +23,8 @@ mujoco-demo = [
     "mujoco>=3.3.0",
     "pillow>=11.0.0",
 ]
+
+[tool.pytest.ini_options]
+# root suite only; campus_sim_project has its own same-named test modules
+testpaths = ["tests"]
+norecursedirs = ["campus_sim_project", "packages", "node_modules", ".venv", "outputs", "unity"]

@@ -15,7 +15,7 @@ namespace SoulForge.UnityClient.Editor
         private const string ScenePath = "Assets/SoulForge/Scenes/SoulForgeApartment.unity";
         private const int PreviewWidth = 1280;
         private const int PreviewHeight = 720;
-        private const int DemoFrameCount = 144;
+        private const int DemoFrameCount = 360;
         private const int DemoFps = 12;
         private const string KenneyFurnitureRoot = "Assets/ThirdParty/KenneyFurniture/FBX/";
         private const string KenneyMiniCharacterRoot = "Assets/ThirdParty/KenneyMiniCharacters/OBJ/";

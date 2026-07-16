@@ -1,0 +1,60 @@
+{
+  "events": [
+    {
+      "time": 1.0,
+      "agentName": "Kai",
+      "dialogue": "Luna，晚饭想吃点什么？我这边快好了。",
+      "emotion": "calm",
+      "actionTemplateId": "cooking",
+      "cameraShot": "kitchen"
+    },
+    {
+      "time": 6.0,
+      "agentName": "Luna",
+      "dialogue": "嗯…清淡一点的就好，今天画了一天有点累。",
+      "emotion": "soft",
+      "actionTemplateId": "drawing",
+      "cameraShot": "desk"
+    },
+    {
+      "time": 11.0,
+      "agentName": "Luna",
+      "dialogue": "累了吗？那我们可以放慢一点节奏。要不要一起画一幅安静的夜空？不用太费神，就随意的线条就好。",
+      "emotion": "warm",
+      "actionTemplateId": "chatting",
+      "cameraShot": "luna_close"
+    },
+    {
+      "time": 19.55,
+      "agentName": "Kai",
+      "dialogue": "好主意，那今晚就放松一下。饭马上就好，你先休息会儿。",
+      "emotion": "calm",
+      "actionTemplateId": "cooking",
+      "cameraShot": "kitchen_close"
+    },
+    {
+      "time": 24.2,
+      "agentName": "Pipo",
+      "dialogue": "嘿，我刚注意到右边花盆的土壤湿度是22%——有点干了。需要我现在浇水，还是稍后提醒你？",
+      "emotion": "robot",
+      "actionTemplateId": "plant_care",
+      "cameraShot": "plant"
+    },
+    {
+      "time": 30.82,
+      "agentName": "Kai",
+      "dialogue": "现在浇吧，谢谢Pipo。",
+      "emotion": "calm",
+      "actionTemplateId": "cooking",
+      "cameraShot": "two_shot"
+    },
+    {
+      "time": 33.2,
+      "agentName": "Luna",
+      "dialogue": "谢谢你们，有你们在身边真好。",
+      "emotion": "moved",
+      "actionTemplateId": "chatting",
+      "cameraShot": "group"
+    }
+  ]
+}
