@@ -19,6 +19,7 @@ from gateway.handlers.audio_codec import StreamingMp3OpusEncoder
 from gateway.latency import latency_tracker
 from gateway.life import LifeLoop
 from gateway.pipeline.orchestrator import PipelineOrchestrator
+from gateway.playback import PlaybackChannel
 from gateway.plugins import match_plugin
 
 logger = structlog.get_logger()
@@ -66,46 +67,14 @@ class WebSocketServer:
                 receipt = chunk.playback_receipt
                 while getattr(session, "_playing", False):
                     await asyncio.sleep(0.05)
-                session._playing = True
-                session._interrupted = False
 
-                text_out = OutboundMessage(
-                    type=MessageType.TEXT,
-                    payload=chunk.text,
-                    metadata={"state": "sentence"},
-                )
-                await ws.send_text(await adapter.encode(text_out))
-
-                total_frames = 0
-                if chunk.audio_data:
-                    start = OutboundMessage(
-                        type=MessageType.TEXT,
-                        payload="",
-                        metadata={"state": "sentence_start"},
-                    )
-                    await ws.send_text(await adapter.encode(start))
-                    raw = await adapter.encode(
-                        AudioHandler.make_audio_response(chunk.audio_data),
-                    )
-                    if isinstance(raw, list):
-                        total_frames = len(raw)
-                        for frame in raw:
-                            if getattr(session, "_interrupted", False):
-                                break
-                            await ws.send_bytes(frame)
-                            await asyncio.sleep(0.06)
-                    elif isinstance(raw, bytes):
-                        await ws.send_bytes(raw)
-
-                stop = OutboundMessage(
-                    type=MessageType.TEXT,
-                    payload="",
-                    metadata={"state": "stop"},
-                )
-                await ws.send_text(await adapter.encode(stop))
-                interrupted = bool(getattr(session, "_interrupted", False))
-                if not interrupted:
-                    await asyncio.sleep(max(total_frames * 0.06 - 2.0, 0.5))
+                interrupted = False
+                async with PlaybackChannel(ws, adapter, session) as pb:
+                    await pb.send_sentence(chunk.text)
+                    if chunk.audio_data:
+                        await pb.send_clip(chunk.audio_data)
+                    await pb.finish(settle=False)
+                    interrupted = pb.interrupted
                 if receipt:
                     await self.orchestrator.confirm_playback(
                         receipt,
@@ -471,56 +440,28 @@ class WebSocketServer:
         Used for plugin responses (time, date, math) that don't need AI.
         """
         try:
-            # Send text
-            start_msg = OutboundMessage(
-                type=MessageType.TEXT,
-                payload="",
-                metadata={"state": "start"},
-            )
-            await ws.send_text(await adapter.encode(start_msg))
+            async with PlaybackChannel(ws, adapter, session) as pb:
+                await pb.send_start()
+                await pb.send_sentence(text)
 
-            text_msg = OutboundMessage(
-                type=MessageType.TEXT,
-                payload=text,
-                metadata={"state": "sentence"},
-            )
-            await ws.send_text(await adapter.encode(text_msg))
+                # TTS for the reply, in the character's own voice
+                try:
+                    from gateway.handlers.audio_codec import mp3_to_pcm_24k, pcm_to_opus_frames
 
-            # TTS for the reply, in the character's own voice
-            try:
-                from gateway.handlers.audio_codec import mp3_to_pcm_24k, pcm_to_opus_frames
-
-                tts = await self.orchestrator.synthesize_tts(
-                    text,
-                    character_id=session.character_id,
-                    brand_id=session.brand_id,
-                )
-                if tts:
-                    ss = OutboundMessage(
-                        type=MessageType.TEXT,
-                        payload="",
-                        metadata={"state": "sentence_start"},
+                    tts = await self.orchestrator.synthesize_tts(
+                        text,
+                        character_id=session.character_id,
+                        brand_id=session.brand_id,
                     )
-                    await ws.send_text(await adapter.encode(ss))
+                    if tts:
+                        pcm = await mp3_to_pcm_24k(tts)
+                        if pcm:
+                            await pb.send_sentence_start()
+                            await pb.send_frames(pcm_to_opus_frames(pcm, sample_rate=24000))
+                except Exception:
+                    logger.exception("gateway.quick_reply_tts_error")
 
-                    pcm = await mp3_to_pcm_24k(tts)
-                    if pcm:
-                        frames = pcm_to_opus_frames(pcm, sample_rate=24000)
-                        for i, frame in enumerate(frames[:5]):
-                            await ws.send_bytes(frame)
-                        for frame in frames[5:]:
-                            await ws.send_bytes(frame)
-                            await asyncio.sleep(0.06)
-            except Exception:
-                logger.exception("gateway.quick_reply_tts_error")
-
-            await asyncio.sleep(0.42)
-            done_msg = OutboundMessage(
-                type=MessageType.TEXT,
-                payload="",
-                metadata={"state": "stop"},
-            )
-            await ws.send_text(await adapter.encode(done_msg))
+                await pb.finish(wait_drain=False)
             logger.info("gateway.quick_reply sent: %s", text[:30])
 
         except Exception:
@@ -571,19 +512,6 @@ class WebSocketServer:
         playback_receipts: set[str] = set()
         try:
             logger.info("gateway.responding start (streaming asr: %s)", text[:30])
-            thinking = OutboundMessage(
-                type=MessageType.TEXT,
-                payload="",
-                metadata={"state": "start"},
-            )
-            await ws.send_text(await adapter.encode(thinking))
-
-            session._playing = True
-            session._interrupted = False
-            session._interrupt_count = 0
-            total_opus_frames = 0
-            full_text = ""
-            interrupted = False
 
             # Latency anchors: measure from VAD speech-end when available,
             # otherwise from the start of processing.
@@ -591,156 +519,96 @@ class WebSocketServer:
             session._t_speech_end = None
             t_ref = t_speech_end if t_speech_end is not None else time.monotonic()
             first_chunk_ms = None
-            first_word_ms = None
             core_stages = None
-            frames_sent = 0  # global PRE_BUFFER counter across the whole response
-            PRE_BUFFER = 5
+            full_text = ""
+            interrupted = False
+            total_opus_frames = 0
 
-            async def _send_opus_frames(frames):
-                """Send Opus frames to the device with prebuffer + realtime pacing."""
-                nonlocal first_word_ms, total_opus_frames, frames_sent, interrupted
-                for frame in frames:
-                    if getattr(session, "_interrupted", False):
+            async with PlaybackChannel(ws, adapter, session) as pb:
+                await pb.send_start()
+
+                # Thinking filler — instant "嗯？" in the character's voice while
+                # the pipeline works; masks first-word latency.
+                life = getattr(session, "_life", None)
+                filler = life.pop_filler() if life else None
+                if filler:
+                    try:
+                        await pb.send_clip(filler, pace=False)
+                    except Exception:
+                        logger.exception("gateway.filler_error")
+                    # The filler must not count as the reply's first word
+                    pb.first_frame_at = None
+
+                # Per-sentence incremental MP3→Opus encoder (streaming TTS path).
+                enc: StreamingMp3OpusEncoder | None = None
+
+                async for chunk in self.orchestrator.process_text_stream(
+                    session, text, stream_audio=True
+                ):
+                    if chunk.playback_receipt:
+                        playback_receipts.add(chunk.playback_receipt)
+                    if chunk.is_done:
+                        full_text = chunk.full_text or full_text
+                        core_stages = chunk.stages
+                        break
+
+                    if first_chunk_ms is None:
+                        first_chunk_ms = (time.monotonic() - t_ref) * 1000
+
+                    if pb.interrupted:
+                        logger.info("gateway.interrupted by user")
                         interrupted = True
-                        return
-                    if first_word_ms is None:
-                        first_word_ms = (time.monotonic() - t_ref) * 1000
-                    await ws.send_bytes(frame)
-                    total_opus_frames += 1
-                    if frames_sent < PRE_BUFFER:
-                        frames_sent += 1
-                    else:
-                        await asyncio.sleep(0.06)
+                        break
 
-            async def _send_sentence_start():
-                ss = OutboundMessage(
-                    type=MessageType.TEXT, payload="", metadata={"state": "sentence_start"}
+                    if chunk.kind == "sentence":
+                        await pb.send_sentence(chunk.text)
+                        full_text += chunk.text
+                        # Legacy whole-clip audio (non-streaming providers ride here).
+                        if chunk.audio_data and not await pb.send_clip(chunk.audio_data):
+                            interrupted = True
+
+                    elif chunk.kind == "audio_chunk":
+                        if chunk.audio_data:
+                            if enc is None:
+                                enc = StreamingMp3OpusEncoder()
+                                await pb.send_sentence_start()
+                            frames = await enc.feed(chunk.audio_data)
+                            if frames and not await pb.send_frames(frames):
+                                interrupted = True
+
+                    elif chunk.kind == "audio_end":
+                        if enc is not None:
+                            frames = await enc.finish()
+                            if frames and not await pb.send_frames(frames):
+                                interrupted = True
+                            enc = None
+
+                    if interrupted:
+                        break
+
+                # Flush any dangling encoder (e.g. stream ended before audio_end).
+                if enc is not None and not interrupted:
+                    tail = await enc.finish()
+                    if tail:
+                        await pb.send_frames(tail)
+
+                # Record before the playback-wait sleeps so "respond" excludes them
+                self._record_voice_turn(
+                    session,
+                    t_ref,
+                    first_chunk_ms,
+                    pb.first_frame_ms(t_ref),
+                    core_stages,
+                    interrupted,
                 )
-                await ws.send_text(await adapter.encode(ss))
-
-            # Thinking filler — instant "嗯？" in the character's voice while
-            # the pipeline works; masks first-word latency.
-            life = getattr(session, "_life", None)
-            filler = life.pop_filler() if life else None
-            if filler:
-                try:
-                    ss = OutboundMessage(
-                        type=MessageType.TEXT,
-                        payload="",
-                        metadata={"state": "sentence_start"},
-                    )
-                    await ws.send_text(await adapter.encode(ss))
-                    raw = await adapter.encode(AudioHandler.make_audio_response(filler))
-                    if isinstance(raw, list):
-                        for frame in raw:
-                            await ws.send_bytes(frame)
-                    elif isinstance(raw, bytes):
-                        await ws.send_bytes(raw)
-                except Exception:
-                    logger.exception("gateway.filler_error")
-
-            # Per-sentence incremental MP3→Opus encoder (streaming TTS path).
-            enc: StreamingMp3OpusEncoder | None = None
-
-            async for chunk in self.orchestrator.process_text_stream(
-                session, text, stream_audio=True
-            ):
-                if chunk.playback_receipt:
-                    playback_receipts.add(chunk.playback_receipt)
-                if chunk.is_done:
-                    full_text = chunk.full_text or full_text
-                    core_stages = chunk.stages
-                    break
-
-                if first_chunk_ms is None:
-                    first_chunk_ms = (time.monotonic() - t_ref) * 1000
-
-                if getattr(session, "_interrupted", False):
-                    logger.info("gateway.interrupted by user")
-                    interrupted = True
-                    break
-
-                if chunk.kind == "sentence":
-                    text_out = OutboundMessage(
-                        type=MessageType.TEXT,
-                        payload=chunk.text,
-                        metadata={"state": "sentence"},
-                    )
-                    await ws.send_text(await adapter.encode(text_out))
-                    full_text += chunk.text
-
-                    # Legacy whole-clip audio (non-streaming providers ride here).
-                    if chunk.audio_data:
-                        await _send_sentence_start()
-                        raw = await adapter.encode(
-                            AudioHandler.make_audio_response(chunk.audio_data)
-                        )
-                        if isinstance(raw, list):
-                            logger.info("gateway.sending %d opus frames @24kHz", len(raw))
-                            await _send_opus_frames(raw)
-                        elif isinstance(raw, bytes):
-                            if first_word_ms is None:
-                                first_word_ms = (time.monotonic() - t_ref) * 1000
-                            await ws.send_bytes(raw)
-
-                elif chunk.kind == "audio_chunk":
-                    if chunk.audio_data:
-                        if enc is None:
-                            enc = StreamingMp3OpusEncoder()
-                            await _send_sentence_start()
-                        frames = await enc.feed(chunk.audio_data)
-                        if frames:
-                            await _send_opus_frames(frames)
-
-                elif chunk.kind == "audio_end":
-                    if enc is not None:
-                        frames = await enc.finish()
-                        if frames:
-                            await _send_opus_frames(frames)
-                        enc = None
-
-                if interrupted:
-                    break
-
-            # Flush any dangling encoder (e.g. stream ended before audio_end).
-            if enc is not None and not interrupted:
-                tail = await enc.finish()
-                if tail:
-                    await _send_opus_frames(tail)
-
-            # Record before the playback-wait sleeps so "respond" excludes them
-            self._record_voice_turn(
-                session, t_ref, first_chunk_ms, first_word_ms, core_stages, interrupted
-            )
-
-            if interrupted:
-                stop = OutboundMessage(
-                    type=MessageType.TEXT,
-                    payload="",
-                    metadata={"state": "stop"},
-                )
-                await ws.send_text(await adapter.encode(stop))
-                await asyncio.sleep(0.2)
-            else:
-                await asyncio.sleep(0.42)
-                done = OutboundMessage(
-                    type=MessageType.TEXT,
-                    payload="",
-                    metadata={"state": "stop"},
-                )
-                await ws.send_text(await adapter.encode(done))
-                playback_secs = max(total_opus_frames * 0.06 - 2.0, 0.5)
-                await asyncio.sleep(playback_secs)
+                await pb.finish()
+                total_opus_frames = pb.total_frames
 
             await self._confirm_playback_receipts(
                 playback_receipts,
                 played=not interrupted,
                 detail="user barge-in interrupted playback" if interrupted else "",
             )
-
-            session._playing = False
-            session._interrupted = False
-            session._interrupt_count = 0
 
             await self.session_manager.add_to_history(session.session_id, "user", text)
             await self.session_manager.add_to_history(session.session_id, "assistant", full_text)
@@ -751,7 +619,6 @@ class WebSocketServer:
             )
 
         except Exception:
-            session._playing = False
             await self._confirm_playback_receipts(
                 playback_receipts,
                 played=False,
@@ -767,57 +634,28 @@ class WebSocketServer:
     async def _process_text_and_respond(self, ws, adapter, session, text: str):
         """Process text input through AI pipeline with streaming response."""
         playback_receipts: set[str] = set()
-        playback_frames = 0
-        audio_sent = False
         try:
-            # Send thinking indicator
-            thinking = OutboundMessage(
-                type=MessageType.TEXT,
-                payload="",
-                metadata={"state": "start"},
-            )
-            await ws.send_text(await adapter.encode(thinking))
+            # Text-chat path: device buffers freely (no pacing), no barge-in,
+            # and the mic-suppression playing flag is not claimed.
+            async with PlaybackChannel(
+                ws, adapter, session, pace=False, check_interrupt=False, claim=False
+            ) as pb:
+                await pb.send_start()
 
-            full_text = ""
-            async for chunk in self.orchestrator.process_text_stream(session, text):
-                if chunk.playback_receipt:
-                    playback_receipts.add(chunk.playback_receipt)
-                if chunk.is_done:
-                    full_text = chunk.full_text or full_text
-                    break
+                full_text = ""
+                async for chunk in self.orchestrator.process_text_stream(session, text):
+                    if chunk.playback_receipt:
+                        playback_receipts.add(chunk.playback_receipt)
+                    if chunk.is_done:
+                        full_text = chunk.full_text or full_text
+                        break
 
-                # Send each sentence immediately
-                text_out = OutboundMessage(
-                    type=MessageType.TEXT,
-                    payload=chunk.text,
-                    metadata={"state": "sentence"},
-                )
-                await ws.send_text(await adapter.encode(text_out))
-                full_text += chunk.text
+                    await pb.send_sentence(chunk.text)
+                    full_text += chunk.text
+                    if chunk.audio_data:
+                        await pb.send_clip(chunk.audio_data, sentence_start=False)
 
-                # Send audio for this sentence
-                if chunk.audio_data:
-                    audio_sent = True
-                    audio_out = AudioHandler.make_audio_response(chunk.audio_data)
-                    raw = await adapter.encode(audio_out)
-                    if isinstance(raw, list):
-                        playback_frames += len(raw)
-                        for frame in raw:
-                            await ws.send_bytes(frame)
-                    elif isinstance(raw, bytes):
-                        await ws.send_bytes(raw)
-
-            # Send stop signal
-            done = OutboundMessage(
-                type=MessageType.TEXT,
-                payload="",
-                metadata={"state": "stop"},
-            )
-            await ws.send_text(await adapter.encode(done))
-
-            if audio_sent:
-                playback_secs = max(playback_frames * 0.06 - 2.0, 0.5)
-                await asyncio.sleep(playback_secs)
+                await pb.finish(settle=False)
             await self._confirm_playback_receipts(playback_receipts, played=True)
 
             await self.session_manager.add_to_history(session.session_id, "user", text)
@@ -844,29 +682,15 @@ class WebSocketServer:
         try:
             result = await self.orchestrator.process_touch(session, payload)
             if result and result.get("text"):
-                # Touch triggered a verbal response
-                text_out = OutboundMessage(
-                    type=MessageType.TEXT,
-                    payload=result["text"],
-                    metadata={"state": "sentence"},
-                )
-                await ws.send_text(await adapter.encode(text_out))
-
-                if result.get("audio_data"):
-                    audio_out = AudioHandler.make_audio_response(result["audio_data"])
-                    raw = await adapter.encode(audio_out)
-                    if isinstance(raw, list):
-                        for frame in raw:
-                            await ws.send_bytes(frame)
-                    elif isinstance(raw, bytes):
-                        await ws.send_bytes(raw)
-
-                done = OutboundMessage(
-                    type=MessageType.TEXT,
-                    payload="",
-                    metadata={"state": "stop"},
-                )
-                await ws.send_text(await adapter.encode(done))
+                # Touch triggered a verbal response (no "start": touch replies
+                # never began a thinking indicator on the device)
+                async with PlaybackChannel(
+                    ws, adapter, session, pace=False, check_interrupt=False, claim=False
+                ) as pb:
+                    await pb.send_sentence(result["text"])
+                    if result.get("audio_data"):
+                        await pb.send_clip(result["audio_data"], sentence_start=False)
+                    await pb.finish(settle=False, wait_drain=False)
         except Exception:
             logger.exception("gateway.touch_error")
 
@@ -907,142 +731,72 @@ class WebSocketServer:
         playback_receipts: set[str] = set()
         try:
             logger.info("gateway.responding start")
-            thinking = OutboundMessage(
-                type=MessageType.TEXT,
-                payload="",
-                metadata={"state": "start"},
-            )
-            await ws.send_text(await adapter.encode(thinking))
-
-            # Enter playing state with interrupt detection
-            session._playing = True
-            session._interrupted = False
-            session._interrupt_count = 0
-            total_opus_frames = 0
-            full_text = ""
-            user_text = ""
-            interrupted = False
 
             t_speech_end = getattr(session, "_t_speech_end", None)
             session._t_speech_end = None
             t_ref = t_speech_end if t_speech_end is not None else time.monotonic()
             first_chunk_ms = None
-            first_word_ms = None
             core_stages = None
+            full_text = ""
+            user_text = ""
+            interrupted = False
+            total_opus_frames = 0
 
-            async for chunk in self.orchestrator.process_audio_stream(session, audio_data):
-                if chunk.playback_receipt:
-                    playback_receipts.add(chunk.playback_receipt)
-                if chunk.is_done:
-                    full_text = chunk.full_text or full_text
-                    user_text = chunk.user_text
-                    core_stages = chunk.stages
-                    break
+            async with PlaybackChannel(ws, adapter, session) as pb:
+                await pb.send_start()
 
-                if first_chunk_ms is None:
-                    first_chunk_ms = (time.monotonic() - t_ref) * 1000
-
-                # Check if user interrupted
-                if getattr(session, "_interrupted", False):
-                    logger.info("gateway.interrupted by user")
-                    interrupted = True
-                    break
-
-                logger.info(
-                    "gateway.sending sentence=%s audio=%d",
-                    chunk.text[:30],
-                    len(chunk.audio_data) if chunk.audio_data else 0,
-                )
-                text_out = OutboundMessage(
-                    type=MessageType.TEXT,
-                    payload=chunk.text,
-                    metadata={"state": "sentence"},
-                )
-                await ws.send_text(await adapter.encode(text_out))
-                full_text += chunk.text
-
-                if chunk.audio_data:
-                    # Send sentence_start before audio (xiaozhi protocol)
-                    ss = OutboundMessage(
-                        type=MessageType.TEXT,
-                        payload="",
-                        metadata={"state": "sentence_start"},
-                    )
-                    await ws.send_text(await adapter.encode(ss))
-
-                    audio_out = AudioHandler.make_audio_response(chunk.audio_data)
-                    raw = await adapter.encode(audio_out)
-                    if isinstance(raw, list):
-                        n = len(raw)
-                        logger.info("gateway.sending %d opus frames @24kHz", n)
-                        total_opus_frames += n
-                        if first_word_ms is None:
-                            first_word_ms = (time.monotonic() - t_ref) * 1000
-                        PRE_BUFFER = 5
-                        for frame in raw[:PRE_BUFFER]:
-                            await ws.send_bytes(frame)
-                        for frame in raw[PRE_BUFFER:]:
-                            # Check interrupt between frames
-                            if getattr(session, "_interrupted", False):
-                                logger.info("gateway.interrupted mid-sentence")
-                                interrupted = True
-                                break
-                            await ws.send_bytes(frame)
-                            await asyncio.sleep(0.06)
-                    elif isinstance(raw, bytes):
-                        if first_word_ms is None:
-                            first_word_ms = (time.monotonic() - t_ref) * 1000
-                        await ws.send_bytes(raw)
-
-                    if interrupted:
+                async for chunk in self.orchestrator.process_audio_stream(session, audio_data):
+                    if chunk.playback_receipt:
+                        playback_receipts.add(chunk.playback_receipt)
+                    if chunk.is_done:
+                        full_text = chunk.full_text or full_text
+                        user_text = chunk.user_text
+                        core_stages = chunk.stages
                         break
 
-            self._record_voice_turn(
-                session,
-                t_ref,
-                first_chunk_ms,
-                first_word_ms,
-                core_stages,
-                interrupted,
-                route="voice_turn_batch",
-            )
+                    if first_chunk_ms is None:
+                        first_chunk_ms = (time.monotonic() - t_ref) * 1000
 
-            if interrupted:
-                # User interrupted — send stop immediately, skip waiting
-                stop = OutboundMessage(
-                    type=MessageType.TEXT,
-                    payload="",
-                    metadata={"state": "stop"},
+                    if pb.interrupted:
+                        logger.info("gateway.interrupted by user")
+                        interrupted = True
+                        break
+
+                    logger.info(
+                        "gateway.sending sentence=%s audio=%d",
+                        chunk.text[:30],
+                        len(chunk.audio_data) if chunk.audio_data else 0,
+                    )
+                    await pb.send_sentence(chunk.text)
+                    full_text += chunk.text
+
+                    if chunk.audio_data and not await pb.send_clip(chunk.audio_data):
+                        interrupted = True
+                        break
+
+                self._record_voice_turn(
+                    session,
+                    t_ref,
+                    first_chunk_ms,
+                    pb.first_frame_ms(t_ref),
+                    core_stages,
+                    interrupted,
+                    route="voice_turn_batch",
                 )
-                await ws.send_text(await adapter.encode(stop))
-                logger.info("gateway.interrupted_stop")
-                await asyncio.sleep(0.2)
-            else:
-                # Normal completion — wait 420ms then send stop
-                await asyncio.sleep(0.42)
-                done = OutboundMessage(
-                    type=MessageType.TEXT,
-                    payload="",
-                    metadata={"state": "stop"},
-                )
-                await ws.send_text(await adapter.encode(done))
-                logger.info(
-                    "gateway.responding done text=%s frames=%d", full_text[:50], total_opus_frames
-                )
-                # Wait for device to finish playing buffered audio
-                playback_secs = max(total_opus_frames * 0.06 - 2.0, 0.5)
-                await asyncio.sleep(playback_secs)
+                await pb.finish()
+                total_opus_frames = pb.total_frames
 
             await self._confirm_playback_receipts(
                 playback_receipts,
                 played=not interrupted,
                 detail="user barge-in interrupted playback" if interrupted else "",
             )
-
-            # Resume listening
-            session._playing = False
-            session._interrupted = False
-            session._interrupt_count = 0
+            logger.info(
+                "gateway.responding done text=%s frames=%d interrupted=%s",
+                full_text[:50],
+                total_opus_frames,
+                interrupted,
+            )
 
             if user_text:
                 await self.session_manager.add_to_history(session.session_id, "user", user_text)
@@ -1051,7 +805,6 @@ class WebSocketServer:
                 session._life.notify_activity()
 
         except Exception:
-            session._playing = False
             await self._confirm_playback_receipts(
                 playback_receipts,
                 played=False,

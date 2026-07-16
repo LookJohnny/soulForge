@@ -24,7 +24,6 @@ from enum import Enum
 
 from gateway.config import settings
 from gateway.life import vocab
-from gateway.protocols.base import MessageType, OutboundMessage
 
 logger = logging.getLogger(__name__)
 
@@ -237,47 +236,19 @@ class LifeLoop:
 
     async def _play(self, text: str, mp3: bytes) -> None:
         """Play an ambient clip using the same protocol dance as quick replies."""
+        from gateway.playback import PlaybackChannel
+
         s = self.session
         if self._busy():
             return
-        s._playing = True
-        s._interrupted = False
-        s._interrupt_count = 0
-        try:
-            start = OutboundMessage(type=MessageType.TEXT, payload="", metadata={"state": "start"})
-            await self.ws.send_text(await self.adapter.encode(start))
+        async with PlaybackChannel(self.ws, self.adapter, s) as pb:
+            await pb.send_start()
             if text:
-                sentence = OutboundMessage(
-                    type=MessageType.TEXT, payload=text, metadata={"state": "sentence"}
-                )
-                await self.ws.send_text(await self.adapter.encode(sentence))
-            ss = OutboundMessage(
-                type=MessageType.TEXT, payload="", metadata={"state": "sentence_start"}
-            )
-            await self.ws.send_text(await self.adapter.encode(ss))
-
-            audio_out = OutboundMessage(type=MessageType.AUDIO, payload=mp3)
-            raw = await self.adapter.encode(audio_out)
-            if isinstance(raw, list):
-                for frame in raw[:5]:
-                    await self.ws.send_bytes(frame)
-                for frame in raw[5:]:
-                    if getattr(s, "_interrupted", False):
-                        break
-                    await self.ws.send_bytes(frame)
-                    await asyncio.sleep(0.06)
-            elif isinstance(raw, bytes):
-                await self.ws.send_bytes(raw)
-
-            await asyncio.sleep(0.42)
-            stop = OutboundMessage(type=MessageType.TEXT, payload="", metadata={"state": "stop"})
-            await self.ws.send_text(await self.adapter.encode(stop))
+                await pb.send_sentence(text)
+            await pb.send_clip(mp3)
+            await pb.finish(wait_drain=False)
             # Let the device drain its buffer before the mic counts again
             await asyncio.sleep(0.3)
-        finally:
-            s._playing = False
-            s._interrupted = False
-            s._interrupt_count = 0
 
         # Reset listening so speaker echo doesn't linger in the VAD buffers
         try:
