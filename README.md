@@ -43,6 +43,35 @@ SoulForge 是一个通用 AI 人格引擎平台。为毛绒玩具、耳机、手
   (数据)      (缓存)    (向量)    / DashScope
 ```
 
+### 第二视图：Character Runtime（一个大脑，多个身体）
+
+上图是**商用设备管线**（设备 → Gateway → AI Core）。仓库里还有第二套并行架构——**Character Runtime**（`engine/`），面向"任何身体都能接入同一个灵魂"的通用引擎愿景：
+
+```
+                    ┌──────────────────────────────┐
+                    │   Character Runtime (大脑)     │
+                    │  engine/planner   三层规划+四级重规划
+                    │  engine/perception 多模态感知   │
+                    │  engine/server    Protocol 0.2  │
+                    └──────┬───────┬───────┬────────┘
+                    JSON over WS (/body /control, 能力协商)
+                      ┌────┴──┐ ┌──┴────┐ ┌┴─────────┐
+                      │ Unity │ │ Web/  │ │ 语音网关  │ ← gateway 作为
+                      │ 场景  │ │Studio │ │(xiaozhi) │   "voice body" 接入
+                      └───────┘ └───────┘ └──────────┘
+                                 ┌──────────────────┐
+                                 │ engine/embodiment │→ engine/legacy 伺服栈 → 真机
+                                 └──────────────────┘
+```
+
+- 权威架构文档：[`docs/engine_architecture.md`](docs/engine_architecture.md)
+- 权威线协议规格：[`docs/protocol_0.2_spec.md`](docs/protocol_0.2_spec.md)（JSON over WebSocket，能力协商、回执防伪、重连顶替）
+- 角色单一来源：[`configs/characters.json`](configs/characters.json)（人格 × 音色 × 模型，换角色零代码）
+- 可视化对话台：`studio/`（`uv run python studio/server.py --port 8899`，人格×音色×VRM 自由组合）
+- `engine/legacy/` 是已退役的 Gen1 行为/伺服栈，仅作为 `embodiment/robot_adapter` 背后的执行层存活，不再添加新功能
+
+两套架构通过 `CHARACTER_RUNTIME_URL` 打通：设置后，网关把语音决策交给 Character Runtime（网关自身成为一个 voice body），TTS 仍复用 AI Core。
+
 ## 核心特性
 
 ### 人格化设计理念：是角色，不是扮演角色
@@ -334,11 +363,28 @@ soulForge/
 │   │       │   ├── audio.py            # 音频帧缓冲
 │   │       │   └── audio_codec.py      # Opus/PCM/MP3转码 (ffmpeg)
 │   │       ├── pipeline/
-│   │       │   └── orchestrator.py     # AI Core调用 (阻塞+流式)
+│   │       │   ├── orchestrator.py     # AI Core调用 (阻塞+流式)
+│   │       │   └── character_bridge.py # Character Runtime 桥 (gateway 作为 voice body)
+│   │       ├── playback.py             # 设备播放协议舞蹈的唯一实现 (节奏/打断/缓冲)
+│   │       ├── life/                   # "活着"层: 空闲状态机 (无聊哼歌/夜间困倦/思考填充音)
 │   │       ├── session.py              # 会话管理 + 设备自动注册
 │   │       └── server.py               # WebSocket服务 (流式推送)
 │   ├── database/               # Prisma Schema + 迁移
 │   └── shared/                 # 共享类型
+├── engine/                     # Character Runtime (第二视图, 见上文)
+│   ├── planner/                # 三层规划 (day/hour/minute) + 四级重规划 + 记忆适配
+│   ├── server/                 # Protocol 0.2 运行时服务器 (/body /control)
+│   ├── perception/             # 多模态感知 (vision/audio/fusion, 确定性安全钳制)
+│   ├── embodiment/             # IR → 身体适配器 (机器人: watchdog/故障锁存/安全姿态)
+│   └── legacy/                 # Gen1 行为/伺服栈 (已退役, 仅供 embodiment 调用)
+├── studio/                     # 人格×音色×VRM 可视化对话台 (aiohttp + three-vrm)
+├── configs/
+│   └── characters.json         # 角色单一来源 (人格/音色/模型/原型)
+├── docs/
+│   ├── engine_architecture.md  # Character Runtime 权威架构
+│   └── protocol_0.2_spec.md    # 权威线协议规格
+├── tests/                      # Character Runtime 测试套件 (197 项)
+├── demo/                       # 晚餐 demo 管线 + 融资样片生成
 ├── hardware/                   # 硬件接入测试
 ├── scripts/
 │   ├── dev.sh                  # 一键启动开发环境
@@ -368,9 +414,11 @@ cp .env.example .env
 ### 2. 安装依赖
 
 ```bash
-uv sync           # Python
-pnpm install      # Node.js
+uv sync --all-packages --dev   # Python (workspace 全部成员)
+pnpm install                   # Node.js
 ```
+
+> ⚠️ **macOS + iCloud**：若仓库位于 iCloud 同步目录（Desktop/Documents），iCloud 会向 `.venv` 注入 `foo 2.dist-info` 副本文件并损坏环境。本仓库的 `.venv` 是指向 `.venv.nosync` 的符号链接（`*.nosync` 不被 iCloud 同步）——重建环境时保持这个结构：`rm -rf .venv.nosync && mkdir .venv.nosync && uv sync --all-packages --dev`。最彻底的方案是把仓库移出 iCloud 目录。
 
 ### 3. 一键启动
 
@@ -392,30 +440,19 @@ pnpm install      # Node.js
 
 ```bash
 curl http://localhost:8100/health       # 健康检查
-uv run pytest packages/ai-core/tests/  # 测试
+make test-py                            # 全部 Python 测试 (~800 项, 三套分开跑)
 pnpm --dir apps/admin-web build         # 管理后台构建
 ```
 
-记忆功能专项验证：
+> 测试命令**都从仓库根目录跑**。`make test-py` 依次执行三套：ai-core (562)、gateway (40)、Character Runtime (197)。ai-core 和 gateway 的 `tests/` 目录同名，**不能合并进一条 pytest 命令**（模块名冲突）；根目录的 `tests/test_gateway_*` 同理不能与 `packages/gateway/tests` 同跑。
+
+单套/单文件验证示例：
 
 ```bash
-cd packages/ai-core
-uv run pytest tests/test_memory_policy.py
-ruff check src tests/test_memory_policy.py
-```
-
-Reaction / ActionPlan Safety Gate 验收：
-
-```bash
-cd packages/ai-core
-uv run pytest tests/test_acceptance_reaction_safety.py
-```
-
-Gateway 设备事件桥接验证：
-
-```bash
-cd packages/gateway
-PYTHONPATH=src uv run pytest tests/test_reaction_event.py
+uv run pytest packages/ai-core/tests/test_memory_policy.py   # 记忆策略
+uv run pytest packages/gateway/tests/test_playback.py        # 设备播放协议
+uv run pytest tests/test_planner.py                          # 规划引擎
+uv tool run ruff check packages/ai-core/src packages/gateway/src engine tests studio
 ```
 
 ## SSE 流式事件
@@ -486,8 +523,10 @@ data: {"type":"done","full_text":"嘿嘿，太棒啦！","emotion":"curious","la
 **后端**: Python 3.12+ / FastAPI / asyncpg / Redis / Milvus
 **前端**: Next.js 16 / NextAuth v5 / Prisma / React 19
 **AI**: DeepSeek (LLM) / DashScope (ASR) / Fish Audio (TTS) / Silero (VAD)
+**引擎**: Character Runtime (零三方依赖可嵌入) / Protocol 0.2 (JSON over WS) / three-vrm (Studio)
 **硬件**: 小智 ESP32-S3 (Opus 16kHz / WebSocket) / opuslib / ffmpeg
 **基建**: PostgreSQL / Redis / Milvus / MinIO / Docker / ffmpeg
+**质量**: ~800 项测试 (make test-py) / ruff / GitHub Actions CI (lint + 三套测试 + Docker build)
 
 ## License
 
