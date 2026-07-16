@@ -31,6 +31,11 @@ Thumbs.db
 outputs/
 checkpoints/
 
+# Third-party downloadable binaries — see assets/**/asset_manifest.json download_url
+assets/**/*.vrm
+assets/**/*.glb
+assets/audio/*.ogg
+
 # Docker volumes
 docker/data/
 

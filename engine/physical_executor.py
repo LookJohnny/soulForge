@@ -142,7 +142,11 @@ class PhysicalExecutor:
                     "value": value,
                 }
             )
-        return self.safety.filter(commands, dt=dt)
+        # feed live sensor readings (battery, servo temps ...) into the safety
+        # layer when the backend exposes them — hardware closes this loop
+        readings = getattr(self.backend, "sensor_readings", None)
+        sensor_readings = readings() if callable(readings) else None
+        return self.safety.filter(commands, sensor_readings=sensor_readings, dt=dt)
 
     def close(self) -> None:
         self.backend.close()

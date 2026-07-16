@@ -13,12 +13,11 @@ Data flow:
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
-from engine.blender import ChannelBlender, ChannelMode, TransitionCurve
+from engine.blender import ChannelBlender, ChannelMode
 from engine.ambient_behaviors import AmbientBehaviorComposer
-from engine.triggered_behaviors import BehaviorScheduler, BEHAVIOR_LIBRARY
+from engine.triggered_behaviors import BehaviorScheduler
 from engine.reactive_layer import ReactiveLayer
 
 
