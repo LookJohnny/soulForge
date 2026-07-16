@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SoulForge Studio · 炼魂台</title>
+  <link rel="stylesheet" href="/studio/studio.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "/node_modules/three/build/three.module.js",
+      "three/examples/jsm/": "/node_modules/three/examples/jsm/",
+      "@pixiv/three-vrm": "/node_modules/@pixiv/three-vrm/lib/three-vrm.module.js",
+      "@pixiv/three-vrm-animation": "/node_modules/@pixiv/three-vrm-animation/lib/three-vrm-animation.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="sigil">◈</span>
+      <h1>SoulForge <em>Studio</em></h1>
+      <span class="sub">炼 魂 台 · ONE BRAIN, MANY BODIES</span>
+    </div>
+    <div class="status" id="status">connecting…</div>
+  </header>
+
+  <main class="console">
+    <!-- ─────────── 左：灵魂面板 ─────────── -->
+    <aside class="panel soul-panel">
+      <h2><span>魂</span>人格 PERSONA</h2>
+
+      <label class="field">
+        <span class="key">角色</span>
+        <select id="agent-select"></select>
+      </label>
+
+      <label class="field">
+        <span class="key">名字</span>
+        <input id="p-name" type="text" maxlength="24" />
+      </label>
+
+      <label class="field">
+        <span class="key">原型</span>
+        <select id="p-archetype"></select>
+      </label>
+
+      <label class="field">
+        <span class="key">性格特质</span>
+        <input id="p-traits" type="text" placeholder="warm, artistic（逗号分隔）" />
+      </label>
+
+      <label class="field">
+        <span class="key">今日目标</span>
+        <input id="p-goals" type="text" placeholder="完成一幅画, 陪用户聊天" />
+      </label>
+
+      <label class="field">
+        <span class="key">安慰台词</span>
+        <textarea id="p-comfort" rows="2" maxlength="120"></textarea>
+      </label>
+
+      <label class="field slider">
+        <span class="key">精力 <b id="p-energy-val">0.8</b></span>
+        <input id="p-energy" type="range" min="0.1" max="1" step="0.05" value="0.8" />
+      </label>
+
+      <div class="divider"></div>
+      <h2><span>声</span>音色 VOICE</h2>
+
+      <label class="field">
+        <span class="key">提供方</span>
+        <select id="v-provider"></select>
+      </label>
+      <label class="field">
+        <span class="key">音色</span>
+        <select id="v-voice"></select>
+      </label>
+      <label class="field slider">
+        <span class="key">语速 <b id="v-rate-val">0</b></span>
+        <input id="v-rate" type="range" min="-30" max="30" step="5" value="0" />
+      </label>
+      <button class="ghost" id="v-preview">试听 ▸</button>
+
+      <div class="divider"></div>
+      <h2><span>躯</span>身体 MODEL</h2>
+      <div class="model-grid" id="model-grid"></div>
+
+      <div class="divider"></div>
+      <h2><span>舞</span>动作 MOTION</h2>
+      <div class="model-grid" id="anim-grid"></div>
+    </aside>
+
+    <!-- ─────────── 中：召唤台 ─────────── -->
+    <section class="stage-wrap">
+      <div class="stage-ring" aria-hidden="true"></div>
+      <canvas id="stage"></canvas>
+      <div class="stage-caption">
+        <b id="cap-name">—</b>
+        <i id="cap-detail">加载中…</i>
+      </div>
+      <div class="rel-meter" title="关系值（跨换装持续）">
+        <span>羁绊</span>
+        <div class="rel-bar"><div id="rel-fill"></div></div>
+        <b id="rel-val">–</b>
+      </div>
+    </section>
+
+    <!-- ─────────── 右：对话 + 决策 ─────────── -->
+    <aside class="panel chat-panel">
+      <h2><span>言</span>对话 DIALOGUE</h2>
+      <div class="chat-log" id="chat-log">
+        <div class="hint" id="chat-hint">
+          对她说点什么——试试「你好」「晚饭想吃清淡一点」「我今天有点累」。
+        </div>
+      </div>
+      <form class="chat-input" id="chat-form">
+        <button type="button" id="mic-btn" title="语音输入（Chrome）">🎙</button>
+        <input id="chat-text" type="text" maxlength="200"
+               placeholder="输入话语…" autocomplete="off" />
+        <button type="submit" id="chat-send">送入</button>
+      </form>
+
+      <div class="divider"></div>
+      <h2><span>思</span>决策 DECISION</h2>
+      <div class="decision" id="decision">
+        <div class="hint">角色的每次回应都来自唯一的 Character Runtime。<br/>
+        这里显示它「为什么这样做」。</div>
+      </div>
+    </aside>
+  </main>
+
+  <script type="module" src="/studio/studio.js"></script>
+</body>
+</html>
