@@ -11,6 +11,16 @@ class Settings(BaseSettings):
     # AI Core service
     ai_core_url: str = "http://localhost:8100"
 
+    # SoulForge Character Runtime (Protocol 0.2). When set, user utterances are
+    # decided by the ONE Character Runtime — the legacy ai-core /pipeline/chat
+    # dialogue path is bypassed so no utterance is ever processed by two LLMs.
+    character_runtime_url: str = ""            # e.g. ws://127.0.0.1:8765
+    character_runtime_agent: str = "kai"       # which character this voice body embodies
+    # Production DB character ids are UUIDs, while Runtime agent ids are names
+    # such as "kai". Pin unsolicited perception speech to its physical device.
+    character_runtime_voice_device_id: str = ""
+    character_runtime_timeout_s: float = 12.0
+
     # Service token for ai-core authentication
     service_token: str = ""
 

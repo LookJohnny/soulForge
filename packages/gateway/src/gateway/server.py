@@ -1,6 +1,7 @@
 """WebSocket server core - handles connections and dispatches to protocol adapters."""
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import time
@@ -36,6 +37,96 @@ class WebSocketServer:
 
     async def shutdown(self):
         await self.orchestrator.close()
+
+    async def _confirm_playback_receipts(
+        self,
+        receipts: set[str],
+        *,
+        played: bool,
+        detail: str = "",
+    ) -> None:
+        """Commit speech command terminal state after the device playback boundary."""
+        for receipt in list(receipts):
+            try:
+                await self.orchestrator.confirm_playback(
+                    receipt, played=played, detail=detail,
+                )
+            except Exception:
+                logger.exception("gateway.playback_receipt_failed", receipt=receipt)
+        receipts.clear()
+
+    async def _runtime_dialogue_loop(self, ws, adapter, session) -> None:
+        """Continuously render speech triggered by perception/system events."""
+        while True:
+            receipt: str | None = None
+            try:
+                chunk = await self.orchestrator.process_next_runtime_dialogue(session)
+                receipt = chunk.playback_receipt
+                while getattr(session, "_playing", False):
+                    await asyncio.sleep(0.05)
+                session._playing = True
+                session._interrupted = False
+
+                text_out = OutboundMessage(
+                    type=MessageType.TEXT,
+                    payload=chunk.text,
+                    metadata={"state": "sentence"},
+                )
+                await ws.send_text(await adapter.encode(text_out))
+
+                total_frames = 0
+                if chunk.audio_data:
+                    start = OutboundMessage(
+                        type=MessageType.TEXT,
+                        payload="",
+                        metadata={"state": "sentence_start"},
+                    )
+                    await ws.send_text(await adapter.encode(start))
+                    raw = await adapter.encode(
+                        AudioHandler.make_audio_response(chunk.audio_data),
+                    )
+                    if isinstance(raw, list):
+                        total_frames = len(raw)
+                        for frame in raw:
+                            if getattr(session, "_interrupted", False):
+                                break
+                            await ws.send_bytes(frame)
+                            await asyncio.sleep(0.06)
+                    elif isinstance(raw, bytes):
+                        await ws.send_bytes(raw)
+
+                stop = OutboundMessage(
+                    type=MessageType.TEXT,
+                    payload="",
+                    metadata={"state": "stop"},
+                )
+                await ws.send_text(await adapter.encode(stop))
+                interrupted = bool(getattr(session, "_interrupted", False))
+                if not interrupted:
+                    await asyncio.sleep(max(total_frames * 0.06 - 2.0, 0.5))
+                if receipt:
+                    await self.orchestrator.confirm_playback(
+                        receipt,
+                        played=not interrupted,
+                        detail="user barge-in interrupted playback" if interrupted else "",
+                    )
+                    receipt = None
+            except asyncio.CancelledError:
+                if receipt:
+                    await self.orchestrator.confirm_playback(
+                        receipt, played=False, detail="device connection closed",
+                    )
+                raise
+            except Exception:
+                if receipt:
+                    await self.orchestrator.confirm_playback(
+                        receipt, played=False, detail="unsolicited playback error",
+                    )
+                logger.exception("gateway.runtime_dialogue_error")
+                await asyncio.sleep(0.2)
+            finally:
+                session._playing = False
+                session._interrupted = False
 
     async def _verify_device(self, device_id: str, device_secret: str | None) -> bool:
         """Verify device credentials against Redis/DB with fallback.
@@ -109,6 +200,20 @@ class WebSocketServer:
             session._life = LifeLoop(self, ws, adapter, session)
             session._life.start()
 
+            # Keep one configured character voice online even when a visual or
+            # system event (rather than microphone speech) caused the line.
+            runtime_dialogue_task = None
+            voice_device = settings.character_runtime_voice_device_id
+            owns_runtime_voice = (
+                device_id == voice_device if voice_device
+                else session.character_id == settings.character_runtime_agent
+            )
+            if settings.character_runtime_url and owns_runtime_voice:
+                runtime_dialogue_task = asyncio.create_task(
+                    self._runtime_dialogue_loop(ws, adapter, session),
+                    name=f"runtime-dialogue-{session.session_id}",
+                )
+
             # Start idle timeout checker
             async def _idle_checker():
                 IDLE_TIMEOUT = 120  # seconds
@@ -150,6 +255,10 @@ class WebSocketServer:
         finally:
             if "idle_task" in locals():
                 idle_task.cancel()
+            if "runtime_dialogue_task" in locals() and runtime_dialogue_task is not None:
+                runtime_dialogue_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await runtime_dialogue_task
             if "session" in locals():
                 life = getattr(session, "_life", None)
                 if life:
@@ -447,6 +556,7 @@ class WebSocketServer:
         raw audio, skipping AI Core's ASR step. Includes playback state
         management and interrupt detection.
         """
+        playback_receipts: set[str] = set()
         try:
             logger.info("gateway.responding start (streaming asr: %s)", text[:30])
             thinking = OutboundMessage(
@@ -523,6 +633,8 @@ class WebSocketServer:
             async for chunk in self.orchestrator.process_text_stream(
                 session, text, stream_audio=True
             ):
+                if chunk.playback_receipt:
+                    playback_receipts.add(chunk.playback_receipt)
                 if chunk.is_done:
                     full_text = chunk.full_text or full_text
                     core_stages = chunk.stages
@@ -608,6 +720,12 @@ class WebSocketServer:
                 playback_secs = max(total_opus_frames * 0.06 - 2.0, 0.5)
                 await asyncio.sleep(playback_secs)
 
+            await self._confirm_playback_receipts(
+                playback_receipts,
+                played=not interrupted,
+                detail="user barge-in interrupted playback" if interrupted else "",
+            )
+
             session._playing = False
             session._interrupted = False
             session._interrupt_count = 0
@@ -622,6 +740,9 @@ class WebSocketServer:
 
         except Exception:
             session._playing = False
+            await self._confirm_playback_receipts(
+                playback_receipts, played=False, detail="gateway playback error",
+            )
             logger.exception("gateway.pipeline_error")
             error_out = OutboundMessage(
                 type=MessageType.CONTROL,
@@ -631,6 +752,9 @@ class WebSocketServer:
 
     async def _process_text_and_respond(self, ws, adapter, session, text: str):
         """Process text input through AI pipeline with streaming response."""
+        playback_receipts: set[str] = set()
+        playback_frames = 0
+        audio_sent = False
         try:
             # Send thinking indicator
             thinking = OutboundMessage(
@@ -642,6 +766,8 @@ class WebSocketServer:
 
             full_text = ""
             async for chunk in self.orchestrator.process_text_stream(session, text):
+                if chunk.playback_receipt:
+                    playback_receipts.add(chunk.playback_receipt)
                 if chunk.is_done:
                     full_text = chunk.full_text or full_text
                     break
@@ -657,9 +783,11 @@ class WebSocketServer:
 
                 # Send audio for this sentence
                 if chunk.audio_data:
+                    audio_sent = True
                     audio_out = AudioHandler.make_audio_response(chunk.audio_data)
                     raw = await adapter.encode(audio_out)
                     if isinstance(raw, list):
+                        playback_frames += len(raw)
                         for frame in raw:
                             await ws.send_bytes(frame)
                     elif isinstance(raw, bytes):
@@ -673,10 +801,18 @@ class WebSocketServer:
             )
             await ws.send_text(await adapter.encode(done))
 
+            if audio_sent:
+                playback_secs = max(playback_frames * 0.06 - 2.0, 0.5)
+                await asyncio.sleep(playback_secs)
+            await self._confirm_playback_receipts(playback_receipts, played=True)
+
             await self.session_manager.add_to_history(session.session_id, "user", text)
             await self.session_manager.add_to_history(session.session_id, "assistant", full_text)
 
         except Exception:
+            await self._confirm_playback_receipts(
+                playback_receipts, played=False, detail="gateway text playback error",
+            )
             logger.exception("gateway.text_pipeline_error")
             error_out = OutboundMessage(
                 type=MessageType.CONTROL,
@@ -752,6 +888,7 @@ class WebSocketServer:
         After all audio is sent, waits for estimated playback duration
         before resuming listening.
         """
+        playback_receipts: set[str] = set()
         try:
             logger.info("gateway.responding start")
             thinking = OutboundMessage(
@@ -778,6 +915,8 @@ class WebSocketServer:
             core_stages = None
 
             async for chunk in self.orchestrator.process_audio_stream(session, audio_data):
+                if chunk.playback_receipt:
+                    playback_receipts.add(chunk.playback_receipt)
                 if chunk.is_done:
                     full_text = chunk.full_text or full_text
                     user_text = chunk.user_text
@@ -878,6 +1017,12 @@ class WebSocketServer:
                 playback_secs = max(total_opus_frames * 0.06 - 2.0, 0.5)
                 await asyncio.sleep(playback_secs)
 
+            await self._confirm_playback_receipts(
+                playback_receipts,
+                played=not interrupted,
+                detail="user barge-in interrupted playback" if interrupted else "",
+            )
+
             # Resume listening
             session._playing = False
             session._interrupted = False
@@ -891,6 +1036,9 @@ class WebSocketServer:
 
         except Exception:
             session._playing = False
+            await self._confirm_playback_receipts(
+                playback_receipts, played=False, detail="gateway playback error",
+            )
             logger.exception("gateway.pipeline_error")
             error_out = OutboundMessage(
                 type=MessageType.CONTROL,

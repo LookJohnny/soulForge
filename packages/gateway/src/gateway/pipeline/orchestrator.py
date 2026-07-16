@@ -7,6 +7,7 @@ Streaming mode yields per-sentence text+audio for low-latency playback.
 import base64
 import json
 import logging
+import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
@@ -41,6 +42,10 @@ class StreamChunk:
     emotion: str = ""
     latency_ms: int = 0
     stages: dict | None = None  # ai-core per-stage latency breakdown (ms)
+    # Opaque receipt for the downstream playback sink.  The sink calls
+    # ``PipelineOrchestrator.confirm_playback`` only after real playback (or
+    # cancellation); producing/yielding audio is not completion.
+    playback_receipt: str | None = None
 
 
 class PipelineOrchestrator:
@@ -65,6 +70,130 @@ class PipelineOrchestrator:
             transport=httpx.AsyncHTTPTransport(),
             headers=headers,
         )
+        self._pending_playback: dict[str, tuple[str, ...]] = {}
+
+    def _character_bridge_instance(self):
+        from gateway.pipeline.character_bridge import CharacterBridge
+
+        if not hasattr(self, "_character_bridge"):
+            self._character_bridge = CharacterBridge()
+        return self._character_bridge
+
+    async def _transcribe_audio(self, audio_data: bytes, audio_format: str = "pcm") -> str:
+        """ASR-only fallback used when the Character Runtime owns decisions.
+
+        The old ``/pipeline/chat/stream`` endpoint combines ASR with a second
+        LLM and is therefore forbidden in single-brain mode. Gateway audio is
+        already 16 kHz mono PCM; feed it to the existing DashScope streaming
+        recognizer without invoking any chat endpoint.
+        """
+        if not audio_data:
+            return ""
+        if audio_format != "pcm":
+            logger.error("orchestrator.asr_only_unsupported_format format=%s", audio_format)
+            return ""
+        if not settings.dashscope_api_key:
+            logger.error("orchestrator.asr_only_unavailable missing DashScope API key")
+            return ""
+
+        from gateway.handlers.streaming_asr import StreamingASR
+
+        recognizer = StreamingASR(api_key=settings.dashscope_api_key)
+        try:
+            recognizer.start()
+            # Small chunks preserve the provider's streaming contract while
+            # processing an already-buffered utterance.
+            for offset in range(0, len(audio_data), 3200):
+                recognizer.feed(audio_data[offset : offset + 3200])
+            return (await recognizer.finish()).strip()
+        except Exception:
+            recognizer.abort()
+            logger.exception("orchestrator.asr_only_failed")
+            return ""
+
+    def _register_playback(self, commands: list[dict]) -> str | None:
+        command_ids = tuple(
+            str(command.get("command_id"))
+            for command in commands
+            if command.get("dialogue") and command.get("command_id")
+        )
+        if not command_ids:
+            return None
+        receipt = uuid.uuid4().hex
+        pending = getattr(self, "_pending_playback", None)
+        if pending is None:
+            pending = self._pending_playback = {}
+        pending[receipt] = command_ids
+        return receipt
+
+    async def confirm_playback(
+        self,
+        receipt: str | None,
+        *,
+        played: bool = True,
+        detail: str = "",
+    ) -> bool:
+        """Commit an explicit downstream playback result.
+
+        Existing stream consumers remain source-compatible because the receipt
+        is optional metadata on ``StreamChunk``. Playback-aware consumers must
+        call this after the device drains its audio buffer (or with
+        ``played=False`` on disconnect/barge-in). Returns ``False`` for unknown
+        or already-consumed receipts, making duplicate callbacks idempotent.
+        """
+        pending = getattr(self, "_pending_playback", {})
+        command_ids = pending.get(receipt or "")
+        bridge = getattr(self, "_character_bridge", None)
+        if not command_ids or bridge is None:
+            return False
+        for command_id in command_ids:
+            await bridge.confirm_spoken(command_id, played=played, detail=detail)
+        pending.pop(receipt, None)
+        return True
+
+    async def process_next_runtime_dialogue(
+        self,
+        session: Session,
+        *,
+        timeout_s: float | None = None,
+    ) -> StreamChunk:
+        """Render dialogue caused by perception/system events into TTS.
+
+        Unlike ``process_text_stream`` this does not submit a second event. The
+        persistent voice body receives an unsolicited ``speak_line`` already
+        decided by Character Runtime, synthesizes it, and returns an explicit
+        playback receipt for the device loop.
+        """
+        if not settings.character_runtime_url:
+            raise RuntimeError("Character Runtime bridge is not configured")
+        if not session.character_id:
+            raise ValueError(f"No character assigned to device {session.device_id}")
+        bridge = self._character_bridge_instance()
+        command = await bridge.next_unsolicited(timeout_s=timeout_s)
+        text = str(command.get("dialogue") or "")
+        receipt = self._register_playback([command])
+        try:
+            audio = await self.synthesize_tts(
+                text, session.character_id, session.brand_id,
+            ) if text else None
+        except Exception:
+            if receipt:
+                await self.confirm_playback(
+                    receipt, played=False, detail="TTS synthesis raised an error",
+                )
+            raise
+        if text and audio is None and receipt:
+            await self.confirm_playback(
+                receipt, played=False, detail="TTS synthesis failed",
+            )
+            receipt = None
+        return StreamChunk(
+            text=text,
+            audio_data=audio,
+            index=0,
+            kind="sentence",
+            playback_receipt=receipt,
+        )
 
     async def process_audio(self, session: Session, audio_data: bytes) -> dict:
         """Send audio to ai-core pipeline, get text + audio response.
@@ -74,6 +203,33 @@ class PipelineOrchestrator:
         """
         if not session.character_id:
             raise ValueError(f"No character assigned to device {session.device_id}")
+
+        if settings.character_runtime_url:
+            user_text = await self._transcribe_audio(audio_data)
+            if not user_text:
+                return {"text": "", "audio_data": None, "latency_ms": 0,
+                        "user_text": "", "playback_receipt": None}
+            bridge = self._character_bridge_instance()
+            decision = await bridge.process_utterance(user_text)
+            reply = decision["text"]
+            receipt = self._register_playback(decision.get("commands", []))
+            try:
+                audio = await self.synthesize_tts(
+                    reply, session.character_id, session.brand_id,
+                ) if reply else None
+            except Exception:
+                if receipt:
+                    await self.confirm_playback(
+                        receipt, played=False, detail="TTS synthesis raised an error",
+                    )
+                raise
+            if reply and audio is None and receipt:
+                await self.confirm_playback(receipt, played=False,
+                                            detail="TTS synthesis failed")
+                receipt = None
+            return {"text": reply, "audio_data": audio, "latency_ms": 0,
+                    "user_text": user_text, "playback_receipt": receipt,
+                    "correlation_id": decision.get("correlation_id")}
 
         payload = {
             "character_id": session.character_id,
@@ -107,6 +263,17 @@ class PipelineOrchestrator:
         """Send text to ai-core pipeline (skip ASR)."""
         if not session.character_id:
             raise ValueError(f"No character assigned to device {session.device_id}")
+
+        # Phase 6 single-decision path: when the Character Runtime is configured,
+        # IT alone decides what the character says/does — the legacy ai-core chat
+        # LLM is bypassed so one utterance is never processed by two brains.
+        if settings.character_runtime_url:
+            decision = await self._character_bridge_instance().process_utterance(text)
+            receipt = self._register_playback(decision.get("commands", []))
+            return {"text": decision["text"], "audio_data": None, "latency_ms": 0,
+                    "correlation_id": decision.get("correlation_id"),
+                    "commands": decision.get("commands", []),
+                    "playback_receipt": receipt}
 
         payload = {
             "character_id": session.character_id,
@@ -289,6 +456,22 @@ class PipelineOrchestrator:
         if not session.character_id:
             raise ValueError(f"No character assigned to device {session.device_id}")
 
+        if settings.character_runtime_url:
+            user_text = await self._transcribe_audio(audio_data, audio_format)
+            if not user_text:
+                # Fail closed: no transcript means no decision. In particular,
+                # never fall through to the legacy chat LLM for convenience.
+                yield StreamChunk(
+                    text="", audio_data=None, index=0, kind="done", is_done=True,
+                    user_text="", stages={"asr_only": "no_transcript"},
+                )
+                return
+            async for chunk in self.process_text_stream(session, user_text):
+                if chunk.is_done:
+                    chunk.user_text = user_text
+                yield chunk
+            return
+
         payload = {
             "character_id": session.character_id,
             "end_user_id": session.end_user_id,
@@ -328,6 +511,35 @@ class PipelineOrchestrator:
         """
         if not session.character_id:
             raise ValueError(f"No character assigned to device {session.device_id}")
+
+        # Phase 6 single-decision path: dialogue is decided by the Character
+        # Runtime; only TTS synthesis still rides ai-core. The legacy chat LLM
+        # is bypassed — one utterance is never processed by two brains.
+        if settings.character_runtime_url:
+            bridge = self._character_bridge_instance()
+            decision = await bridge.process_utterance(text)
+            reply = decision["text"]
+            receipt = self._register_playback(decision.get("commands", []))
+            try:
+                audio = await self.synthesize_tts(
+                    reply, session.character_id, session.brand_id,
+                ) if reply else None
+            except Exception:
+                if receipt:
+                    await self.confirm_playback(
+                        receipt, played=False, detail="TTS synthesis raised an error",
+                    )
+                raise
+            if reply and audio is None and receipt:
+                await self.confirm_playback(receipt, played=False,
+                                            detail="TTS synthesis failed")
+                receipt = None
+            yield StreamChunk(text=reply, audio_data=audio, index=0,
+                              kind="sentence", playback_receipt=receipt)
+            yield StreamChunk(text="", audio_data=None, index=1, kind="done",
+                              is_done=True, full_text=reply, user_text=text,
+                              playback_receipt=receipt)
+            return
 
         payload = {
             "character_id": session.character_id,
@@ -389,5 +601,13 @@ class PipelineOrchestrator:
         return None
 
     async def close(self):
+        # Outstanding receipts were never confirmed by a playback sink. Mark
+        # them interrupted before disconnecting so Runtime does not infer speech.
+        for receipt in list(getattr(self, "_pending_playback", {})):
+            await self.confirm_playback(receipt, played=False,
+                                        detail="gateway shutdown before playback confirmation")
+        bridge = getattr(self, "_character_bridge", None)
+        if bridge is not None:
+            await bridge.close()
         await self.client.aclose()
         await self.stream_client.aclose()

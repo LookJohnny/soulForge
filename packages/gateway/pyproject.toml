@@ -10,9 +10,15 @@ dependencies = [
     "asyncpg>=0.30",
     "redis>=5.2",
     "httpx>=0.28",
+    # Imported directly by the real-time audio stack. Keep these declared here
+    # so a standalone gateway install can import and start gateway.server.
+    "dashscope>=1.22",
+    "opuslib>=3.0.1",
     "pydantic>=2.10",
     "pydantic-settings>=2.7",
+    "silero-vad>=6.2",
     "structlog>=24.0",
+    "torch>=2.6",
 ]
 
 [build-system]
