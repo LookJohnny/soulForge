@@ -2147,6 +2147,10 @@ wheels = [
 name = "soulforge"
 version = "0.1.0"
 source = { virtual = "." }
+dependencies = [
+    { name = "ai-core" },
+    { name = "gateway" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -2163,6 +2167,10 @@ mujoco-demo = [
 ]
 
 [package.metadata]
+requires-dist = [
+    { name = "ai-core", editable = "packages/ai-core" },
+    { name = "gateway", editable = "packages/gateway" },
+]
 
 [package.metadata.requires-dev]
 dev = [

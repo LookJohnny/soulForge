@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
-.venv/
+.venv
+.venv.nosync/
 __pycache__/
 *.pyc
 

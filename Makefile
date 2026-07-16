@@ -43,8 +43,12 @@ test: test-js test-py
 test-js:
 	pnpm run test
 
+# Note: the two packages' tests/ dirs collide on module names when collected
+# in one pytest run (both import as the 'tests' package) — run separately.
 test-py:
-	uv run pytest packages/ai-core/tests packages/gateway/tests
+	uv run pytest packages/ai-core/tests
+	uv run pytest packages/gateway/tests
+	uv run pytest
 
 # ─── Lint ───────────────────────────────────────────
 lint: lint-js lint-py

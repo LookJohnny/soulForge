@@ -3,12 +3,22 @@ name = "soulforge"
 version = "0.1.0"
 description = "SoulForge - AI Toy Soul Injection Platform"
 requires-python = ">=3.12"
+# Workspace members as root deps: a bare `uv run` re-syncs the venv to the
+# root project spec and would otherwise UNINSTALL ai-core/gateway mid-work.
+dependencies = [
+    "ai-core",
+    "gateway",
+]
 
 [tool.uv.workspace]
 members = [
     "packages/ai-core",
     "packages/gateway",
 ]
+
+[tool.uv.sources]
+ai-core = { workspace = true }
+gateway = { workspace = true }
 
 [dependency-groups]
 dev = [
