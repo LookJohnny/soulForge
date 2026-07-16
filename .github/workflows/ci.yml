@@ -31,8 +31,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv tool install ruff
-      - run: ruff check packages/ai-core/src packages/gateway/src
-      - run: ruff format --check packages/ai-core/src packages/gateway/src
+      - run: ruff check packages/ai-core/src packages/gateway/src engine tests studio
+      - run: ruff format --check packages/ai-core/src packages/gateway/src engine tests studio
 
   test-ai-core:
     name: Test AI Core
@@ -44,7 +44,31 @@ jobs:
         with:
           python-version: "3.12"
       - run: cd packages/ai-core && uv sync --dev
-      - run: cd packages/ai-core && uv run pytest tests/ -v --tb=short || true
+      - run: cd packages/ai-core && uv run pytest tests/ --tb=short
+
+  test-gateway:
+    name: Test Gateway
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: cd packages/gateway && uv sync --dev
+      - run: cd packages/gateway && uv run pytest tests/ --tb=short
+
+  test-engine:
+    name: Test Character Runtime (engine)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --dev
+      - run: uv run pytest --tb=short
 
   docker-build:
     name: Docker Build Test
