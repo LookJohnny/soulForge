@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, field
 
-from engine.action_units import ActionTemplate, ActionUnit, compile_to_units
-from engine.intent import Intent
-from engine.physical_executor import ExecutionResult, PhysicalExecutor
+from engine.legacy.action_units import ActionTemplate, ActionUnit, compile_to_units
+from engine.legacy.intent import Intent
+from engine.legacy.physical_executor import ExecutionResult, PhysicalExecutor
 
 
 @dataclass

@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from engine.intent import Intent
+from engine.legacy.intent import Intent
 
 
 Pose = dict[str, float]

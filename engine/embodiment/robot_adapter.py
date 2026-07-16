@@ -4,9 +4,13 @@ Data path (the LLM/planner can never reach an actuator directly):
 
     Character Runtime -> ActionCommand (IR)
         -> RobotEmbodimentAdapter.execute()
-        -> PhysicalAIEngine.submit_intent()   (old servo stack, unchanged)
+        -> PhysicalAIEngine.submit_intent()   (engine.legacy servo stack)
         -> Dispatcher -> PhysicalExecutor -> SafetyManager -> Backend
         -> canonical Observation back to the brain
+
+This adapter is the ONLY sanctioned caller of engine.legacy: the Gen1 stack
+survives solely as the servo execution layer behind this boundary. New
+behavior belongs in planner templates + this step map, never in legacy.
 
 The adapter owns the robot-side authority: watchdog, deadline/TTL checks,
 fault latching with a manual reset interface, and a commanded safe pose.
@@ -18,8 +22,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from engine.intent import Priority
-from engine.physical_ai_engine import PhysicalAIEngine
+from engine.legacy.intent import Priority
+from engine.legacy.physical_ai_engine import PhysicalAIEngine
 from engine.server.protocol import ActionCommand, Observation
 
 # planner micro-steps / animation clips -> servo-stack action templates.

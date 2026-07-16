@@ -41,7 +41,7 @@ M0 的头部软打断通过标准：
 
 | 物理能力 | 当前入口 | 本轮处理 |
 | --- | --- | --- |
-| 三层行为引擎 | `engine/behavior_engine.py` | 后续接 Intent/ActionUnit |
+| 三层行为引擎 | `engine/legacy/behavior_engine.py` | 后续接 Intent/ActionUnit |
 | Ambient/Triggered/Reactive 分层 | `engine/ambient_behaviors.py`, `engine/triggered_behaviors.py`, `engine/reactive_layer.py` | 保留，M0 先用脚本化场景验证 |
 | 通道混合 | `engine/blender.py` | 后续纳入 Dispatcher |
 | 运动平滑 | `motion/smoother.py` | M0 MuJoCo demo 已复用 |
@@ -56,7 +56,7 @@ M0 的头部软打断通过标准：
 | 通用执行器 | `engine/physical_executor.py` | 已实现 |
 | MuJoCo 后端 | `engine/mujoco_backend.py` | 已实现 |
 | Vtuber loader/proxy | `engine/vtuber_model.py` | 已实现 |
-| PhysicalAIEngine facade | `engine/physical_ai_engine.py` | 已实现 |
+| PhysicalAIEngine facade | `engine/legacy/physical_ai_engine.py` | 已实现 |
 | LLM 行为规划 | `engine/llm_behavior_planner.py` | 已实现：LLM 选高层动作模板，不直接发舵机角度 |
 | 24 小时自主日程 | `engine/daily_autonomy.py` | 已实现：全天 block -> 每小时 -> 每分钟动作模板 |
 | 外部环境事件接口 | `engine/environment_events.py` | 已实现：计算机模拟/机器人/游戏统一成 EnvironmentEvent |

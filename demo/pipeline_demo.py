@@ -8,7 +8,7 @@ Data flow:
 import sys, os, json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from engine.behavior_engine import BehaviorEngine
+from engine.legacy.behavior_engine import BehaviorEngine
 from protocol.mapping_engine import MappingEngine
 from safety.safety_manager import SafetyManager
 from simulator.toy_simulator import ToySimulator

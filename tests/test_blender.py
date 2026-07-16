@@ -6,7 +6,7 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from engine.blender import ChannelBlender, ChannelMode, TransitionCurve
+from engine.legacy.blender import ChannelBlender, ChannelMode, TransitionCurve
 
 
 class TestExclusiveMode:

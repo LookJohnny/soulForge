@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from engine.action_units import ActionUnit, sample_pose
+from engine.legacy.action_units import ActionUnit, sample_pose
 from motion.smoother import MotionSmoother
 from safety.safety_manager import SafetyManager
 from simulator.toy_simulator import ToySimulator

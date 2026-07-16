@@ -19,7 +19,7 @@ from believability.gym_env import BelievabilityEnv, N_CHANNELS
 from believability.metrics import BelievabilityMetrics
 from believability.policy import BelievabilityPolicy
 from believability.scenario_generator import generate as gen_scenario
-from engine.behavior_engine import BehaviorEngine
+from engine.legacy.behavior_engine import BehaviorEngine
 
 
 # ── Strategy implementations ─────────────────────

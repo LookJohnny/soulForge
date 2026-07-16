@@ -28,8 +28,8 @@ from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from engine.action_units import DEFAULT_ACTION_TEMPLATES, sample_pose
-from engine.vtuber_model import load_vtuber_model
+from engine.legacy.action_units import DEFAULT_ACTION_TEMPLATES, sample_pose
+from engine.legacy.vtuber_model import load_vtuber_model
 
 
 PROJECTS_URL = "https://raw.githubusercontent.com/ToxSam/open-source-avatars/main/data/projects.json"

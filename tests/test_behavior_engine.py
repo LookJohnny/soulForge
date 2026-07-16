@@ -5,8 +5,8 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from engine.behavior_engine import BehaviorEngine
-from engine.triggered_behaviors import BehaviorScheduler, BEHAVIOR_LIBRARY
+from engine.legacy.behavior_engine import BehaviorEngine
+from engine.legacy.triggered_behaviors import BehaviorScheduler, BEHAVIOR_LIBRARY
 
 
 class TestTriggeredBehaviors:

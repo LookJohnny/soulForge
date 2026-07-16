@@ -2,10 +2,10 @@
 -> Observation, with fault injection and fail-closed behavior."""
 
 from engine.embodiment import FaultInjectionBackend, RobotEmbodimentAdapter
-from engine.physical_ai_engine import PhysicalAIEngine
-from engine.physical_executor import RecordingBackend
+from engine.legacy.physical_ai_engine import PhysicalAIEngine
+from engine.legacy.physical_executor import RecordingBackend
 from engine.server.protocol import ActionCommand
-from engine.vtuber_model import build_proxy_manifest
+from engine.legacy.vtuber_model import build_proxy_manifest
 
 
 def make_adapter(backend=None, **kwargs):

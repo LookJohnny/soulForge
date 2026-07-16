@@ -17,11 +17,11 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from engine.daily_autonomy import DailyAutonomyPlanner
-from engine.environment_events import EnvironmentEvent, ScriptedEnvironmentAdapter
-from engine.mujoco_backend import MuJoCoVideoBackend
-from engine.physical_ai_engine import PhysicalAIEngine
-from engine.vtuber_model import load_vtuber_model
+from engine.legacy.daily_autonomy import DailyAutonomyPlanner
+from engine.legacy.environment_events import EnvironmentEvent, ScriptedEnvironmentAdapter
+from engine.legacy.mujoco_backend import MuJoCoVideoBackend
+from engine.legacy.physical_ai_engine import PhysicalAIEngine
+from engine.legacy.vtuber_model import load_vtuber_model
 
 
 def parse_args() -> argparse.Namespace:

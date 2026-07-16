@@ -4,13 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from engine.action_units import ActionTemplate, DEFAULT_ACTION_TEMPLATES
-from engine.daily_autonomy import DailyAutonomyPlanner, DailyPlan
-from engine.dispatcher import Dispatcher
-from engine.environment_events import EnvironmentAdapter, event_to_template
-from engine.intent import Intent, Priority
-from engine.llm_behavior_planner import BehaviorPlan, LLMBehaviorPlanner
-from engine.physical_executor import ExecutionBackend, ExecutionResult, PhysicalExecutor
+from engine.legacy.action_units import ActionTemplate, DEFAULT_ACTION_TEMPLATES
+from engine.legacy.daily_autonomy import DailyAutonomyPlanner, DailyPlan
+from engine.legacy.dispatcher import Dispatcher
+from engine.legacy.environment_events import EnvironmentAdapter, event_to_template
+from engine.legacy.intent import Intent, Priority
+from engine.legacy.llm_behavior_planner import BehaviorPlan, LLMBehaviorPlanner
+from engine.legacy.physical_executor import (
+    ExecutionBackend,
+    ExecutionResult,
+    PhysicalExecutor,
+)
 
 
 @dataclass

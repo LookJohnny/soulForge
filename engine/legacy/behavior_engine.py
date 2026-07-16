@@ -15,10 +15,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.blender import ChannelBlender, ChannelMode
-from engine.ambient_behaviors import AmbientBehaviorComposer
-from engine.triggered_behaviors import BehaviorScheduler
-from engine.reactive_layer import ReactiveLayer
+from engine.legacy.blender import ChannelBlender, ChannelMode
+from engine.legacy.ambient_behaviors import AmbientBehaviorComposer
+from engine.legacy.triggered_behaviors import BehaviorScheduler
+from engine.legacy.reactive_layer import ReactiveLayer
 
 
 # Default channel definitions (can be overridden from hardware manifest)

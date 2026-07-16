@@ -10,8 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from engine.action_units import DEFAULT_ACTION_TEMPLATES
-from engine.intent import Intent, Priority
+from engine.legacy.action_units import DEFAULT_ACTION_TEMPLATES
+from engine.legacy.intent import Intent, Priority
 
 
 PHYSICAL_PLANNER_PROMPT = """\
