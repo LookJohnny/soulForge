@@ -1,6 +1,7 @@
 """Tests for Safety module (Tasks 3A + 3B)."""
 
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from safety.cbf_constraint import CBFConstraint
@@ -124,7 +125,6 @@ class TestServoThermalModel:
 
     def test_fit_from_data(self):
         """fit_from_data recovers known parameters from synthetic data."""
-        import numpy as np
 
         alpha_true, beta_true, t_amb_true = 0.03, 0.4, 36.0
         m = ServoThermalModel(alpha=alpha_true, beta=beta_true, t_ambient=t_amb_true, t_initial=36.0)

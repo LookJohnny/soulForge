@@ -1,6 +1,8 @@
 """Tests for Believability Metrics (Task 5A)."""
 
-import sys, os, math
+import sys
+import os
+import math
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from believability.metrics import BelievabilityMetrics

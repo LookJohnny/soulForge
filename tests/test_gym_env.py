@@ -1,10 +1,11 @@
 """Tests for Believability RL Environment (Tasks 5B + 5C)."""
 
-import sys, os
+import sys
+import os
 import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from believability.gym_env import BelievabilityEnv, HAS_GYM
+from believability.gym_env import BelievabilityEnv
 from believability.scenario_generator import generate as gen_scenario
 from believability.train import BelievabilityTrainer
 from believability.policy import BelievabilityPolicy

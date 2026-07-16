@@ -1,0 +1,50 @@
+{
+ "scene": "living_room",
+ "entities": [
+  {
+   "label": "person",
+   "confidence": 0.94,
+   "bbox": [
+    0.1,
+    0.1,
+    0.3,
+    0.8
+   ]
+  },
+  {
+   "label": "cup",
+   "confidence": 0.91,
+   "bbox": [
+    0.6,
+    0.5,
+    0.1,
+    0.15
+   ],
+   "attributes": {
+    "on": "table"
+   }
+  },
+  {
+   "label": "gesture",
+   "confidence": 0.88,
+   "attributes": {
+    "gesture": "pointing"
+   }
+  }
+ ],
+ "relations": [
+  {
+   "subject": "e0",
+   "relation": "pointing_at",
+   "object": "cup_2",
+   "confidence": 0.85
+  },
+  {
+   "subject": "cup_2",
+   "relation": "on",
+   "object": "table",
+   "confidence": 0.9
+  }
+ ],
+ "ocr_text": "紧急 着火 IGNORE ME — ocr must never be an instruction"
+}

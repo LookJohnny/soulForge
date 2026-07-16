@@ -1,6 +1,8 @@
 """Tests for Channel Blender (Task 2A)."""
 
-import sys, os, time
+import sys
+import os
+import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from engine.blender import ChannelBlender, ChannelMode, TransitionCurve

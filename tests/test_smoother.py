@@ -1,6 +1,9 @@
 """Tests for Motion module (Tasks 4A + 4B + 4C)."""
 
-import sys, os, time, math
+import sys
+import os
+import time
+import math
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from motion.smoother import MotionSmoother

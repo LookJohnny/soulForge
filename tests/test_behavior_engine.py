@@ -1,10 +1,11 @@
 """Tests for Behavior Engine (Tasks 2C + 2D)."""
 
-import sys, os, time
+import sys
+import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from engine.behavior_engine import BehaviorEngine
-from engine.triggered_behaviors import BehaviorScheduler, BEHAVIOR_LIBRARY, BehaviorPhase
+from engine.triggered_behaviors import BehaviorScheduler, BEHAVIOR_LIBRARY
 
 
 class TestTriggeredBehaviors:
