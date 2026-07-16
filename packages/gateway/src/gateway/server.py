@@ -49,7 +49,9 @@ class WebSocketServer:
         for receipt in list(receipts):
             try:
                 await self.orchestrator.confirm_playback(
-                    receipt, played=played, detail=detail,
+                    receipt,
+                    played=played,
+                    detail=detail,
                 )
             except Exception:
                 logger.exception("gateway.playback_receipt_failed", receipt=receipt)
@@ -114,13 +116,17 @@ class WebSocketServer:
             except asyncio.CancelledError:
                 if receipt:
                     await self.orchestrator.confirm_playback(
-                        receipt, played=False, detail="device connection closed",
+                        receipt,
+                        played=False,
+                        detail="device connection closed",
                     )
                 raise
             except Exception:
                 if receipt:
                     await self.orchestrator.confirm_playback(
-                        receipt, played=False, detail="unsolicited playback error",
+                        receipt,
+                        played=False,
+                        detail="unsolicited playback error",
                     )
                 logger.exception("gateway.runtime_dialogue_error")
                 await asyncio.sleep(0.2)
@@ -205,7 +211,8 @@ class WebSocketServer:
             runtime_dialogue_task = None
             voice_device = settings.character_runtime_voice_device_id
             owns_runtime_voice = (
-                device_id == voice_device if voice_device
+                device_id == voice_device
+                if voice_device
                 else session.character_id == settings.character_runtime_agent
             )
             if settings.character_runtime_url and owns_runtime_voice:
@@ -216,11 +223,10 @@ class WebSocketServer:
 
             # Start idle timeout checker
             async def _idle_checker():
-                IDLE_TIMEOUT = 120  # seconds
                 while True:
                     await asyncio.sleep(10)
                     idle = time.monotonic() - getattr(session, "_last_activity", time.monotonic())
-                    if idle > IDLE_TIMEOUT:
+                    if idle > settings.idle_timeout_s:
                         logger.info("gateway.idle_timeout device=%s", device_id)
                         await ws.close(code=1000, reason="Idle timeout")
                         return
@@ -263,7 +269,13 @@ class WebSocketServer:
                 life = getattr(session, "_life", None)
                 if life:
                     life.cancel()
-                self.audio_handler.abort(session)
+                # The VAD monitor coroutine outlives the socket otherwise and
+                # keeps writing to a closed connection.
+                silence_task = getattr(session, "_silence_task", None)
+                if silence_task:
+                    silence_task.cancel()
+                    session._silence_task = None
+                self.audio_handler.release(session)
                 await self.session_manager.remove_session(session.session_id)
 
     async def _handle_message(self, ws, adapter, session, msg):
@@ -348,15 +360,15 @@ class WebSocketServer:
 
             # High energy = user is trying to speak over TTS
             # Threshold must be well above speaker echo level (~3000-8000 RMS)
-            if rms > 12000:
+            if rms > settings.barge_in_rms_threshold:
                 session._interrupt_count += 1
-                if session._interrupt_count >= 8:  # ~500ms sustained loud voice
+                if session._interrupt_count >= settings.barge_in_sustain_frames:
                     session._interrupted = True
                     logger.info("gateway.barge_in detected rms=%d", int(rms))
             else:
                 session._interrupt_count = max(0, getattr(session, "_interrupt_count", 0) - 1)
         except Exception:
-            pass
+            logger.debug("gateway.barge_in_decode_error", exc_info=True)
 
     async def _vad_monitor(self, ws, adapter, session):
         """Monitor VAD state and trigger processing when speech ends.
@@ -741,7 +753,9 @@ class WebSocketServer:
         except Exception:
             session._playing = False
             await self._confirm_playback_receipts(
-                playback_receipts, played=False, detail="gateway playback error",
+                playback_receipts,
+                played=False,
+                detail="gateway playback error",
             )
             logger.exception("gateway.pipeline_error")
             error_out = OutboundMessage(
@@ -811,7 +825,9 @@ class WebSocketServer:
 
         except Exception:
             await self._confirm_playback_receipts(
-                playback_receipts, played=False, detail="gateway text playback error",
+                playback_receipts,
+                played=False,
+                detail="gateway text playback error",
             )
             logger.exception("gateway.text_pipeline_error")
             error_out = OutboundMessage(
@@ -1037,7 +1053,9 @@ class WebSocketServer:
         except Exception:
             session._playing = False
             await self._confirm_playback_receipts(
-                playback_receipts, played=False, detail="gateway playback error",
+                playback_receipts,
+                played=False,
+                detail="gateway playback error",
             )
             logger.exception("gateway.pipeline_error")
             error_out = OutboundMessage(

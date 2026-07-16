@@ -57,42 +57,50 @@ class CharacterBridge:
     # ------------------------------------------------------------ connection
     async def _ensure_connected(self):
         async with self._connect_lock:
-            if (self._socket is not None and self._reader_task is not None
-                    and not self._reader_task.done()):
+            if (
+                self._socket is not None
+                and self._reader_task is not None
+                and not self._reader_task.done()
+            ):
                 try:
                     await self._socket.ping()
                     return self._socket
                 except Exception:
                     await self._disconnect()
             socket = await websockets.connect(f"{self.url.rstrip('/')}/body")
-            await socket.send(_frame({
-                "type": "hello",
-                "protocol": "0.2",
-                "body_id": self.body_id,
-                "backend": "voice",
-                "agent_ids": [self.agent_id],
-                "manifest": {
-                    # This connection only renders speech. Gaze, nods, waits and
-                    # motion are executed (and acknowledged) by their real bodies.
-                    "supported_steps": ["speak_line"],
-                    # Speech may accompany any template, so do not template-filter
-                    # it. Step negotiation above is the fail-closed capability gate.
-                    "supported_templates": [],
-                    "features": {
-                        "speech": True,
-                        "speech_only": True,
-                        "gaze": False,
-                        "nav": False,
-                    },
-                },
-            }))
+            await socket.send(
+                _frame(
+                    {
+                        "type": "hello",
+                        "protocol": "0.2",
+                        "body_id": self.body_id,
+                        "backend": "voice",
+                        "agent_ids": [self.agent_id],
+                        "manifest": {
+                            # This connection only renders speech. Gaze, nods, waits and
+                            # motion are executed (and acknowledged) by their real bodies.
+                            "supported_steps": ["speak_line"],
+                            # Speech may accompany any template, so do not template-filter
+                            # it. Step negotiation above is the fail-closed capability gate.
+                            "supported_templates": [],
+                            "features": {
+                                "speech": True,
+                                "speech_only": True,
+                                "gaze": False,
+                                "nav": False,
+                            },
+                        },
+                    }
+                )
+            )
             welcome = json.loads(await asyncio.wait_for(socket.recv(), timeout=5))
             if welcome.get("type") != "welcome":
                 await socket.close()
                 raise ConnectionError(f"runtime server refused hello: {welcome}")
             self._socket = socket
             self._reader_task = asyncio.create_task(
-                self._reader_loop(socket), name=f"character-voice-{self.body_id}",
+                self._reader_loop(socket),
+                name=f"character-voice-{self.body_id}",
             )
             return socket
 
@@ -109,30 +117,40 @@ class CharacterBridge:
                     continue
                 if not isinstance(data, dict):
                     continue
-                if (data.get("type") != "action"
-                        or data.get("agent_id") != self.agent_id
-                        or not data.get("dialogue")):
+                if (
+                    data.get("type") != "action"
+                    or data.get("agent_id") != self.agent_id
+                    or not data.get("dialogue")
+                ):
                     continue
                 correlation = data.get("correlation_id")
                 waiter = self._waiters.get(correlation)
                 if waiter is None and self._unsolicited.full():
-                    await socket.send(_frame({
-                        "type": "observation",
-                        "command_id": data.get("command_id", ""),
-                        "agent_id": self.agent_id,
-                        "status": "rejected",
-                        "detail": "voice playback queue full",
-                        "body_id": self.body_id,
-                    }))
+                    await socket.send(
+                        _frame(
+                            {
+                                "type": "observation",
+                                "command_id": data.get("command_id", ""),
+                                "agent_id": self.agent_id,
+                                "status": "rejected",
+                                "detail": "voice playback queue full",
+                                "body_id": self.body_id,
+                            }
+                        )
+                    )
                     continue
                 # Receipt only. Terminal status comes from actual playback.
-                await socket.send(_frame({
-                    "type": "observation",
-                    "command_id": data.get("command_id", ""),
-                    "agent_id": self.agent_id,
-                    "status": "accepted",
-                    "body_id": self.body_id,
-                }))
+                await socket.send(
+                    _frame(
+                        {
+                            "type": "observation",
+                            "command_id": data.get("command_id", ""),
+                            "agent_id": self.agent_id,
+                            "status": "accepted",
+                            "body_id": self.body_id,
+                        }
+                    )
+                )
                 if waiter is not None:
                     await waiter.put(data)
                 else:
@@ -144,14 +162,18 @@ class CharacterBridge:
                 self._socket = None
 
     # ---------------------------------------------------------------- decide
-    async def process_utterance(self, text: str, *, payload: dict[str, Any] | None = None,
-                                ) -> dict[str, Any]:
+    async def process_utterance(
+        self,
+        text: str,
+        *,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Send one user utterance, collect this decision's dialogue commands.
 
         Returns {"text": str, "correlation_id": str|None, "commands": [...]} in a
         shape orchestrator can hand to the existing TTS stage unchanged.
         """
-        async with self._lock:                     # one in-flight decision per body
+        async with self._lock:  # one in-flight decision per body
             socket = await self._ensure_connected()
             event_payload = dict(payload or {})
             event_id = event_payload.get("event_id")
@@ -168,11 +190,18 @@ class CharacterBridge:
             # after a short quiet period) or the deadline hits
             quiet_after = None
             try:
-                await socket.send(_frame({
-                    "type": "event", "kind": "user_utterance", "source": "user",
-                    "text": text, "target_agent": self.agent_id,
-                    "payload": event_payload,
-                }))
+                await socket.send(
+                    _frame(
+                        {
+                            "type": "event",
+                            "kind": "user_utterance",
+                            "source": "user",
+                            "text": text,
+                            "target_agent": self.agent_id,
+                            "payload": event_payload,
+                        }
+                    )
+                )
                 while loop.time() < deadline:
                     budget = (quiet_after or deadline) - loop.time()
                     if budget <= 0:
@@ -183,11 +212,14 @@ class CharacterBridge:
                         break
                     commands.append(data)
                     dialogue_parts.append(data["dialogue"])
-                    quiet_after = loop.time() + 0.6      # flush trailing speech
+                    quiet_after = loop.time() + 0.6  # flush trailing speech
             finally:
                 self._waiters.pop(event_id, None)
-            return {"text": "".join(dialogue_parts), "correlation_id": event_id,
-                    "commands": commands}
+            return {
+                "text": "".join(dialogue_parts),
+                "correlation_id": event_id,
+                "commands": commands,
+            }
 
     async def next_unsolicited(self, *, timeout_s: float | None = None) -> dict[str, Any]:
         """Wait for dialogue caused by perception/system events, not a voice turn."""
@@ -210,13 +242,18 @@ class CharacterBridge:
         """
         if self._socket is None or not command_id:
             return
-        await self._socket.send(_frame({
-            "type": "observation", "command_id": command_id,
-            "agent_id": self.agent_id,
-            "status": "done" if played else "interrupted",
-            "detail": detail,
-            "body_id": self.body_id,
-        }))
+        await self._socket.send(
+            _frame(
+                {
+                    "type": "observation",
+                    "command_id": command_id,
+                    "agent_id": self.agent_id,
+                    "status": "done" if played else "interrupted",
+                    "detail": detail,
+                    "body_id": self.body_id,
+                }
+            )
+        )
 
     async def close(self) -> None:
         await self._disconnect()

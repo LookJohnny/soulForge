@@ -11,6 +11,7 @@ import opuslib
 import torch
 from silero_vad import load_silero_vad
 
+from gateway.config import settings
 from gateway.handlers.streaming_asr import StreamingASR
 from gateway.protocols.base import MessageType, OutboundMessage
 from gateway.session import Session
@@ -21,13 +22,6 @@ logger = logging.getLogger(__name__)
 # Silero needs 512 samples (32ms) at 16kHz per chunk
 SILERO_CHUNK_SAMPLES = 512
 SILERO_CHUNK_BYTES = SILERO_CHUNK_SAMPLES * 2  # 1024 bytes per chunk
-SPEECH_PROB_THRESHOLD = 0.5  # Silero probability threshold for speech
-SPEECH_START_FRAMES = 3  # consecutive voiced frames to confirm speech start
-SILENCE_END_FRAMES = 20  # consecutive silent frames to confirm speech end (~640ms)
-
-# Load model once at module level (shared across all sessions)
-_silero_model = load_silero_vad()
-logger.info("Silero VAD model loaded")
 
 
 class AudioHandler:
@@ -45,6 +39,9 @@ class AudioHandler:
         self._raw_opus: dict[str, list[bytes]] = {}  # Raw Opus packets (for reliable ASR)
         self._decoders: dict[str, opuslib.Decoder] = {}
         self._vad_states: dict[str, dict] = {}
+        # Silero keeps recurrent state inside the model object, so concurrent
+        # sessions MUST NOT share one instance — one model per session.
+        self._vad_models: dict[str, object] = {}
         self._asr_sessions: dict[str, StreamingASR] = {}
         self._dashscope_api_key = dashscope_api_key
         self._asr_model = asr_model
@@ -60,8 +57,13 @@ class AudioHandler:
             asr.start()
             self._asr_sessions[session.session_id] = asr
 
-        # Reset Silero model state for new session
-        _silero_model.reset_states()
+        # Per-session Silero model; reset its recurrent state for the new turn
+        model = self._vad_models.get(session.session_id)
+        if model is None:
+            model = load_silero_vad()
+            self._vad_models[session.session_id] = model
+            logger.info("vad.model_loaded session=%s", session.session_id)
+        model.reset_states()
         self._vad_states[session.session_id] = {
             "pcm_pending": bytearray(),  # accumulates PCM until we have a full Silero chunk
             "speech_started": False,
@@ -77,7 +79,8 @@ class AudioHandler:
         sid = session.session_id
         buf = self._buffers.get(sid)
         state = self._vad_states.get(sid)
-        if buf is None or state is None:
+        model = self._vad_models.get(sid)
+        if buf is None or state is None or model is None:
             return
 
         # Save raw Opus packet for later batch decoding (more reliable than per-frame)
@@ -113,14 +116,17 @@ class AudioHandler:
             audio_tensor = torch.FloatTensor(samples) / 32768.0
 
             # Run Silero VAD inference
-            speech_prob = _silero_model(audio_tensor, 16000).item()
-            is_speech = speech_prob > SPEECH_PROB_THRESHOLD
+            speech_prob = model(audio_tensor, 16000).item()
+            is_speech = speech_prob > settings.vad_speech_prob_threshold
 
             if is_speech:
                 state["voiced_count"] += 1
                 state["silent_count"] = 0
 
-                if not state["speech_started"] and state["voiced_count"] >= SPEECH_START_FRAMES:
+                if (
+                    not state["speech_started"]
+                    and state["voiced_count"] >= settings.vad_speech_start_frames
+                ):
                     state["speech_started"] = True
                     # Include pre-speech buffer for natural onset
                     buf.extend(state["pre_speech_buf"])
@@ -135,7 +141,7 @@ class AudioHandler:
 
                 if state["speech_started"]:
                     buf.extend(frame)  # include trailing silence
-                    if state["silent_count"] >= SILENCE_END_FRAMES:
+                    if state["silent_count"] >= settings.vad_silence_end_frames:
                         state["speech_complete"] = True
                         logger.info("vad.speech_end session=%s bytes=%d", sid, len(buf))
                 else:
@@ -188,22 +194,6 @@ class AudioHandler:
             len(pcm_buf) / 32000,
         )
 
-        # Debug: save WAV for inspection
-        try:
-            import wave as _wave
-            import io as _io
-
-            wav_buf = _io.BytesIO()
-            with _wave.open(wav_buf, "wb") as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(16000)
-                wf.writeframes(pcm_buf)
-            with open("/tmp/xiaozhi_latest.wav", "wb") as f:
-                f.write(wav_buf.getvalue())
-        except Exception:
-            pass
-
         return bytes(pcm_buf)
 
     async def get_streaming_asr_result(self, session: Session) -> str:
@@ -218,7 +208,8 @@ class AudioHandler:
         return ""
 
     def abort(self, session: Session):
-        """Discard buffered audio."""
+        """Discard buffered audio. Keeps the per-session VAD model so the next
+        listen turn doesn't pay the model-load cost again."""
         self._buffers.pop(session.session_id, None)
         self._raw_opus.pop(session.session_id, None)
         self._decoders.pop(session.session_id, None)
@@ -226,6 +217,11 @@ class AudioHandler:
         asr = self._asr_sessions.pop(session.session_id, None)
         if asr:
             asr.abort()
+
+    def release(self, session: Session):
+        """Full cleanup at connection teardown — abort plus drop the VAD model."""
+        self.abort(session)
+        self._vad_models.pop(session.session_id, None)
 
     @staticmethod
     def make_audio_response(audio_data: bytes) -> OutboundMessage:

@@ -173,18 +173,28 @@ class PipelineOrchestrator:
         text = str(command.get("dialogue") or "")
         receipt = self._register_playback([command])
         try:
-            audio = await self.synthesize_tts(
-                text, session.character_id, session.brand_id,
-            ) if text else None
+            audio = (
+                await self.synthesize_tts(
+                    text,
+                    session.character_id,
+                    session.brand_id,
+                )
+                if text
+                else None
+            )
         except Exception:
             if receipt:
                 await self.confirm_playback(
-                    receipt, played=False, detail="TTS synthesis raised an error",
+                    receipt,
+                    played=False,
+                    detail="TTS synthesis raised an error",
                 )
             raise
         if text and audio is None and receipt:
             await self.confirm_playback(
-                receipt, played=False, detail="TTS synthesis failed",
+                receipt,
+                played=False,
+                detail="TTS synthesis failed",
             )
             receipt = None
         return StreamChunk(
@@ -207,29 +217,46 @@ class PipelineOrchestrator:
         if settings.character_runtime_url:
             user_text = await self._transcribe_audio(audio_data)
             if not user_text:
-                return {"text": "", "audio_data": None, "latency_ms": 0,
-                        "user_text": "", "playback_receipt": None}
+                return {
+                    "text": "",
+                    "audio_data": None,
+                    "latency_ms": 0,
+                    "user_text": "",
+                    "playback_receipt": None,
+                }
             bridge = self._character_bridge_instance()
             decision = await bridge.process_utterance(user_text)
             reply = decision["text"]
             receipt = self._register_playback(decision.get("commands", []))
             try:
-                audio = await self.synthesize_tts(
-                    reply, session.character_id, session.brand_id,
-                ) if reply else None
+                audio = (
+                    await self.synthesize_tts(
+                        reply,
+                        session.character_id,
+                        session.brand_id,
+                    )
+                    if reply
+                    else None
+                )
             except Exception:
                 if receipt:
                     await self.confirm_playback(
-                        receipt, played=False, detail="TTS synthesis raised an error",
+                        receipt,
+                        played=False,
+                        detail="TTS synthesis raised an error",
                     )
                 raise
             if reply and audio is None and receipt:
-                await self.confirm_playback(receipt, played=False,
-                                            detail="TTS synthesis failed")
+                await self.confirm_playback(receipt, played=False, detail="TTS synthesis failed")
                 receipt = None
-            return {"text": reply, "audio_data": audio, "latency_ms": 0,
-                    "user_text": user_text, "playback_receipt": receipt,
-                    "correlation_id": decision.get("correlation_id")}
+            return {
+                "text": reply,
+                "audio_data": audio,
+                "latency_ms": 0,
+                "user_text": user_text,
+                "playback_receipt": receipt,
+                "correlation_id": decision.get("correlation_id"),
+            }
 
         payload = {
             "character_id": session.character_id,
@@ -270,10 +297,14 @@ class PipelineOrchestrator:
         if settings.character_runtime_url:
             decision = await self._character_bridge_instance().process_utterance(text)
             receipt = self._register_playback(decision.get("commands", []))
-            return {"text": decision["text"], "audio_data": None, "latency_ms": 0,
-                    "correlation_id": decision.get("correlation_id"),
-                    "commands": decision.get("commands", []),
-                    "playback_receipt": receipt}
+            return {
+                "text": decision["text"],
+                "audio_data": None,
+                "latency_ms": 0,
+                "correlation_id": decision.get("correlation_id"),
+                "commands": decision.get("commands", []),
+                "playback_receipt": receipt,
+            }
 
         payload = {
             "character_id": session.character_id,
@@ -462,8 +493,13 @@ class PipelineOrchestrator:
                 # Fail closed: no transcript means no decision. In particular,
                 # never fall through to the legacy chat LLM for convenience.
                 yield StreamChunk(
-                    text="", audio_data=None, index=0, kind="done", is_done=True,
-                    user_text="", stages={"asr_only": "no_transcript"},
+                    text="",
+                    audio_data=None,
+                    index=0,
+                    kind="done",
+                    is_done=True,
+                    user_text="",
+                    stages={"asr_only": "no_transcript"},
                 )
                 return
             async for chunk in self.process_text_stream(session, user_text):
@@ -521,24 +557,39 @@ class PipelineOrchestrator:
             reply = decision["text"]
             receipt = self._register_playback(decision.get("commands", []))
             try:
-                audio = await self.synthesize_tts(
-                    reply, session.character_id, session.brand_id,
-                ) if reply else None
+                audio = (
+                    await self.synthesize_tts(
+                        reply,
+                        session.character_id,
+                        session.brand_id,
+                    )
+                    if reply
+                    else None
+                )
             except Exception:
                 if receipt:
                     await self.confirm_playback(
-                        receipt, played=False, detail="TTS synthesis raised an error",
+                        receipt,
+                        played=False,
+                        detail="TTS synthesis raised an error",
                     )
                 raise
             if reply and audio is None and receipt:
-                await self.confirm_playback(receipt, played=False,
-                                            detail="TTS synthesis failed")
+                await self.confirm_playback(receipt, played=False, detail="TTS synthesis failed")
                 receipt = None
-            yield StreamChunk(text=reply, audio_data=audio, index=0,
-                              kind="sentence", playback_receipt=receipt)
-            yield StreamChunk(text="", audio_data=None, index=1, kind="done",
-                              is_done=True, full_text=reply, user_text=text,
-                              playback_receipt=receipt)
+            yield StreamChunk(
+                text=reply, audio_data=audio, index=0, kind="sentence", playback_receipt=receipt
+            )
+            yield StreamChunk(
+                text="",
+                audio_data=None,
+                index=1,
+                kind="done",
+                is_done=True,
+                full_text=reply,
+                user_text=text,
+                playback_receipt=receipt,
+            )
             return
 
         payload = {
@@ -580,9 +631,7 @@ class PipelineOrchestrator:
             )
         if etype == "audio_chunk":
             audio = base64.b64decode(data["audio_data"]) if data.get("audio_data") else None
-            return StreamChunk(
-                text="", audio_data=audio, index=data["index"], kind="audio_chunk"
-            )
+            return StreamChunk(text="", audio_data=audio, index=data["index"], kind="audio_chunk")
         if etype == "audio_end":
             return StreamChunk(text="", audio_data=None, index=data["index"], kind="audio_end")
         if etype == "done":
@@ -604,8 +653,9 @@ class PipelineOrchestrator:
         # Outstanding receipts were never confirmed by a playback sink. Mark
         # them interrupted before disconnecting so Runtime does not infer speech.
         for receipt in list(getattr(self, "_pending_playback", {})):
-            await self.confirm_playback(receipt, played=False,
-                                        detail="gateway shutdown before playback confirmation")
+            await self.confirm_playback(
+                receipt, played=False, detail="gateway shutdown before playback confirmation"
+            )
         bridge = getattr(self, "_character_bridge", None)
         if bridge is not None:
             await bridge.close()

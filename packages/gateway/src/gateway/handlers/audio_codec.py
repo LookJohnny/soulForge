@@ -18,6 +18,34 @@ logger = logging.getLogger(__name__)
 _FFMPEG_TIMEOUT = 10
 
 
+async def _run_ffmpeg(args: list[str], input_data: bytes) -> tuple[bytes, bytes, int | None]:
+    """Run ffmpeg with stdin/stdout pipes, guaranteeing the subprocess is
+    killed on timeout or cancellation (no zombie ffmpeg accumulation).
+
+    Returns (stdout, stderr, returncode).
+    """
+    proc = await asyncio.create_subprocess_exec(
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        *args,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(input=input_data),
+            timeout=_FFMPEG_TIMEOUT,
+        )
+    except (TimeoutError, asyncio.CancelledError):
+        proc.kill()
+        await proc.wait()
+        raise
+    return stdout, stderr, proc.returncode
+
+
 def apply_pcm_gain(pcm_data: bytes, gain: float) -> bytes:
     """Amplify signed 16-bit little-endian PCM with clipping protection."""
     if gain <= 1.0 or not pcm_data:
@@ -77,31 +105,23 @@ async def opus_to_pcm(opus_data: bytes) -> bytes:
     Returns:
         PCM bytes: signed 16-bit little-endian, 16kHz, mono.
     """
-    proc = await asyncio.create_subprocess_exec(
-        "ffmpeg",
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-i",
-        "pipe:0",  # read from stdin
-        "-f",
-        "s16le",  # output format: raw PCM
-        "-acodec",
-        "pcm_s16le",  # signed 16-bit LE
-        "-ar",
-        "16000",  # 16kHz
-        "-ac",
-        "1",  # mono
-        "pipe:1",  # write to stdout
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
+    stdout, stderr, returncode = await _run_ffmpeg(
+        [
+            "-i",
+            "pipe:0",  # read from stdin
+            "-f",
+            "s16le",  # output format: raw PCM
+            "-acodec",
+            "pcm_s16le",  # signed 16-bit LE
+            "-ar",
+            "16000",  # 16kHz
+            "-ac",
+            "1",  # mono
+            "pipe:1",  # write to stdout
+        ],
+        opus_data,
     )
-    stdout, stderr = await asyncio.wait_for(
-        proc.communicate(input=opus_data),
-        timeout=_FFMPEG_TIMEOUT,
-    )
-    if proc.returncode != 0:
+    if returncode != 0:
         err = stderr.decode(errors="replace").strip()
         logger.error("opus_to_pcm failed: %s", err)
         # Fallback: return original data as-is (maybe it was already PCM)
@@ -118,35 +138,27 @@ async def mp3_to_opus(mp3_data: bytes) -> bytes:
     Returns:
         OGG/Opus bytes suitable for xiaozhi device playback.
     """
-    proc = await asyncio.create_subprocess_exec(
-        "ffmpeg",
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-i",
-        "pipe:0",  # read MP3 from stdin
-        "-c:a",
-        "libopus",  # Opus codec
-        "-ar",
-        "16000",  # 16kHz
-        "-ac",
-        "1",  # mono
-        "-b:a",
-        "32k",  # 32kbps (good quality for speech, small size)
-        "-application",
-        "voip",  # optimized for speech
-        "-f",
-        "ogg",  # OGG container
-        "pipe:1",  # write to stdout
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
+    stdout, stderr, returncode = await _run_ffmpeg(
+        [
+            "-i",
+            "pipe:0",  # read MP3 from stdin
+            "-c:a",
+            "libopus",  # Opus codec
+            "-ar",
+            "16000",  # 16kHz
+            "-ac",
+            "1",  # mono
+            "-b:a",
+            "32k",  # 32kbps (good quality for speech, small size)
+            "-application",
+            "voip",  # optimized for speech
+            "-f",
+            "ogg",  # OGG container
+            "pipe:1",  # write to stdout
+        ],
+        mp3_data,
     )
-    stdout, stderr = await asyncio.wait_for(
-        proc.communicate(input=mp3_data),
-        timeout=_FFMPEG_TIMEOUT,
-    )
-    if proc.returncode != 0:
+    if returncode != 0:
         err = stderr.decode(errors="replace").strip()
         logger.error("mp3_to_opus failed: %s", err)
         # Fallback: return MP3 as-is (some devices may handle it)
@@ -164,37 +176,29 @@ async def pcm_to_opus(pcm_data: bytes, sample_rate: int = 16000) -> bytes:
     Returns:
         OGG/Opus bytes.
     """
-    proc = await asyncio.create_subprocess_exec(
-        "ffmpeg",
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-f",
-        "s16le",  # input format: raw PCM
-        "-ar",
-        str(sample_rate),  # input sample rate
-        "-ac",
-        "1",  # mono
-        "-i",
-        "pipe:0",  # read from stdin
-        "-c:a",
-        "libopus",  # Opus codec
-        "-b:a",
-        "32k",
-        "-application",
-        "voip",
-        "-f",
-        "ogg",
-        "pipe:1",
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
+    stdout, stderr, returncode = await _run_ffmpeg(
+        [
+            "-f",
+            "s16le",  # input format: raw PCM
+            "-ar",
+            str(sample_rate),  # input sample rate
+            "-ac",
+            "1",  # mono
+            "-i",
+            "pipe:0",  # read from stdin
+            "-c:a",
+            "libopus",  # Opus codec
+            "-b:a",
+            "32k",
+            "-application",
+            "voip",
+            "-f",
+            "ogg",
+            "pipe:1",
+        ],
+        pcm_data,
     )
-    stdout, stderr = await asyncio.wait_for(
-        proc.communicate(input=pcm_data),
-        timeout=_FFMPEG_TIMEOUT,
-    )
-    if proc.returncode != 0:
+    if returncode != 0:
         err = stderr.decode(errors="replace").strip()
         logger.error("pcm_to_opus failed: %s", err)
         return pcm_data
@@ -227,29 +231,11 @@ def is_mp3(data: bytes) -> bool:
 
 async def mp3_to_pcm(mp3_data: bytes) -> bytes:
     """Decode MP3 to raw PCM (16kHz 16-bit mono)."""
-    proc = await asyncio.create_subprocess_exec(
-        "ffmpeg",
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-i",
-        "pipe:0",
-        "-f",
-        "s16le",
-        "-ar",
-        "16000",
-        "-ac",
-        "1",
-        "pipe:1",
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
+    stdout, stderr, returncode = await _run_ffmpeg(
+        ["-i", "pipe:0", "-f", "s16le", "-ar", "16000", "-ac", "1", "pipe:1"],
+        mp3_data,
     )
-    stdout, stderr = await asyncio.wait_for(
-        proc.communicate(input=mp3_data),
-        timeout=_FFMPEG_TIMEOUT,
-    )
-    if proc.returncode != 0:
+    if returncode != 0:
         logger.error("mp3_to_pcm failed: %s", stderr.decode(errors="replace").strip())
         return b""
     return stdout
@@ -259,29 +245,11 @@ async def mp3_to_pcm_24k(mp3_data: bytes) -> bytes:
     """Decode MP3 to raw PCM at 24kHz 16-bit mono (xiaozhi TTS standard)."""
     from gateway.config import settings
 
-    proc = await asyncio.create_subprocess_exec(
-        "ffmpeg",
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-i",
-        "pipe:0",
-        "-f",
-        "s16le",
-        "-ar",
-        "24000",
-        "-ac",
-        "1",
-        "pipe:1",
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
+    stdout, stderr, returncode = await _run_ffmpeg(
+        ["-i", "pipe:0", "-f", "s16le", "-ar", "24000", "-ac", "1", "pipe:1"],
+        mp3_data,
     )
-    stdout, stderr = await asyncio.wait_for(
-        proc.communicate(input=mp3_data),
-        timeout=_FFMPEG_TIMEOUT,
-    )
-    if proc.returncode != 0:
+    if returncode != 0:
         logger.error("mp3_to_pcm_24k failed: %s", stderr.decode(errors="replace").strip())
         return b""
     gain = max(0.2, min(settings.output_audio_gain, 8.0))

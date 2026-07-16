@@ -106,7 +106,8 @@ async def xiaozhi_ota(request: Request):
         device_id=request.headers.get("device-id", ""),
         body_len=len(body),
     )
-    host = request.headers.get("host", "192.168.1.172:8080")
+    fallback = settings.ota_fallback_host or f"localhost:{settings.gateway_port}"
+    host = request.headers.get("host", fallback)
     response = {
         "websocket": {
             "url": f"ws://{host}/ws",
@@ -116,7 +117,7 @@ async def xiaozhi_ota(request: Request):
         },
         "server_time": {
             "timestamp": int(_time.time()),
-            "timezone_offset": 480,
+            "timezone_offset": settings.ota_timezone_offset_min,
         },
     }
     logger.info("ota.response", ws_url=response["websocket"]["url"])
