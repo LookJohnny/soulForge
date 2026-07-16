@@ -24,6 +24,12 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+# macOS Finder/iCloud duplicate copies ("foo 2.png")
+* 2.*
+
+# Generated media & training artifacts
+outputs/
+checkpoints/
 
 # Docker volumes
 docker/data/
@@ -36,9 +42,6 @@ packages/database/prisma/migrations/migration_lock.toml
 
 # Dev logs
 logs/
-
-# uv
-uv.lock
 
 # MinIO local data
 minio_data/
