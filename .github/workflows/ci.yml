@@ -43,8 +43,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: cd packages/ai-core && uv sync --dev
-      - run: cd packages/ai-core && uv run pytest tests/ --tb=short
+      - run: uv sync --all-packages --dev
+      - run: uv run pytest packages/ai-core/tests --tb=short
 
   test-gateway:
     name: Test Gateway
@@ -55,8 +55,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: cd packages/gateway && uv sync --dev
-      - run: cd packages/gateway && uv run pytest tests/ --tb=short
+      - run: uv sync --all-packages --dev
+      - run: uv run pytest packages/gateway/tests --tb=short
 
   test-engine:
     name: Test Character Runtime (engine)
@@ -67,7 +67,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: uv sync --dev
+      - run: uv sync --all-packages --dev
       - run: uv run pytest --tb=short
 
   docker-build:
