@@ -130,3 +130,11 @@ uv run python -m engine.server.server --port 8765  # 常驻服务（Unity/机器
 Gateway 数据库中的 `character_id` 通常是 UUID，而 Runtime 使用 `kai` 这类 agent id。
 生产环境应设置 `CHARACTER_RUNTIME_VOICE_DEVICE_ID`，把感知触发的主动台词明确绑定到一个
 实际播放设备；未绑定时只在 session character_id 与 Runtime agent id 相同的开发配置下启用。
+
+## 与 ai-core 的边界（有意的两套，不是待合并的债）
+
+| 关注点 | engine 侧 | ai-core 侧 | 边界规则 |
+|---|---|---|---|
+| LLM 调用 | `planner/llm_interface.py`：同步单发行为决策，stdlib urllib，失败落 mock | `services/llm/`：异步流式对话栈（多 provider/重试/SSE） | 引擎保持零三方依赖可嵌入；要 provider/重试/流式，去 ai-core，经 HTTP 调用（照 `AICoreMemoryStore` 模式） |
+| 记忆 | `planner/memory_store.py`：协议 + InMemory + HTTP 瘦适配 | `services/memory.py`：五层记忆真实现 | 已按适配器模式处理，engine 侧明示 "NOT a third implementation" |
+| 人格 | `configs/characters.json`（agent 名如 kai/luna，运行时/Studio/demo 用） | Postgres characters 表（UUID，admin-web 管理，商用管线用） | 网关用 `CHARACTER_RUNTIME_AGENT` 把设备的 DB 角色映射到运行时 agent。**统一方向未定**：待第一个真实商用 body（Joy 迁移）落地时，决定 provisioning 流向（DB→json 还是 json→DB），在那之前不要盲目双写 |

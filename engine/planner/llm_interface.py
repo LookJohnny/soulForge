@@ -3,6 +3,18 @@
 The LLM never emits raw motion. It returns a structured decision that selects,
 parameterizes and chains behavior templates. A deterministic mock is always
 available so the whole engine runs and tests without any API key.
+
+DELIBERATE BOUNDARY — this client is separate from ai-core's LLM layer
+(packages/ai-core/src/ai_core/services/llm/) on purpose, not by accident:
+
+- Different job: this one makes sync, single-shot *behavior decisions*
+  (validated JSON, mock fallback on any failure); ai-core's is the async
+  streaming *conversation* stack (provider registry, retries, SSE).
+- Independence: the engine must import with zero third-party deps so any
+  body can embed it — stdlib urllib only, no httpx/openai/pydantic.
+
+If you're tempted to add retries, providers, or streaming here, the feature
+belongs in ai-core; call it over HTTP like memory_store.AICoreMemoryStore.
 """
 
 from __future__ import annotations
