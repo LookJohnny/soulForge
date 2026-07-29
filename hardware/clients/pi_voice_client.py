@@ -22,7 +22,11 @@ end-of-utterance; the client never needs to segment speech itself.
 Echo control is half-duplex: uplink is muted from tts:start to tts:stop
 plus a short settle window, so the mic never hears the speaker.
 
-Dependencies (venv):  pip install websockets opuslib requests
+Wake word: local sherpa-onnx KWS (「你好维智」, see WakeGate). Idle audio
+never leaves the device; a wake hit beeps and opens a conversation window
+that each reply extends. Without the model the client streams always-on.
+
+Dependencies (venv):  pip install websockets opuslib requests numpy sherpa-onnx
 System:               apt install libopus0  (usually already present)
 
 Env:
@@ -31,6 +35,9 @@ Env:
   SF_MIC_DEV       arecord -D device (default: default)
   SF_SPK_DEV       aplay -D device (default: default)
   SF_FACE_HOST     ESP8266 servo face host/IP; empty disables the face
+  SF_KWS_DIR       sherpa-onnx KWS model dir (SF_KWS_DISABLE=1 to skip)
+  SF_KEYWORDS      keywords file (pinyin tokens, sherpa-onnx-cli text2token)
+  SF_WAKE_WINDOW   conversation window seconds after wake (default 45)
 """
 
 import asyncio
@@ -41,6 +48,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 
 import opuslib
 import websockets
@@ -213,9 +221,104 @@ ARECORD_CMD = [
     "-f", "S16_LE", "-c", "1", "-t", "raw",
 ]
 
+KWS_DIR = os.environ.get(
+    "SF_KWS_DIR",
+    os.path.expanduser("~/soulforge/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"),
+)
+KEYWORDS_FILE = os.environ.get("SF_KEYWORDS", os.path.expanduser("~/soulforge/keywords.txt"))
+WAKE_WINDOW_SEC = float(os.environ.get("SF_WAKE_WINDOW", "45"))
+KEEPALIVE_SEC = 25.0  # idle: one silence frame keeps the gateway session alive
 
-async def mic_loop(ws, muted: asyncio.Event):
+
+class WakeGate:
+    """Local wake-word gate (sherpa-onnx KWS, 唤醒词「你好维智」).
+
+    While idle, mic audio stays on-device: frames are only fed to the local
+    spotter. A hit opens a conversation window; the receiver extends it on
+    each turn so back-and-forth chat never needs re-waking. If the model is
+    missing or SF_KWS_DISABLE=1, the gate stays open (always streaming).
+    """
+
+    def __init__(self):
+        self.spotter = None
+        self.stream = None
+        self.active_until = 0.0
+        if os.environ.get("SF_KWS_DISABLE") == "1":
+            print("[wake] disabled by env, always streaming", flush=True)
+            return
+        try:
+            import sherpa_onnx
+
+            self.spotter = sherpa_onnx.KeywordSpotter(
+                tokens=f"{KWS_DIR}/tokens.txt",
+                encoder=f"{KWS_DIR}/encoder-epoch-12-avg-2-chunk-16-left-64.onnx",
+                decoder=f"{KWS_DIR}/decoder-epoch-12-avg-2-chunk-16-left-64.onnx",
+                joiner=f"{KWS_DIR}/joiner-epoch-12-avg-2-chunk-16-left-64.onnx",
+                keywords_file=KEYWORDS_FILE,
+                num_threads=2,
+                keywords_score=3.0,       # 实测 piper/真人语音在此组合下稳定命中
+                keywords_threshold=0.15,  # 负样本(日常聊天)不误触
+            )
+            self.stream = self.spotter.create_stream()
+            print("[wake] keyword spotter loaded (你好维智)", flush=True)
+        except Exception as e:
+            print(f"[wake] spotter unavailable, always streaming: {e}", flush=True)
+
+    @property
+    def enabled(self) -> bool:
+        return self.spotter is not None
+
+    def is_active(self) -> bool:
+        return not self.enabled or time.monotonic() < self.active_until
+
+    def extend(self):
+        self.active_until = time.monotonic() + WAKE_WINDOW_SEC
+
+    def feed(self, frame: bytes) -> bool:
+        """Feed one 16 kHz S16 frame; True when the wake word just fired."""
+        if not self.enabled:
+            return False
+        import numpy as np
+
+        samples = np.frombuffer(frame, dtype=np.int16).astype(np.float32) / 32768.0
+        self.stream.accept_waveform(UP_RATE, samples)
+        hit = False
+        while self.spotter.is_ready(self.stream):
+            self.spotter.decode_stream(self.stream)
+            if self.spotter.get_result(self.stream) != "":
+                self.spotter.reset_stream(self.stream)
+                hit = True
+        return hit
+
+
+def play_beep():
+    """Short wake-ack beep; generated once, played fire-and-forget."""
+    path = "/tmp/sf_wake_beep.wav"
+    if not os.path.exists(path):
+        try:
+            import wave
+
+            import numpy as np
+
+            sr = 24000
+            t = np.arange(int(sr * 0.15))
+            tone = (np.sin(2 * np.pi * 880 * t / sr) * 12000).astype(np.int16)
+            with wave.open(path, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(sr)
+                wf.writeframes(tone.tobytes())
+        except Exception:
+            return
+    subprocess.Popen(["aplay", "-q", "-D", SPK_DEV, path])
+
+
+async def mic_loop(ws, muted: asyncio.Event, gate: WakeGate):
     """Read raw PCM from arecord, encode 60 ms Opus frames, stream uplink.
+
+    Wake gating: while idle, frames only feed the local keyword spotter and a
+    periodic silence frame keeps the gateway session alive; audio streams up
+    only inside the wake window.
 
     A deaf body is useless: if capture dies (device still held by a previous
     arecord after a reconnect, USB hiccup), close the WebSocket so the outer
@@ -224,6 +327,8 @@ async def mic_loop(ws, muted: asyncio.Event):
     encoder = opuslib.Encoder(UP_RATE, 1, opuslib.APPLICATION_VOIP)
     loop = asyncio.get_running_loop()
     frame_bytes = UP_SAMPLES * 2
+    silence = b"\x00" * frame_bytes
+    last_keepalive = time.monotonic()
     proc = None
     try:
         # The capture device can stay busy for a moment while a previous
@@ -244,8 +349,18 @@ async def mic_loop(ws, muted: asyncio.Event):
             return
 
         while data and len(data) == frame_bytes:
-            if not muted.is_set():  # half-duplex: swallow mic while speaker is active
+            if muted.is_set():
+                pass  # half-duplex: swallow mic while speaker is active
+            elif gate.is_active():
                 await ws.send(encoder.encode(data, UP_SAMPLES))
+            else:
+                if await loop.run_in_executor(None, gate.feed, data):
+                    print("[wake] 唤醒！开启对话窗口", flush=True)
+                    gate.extend()
+                    play_beep()
+                elif time.monotonic() - last_keepalive > KEEPALIVE_SEC:
+                    await ws.send(encoder.encode(silence, UP_SAMPLES))
+                    last_keepalive = time.monotonic()
             data = await loop.run_in_executor(None, proc.stdout.read, frame_bytes)
         print("[mic] capture stream ended", flush=True)
     finally:
@@ -279,7 +394,8 @@ async def run_once():
 
         muted = asyncio.Event()
         player = Player()
-        mic_task = asyncio.create_task(mic_loop(ws, muted))
+        gate = WakeGate()
+        mic_task = asyncio.create_task(mic_loop(ws, muted, gate))
         unmute_task = None
 
         def schedule_unmute():
@@ -306,6 +422,7 @@ async def run_once():
                         print(f"AI: {data.get('text', '')}", flush=True)
                     elif state == "stop":
                         unmute_task = schedule_unmute()
+                        gate.extend()  # 每轮回复后续满对话窗口，连续聊天无需重新唤醒
                 elif mtype == "llm":
                     drive_face(data.get("emotion", ""))
                 elif mtype == "emotion":
