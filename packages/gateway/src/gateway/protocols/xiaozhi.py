@@ -184,7 +184,14 @@ class XiaozhiAdapter(ProtocolAdapter):
 
         # Control/text messages as JSON
         if message.type == MessageType.CONTROL:
-            return json.dumps(message.payload)
+            payload = message.payload
+            # Stock xiaozhi firmware has no "emotion" message; it displays
+            # emotions carried on "llm" messages, so translate on the wire.
+            if isinstance(payload, dict) and payload.get("type") == "emotion":
+                return json.dumps(
+                    {"type": "llm", "text": "", "emotion": payload.get("emotion", "")}
+                )
+            return json.dumps(payload)
 
         if message.type == MessageType.TEXT:
             # TTS text response format

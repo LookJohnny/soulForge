@@ -86,6 +86,10 @@ class ChatRequest(BaseModel):
     # lower time-to-first-audio. Defaults off so non-streaming consumers keep
     # receiving whole-clip-per-sentence audio.
     audio_streaming: bool = False
+    # Optional camera frame (base64 JPEG/PNG) captured for this turn. When
+    # present it is described by a VLM and injected as visual context; the
+    # character may only talk about what the description actually contains.
+    image_data: str | None = None
 
     @field_validator("character_id")
     @classmethod

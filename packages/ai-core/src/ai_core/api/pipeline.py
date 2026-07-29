@@ -41,6 +41,7 @@ from ai_core.models.schemas import (
     TouchEventResponse,
 )
 from ai_core.services.content_filter import ContentFilter
+from ai_core.services.hardware_mapper import pad_to_hardware
 from ai_core.services.latency import Stopwatch, latency_tracker
 from ai_core.services.tts.context import prepare_for_character as _tts_prepare_for_character
 
@@ -607,6 +608,32 @@ async def chat_stream(req: ChatRequest, request: Request):
     prompt_result = ctx["prompt_result"]
     rel_state = ctx["rel_state"]
 
+    # Audio turns are transcribed here, so only ai-core can spot a vision
+    # request the gateway couldn't see. Hand the turn back: the gateway
+    # captures a frame and re-issues it as text+image (image_data is then
+    # always set, so this cannot loop).
+    from ai_core.services.vision import is_vision_trigger
+
+    if req.image_data is None and user_text and is_vision_trigger(user_text):
+
+        async def _need_vision():
+            yield _sse({"type": "need_vision", "user_text": user_text})
+
+        return StreamingResponse(_need_vision(), media_type="text/event-stream")
+
+    # Per-turn camera frame: describe via VLM and wrap the utterance with
+    # visual context. History/memory keep the plain user_text; only the LLM
+    # input carries the visual wrapper. Vision failures degrade to an honest
+    # "看不清" turn — never an exception.
+    llm_input = user_text
+    if req.image_data is not None:  # "" = vision turn whose capture failed
+        from ai_core.services.vision import build_vision_turn, describe_image
+
+        t_vlm = time.monotonic()
+        description = await describe_image(req.image_data)
+        ctx["timings"]["vlm"] = (time.monotonic() - t_vlm) * 1000
+        llm_input = build_vision_turn(user_text, description)
+
     async def event_generator():
         full_text = ""
         buffer = ""
@@ -626,7 +653,7 @@ async def chat_stream(req: ChatRequest, request: Request):
         )
         async for chunk in llm.chat_stream(
             system_prompt=prompt_result["system_prompt"],
-            user_input=user_text,
+            user_input=llm_input,
             history=history,
         ):
             stage_ms.setdefault("llm_first_token", (time.monotonic() - start) * 1000)
@@ -696,6 +723,23 @@ async def chat_stream(req: ChatRequest, request: Request):
             user_mood=ctx["user_mood"],
             personality=prompt_result.get("personality"),
             relationship_stage=rel_state.get("stage"),
+        )
+
+        # Emotion event — emitted before `done` so devices with expression
+        # hardware (LED / servo face) can react while audio is still playing.
+        hw = pad_to_hardware(
+            pad_state.p,
+            pad_state.a,
+            pad_state.d,
+            species=prompt_result.get("_species", ""),
+        )
+        yield _sse(
+            {
+                "type": "emotion",
+                "emotion": new_emotion,
+                "pad": pad_state.to_dict(),
+                "hardware": hw.to_dict(),
+            }
         )
 
         # Done event

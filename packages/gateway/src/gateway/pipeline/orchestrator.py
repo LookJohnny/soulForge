@@ -40,6 +40,9 @@ class StreamChunk:
     full_text: str = ""
     user_text: str = ""
     emotion: str = ""
+    # Only populated on 'emotion' chunks (PAD snapshot + mapped hardware command)
+    pad: dict | None = None
+    hardware: dict | None = None
     latency_ms: int = 0
     stages: dict | None = None  # ai-core per-stage latency breakdown (ms)
     # Opaque receipt for the downstream playback sink.  The sink calls
@@ -538,7 +541,11 @@ class PipelineOrchestrator:
                     yield chunk
 
     async def process_text_stream(
-        self, session: Session, text: str, stream_audio: bool = False
+        self,
+        session: Session,
+        text: str,
+        stream_audio: bool = False,
+        image_data: str | None = None,
     ) -> AsyncIterator[StreamChunk]:
         """Stream text through AI pipeline, yielding per-sentence chunks.
 
@@ -600,6 +607,8 @@ class PipelineOrchestrator:
             "text_input": text,
             "audio_streaming": stream_audio,
         }
+        if image_data is not None:
+            payload["image_data"] = image_data
 
         headers = {}
         if session.brand_id:
@@ -634,6 +643,25 @@ class PipelineOrchestrator:
             return StreamChunk(text="", audio_data=audio, index=data["index"], kind="audio_chunk")
         if etype == "audio_end":
             return StreamChunk(text="", audio_data=None, index=data["index"], kind="audio_end")
+        if etype == "need_vision":
+            # ai-core spotted a vision request in an audio turn it transcribed;
+            # the server must capture a frame and re-issue the turn as text.
+            return StreamChunk(
+                text=data.get("user_text", ""),
+                audio_data=None,
+                index=-1,
+                kind="need_vision",
+            )
+        if etype == "emotion":
+            return StreamChunk(
+                text="",
+                audio_data=None,
+                index=-1,
+                kind="emotion",
+                emotion=data.get("emotion", ""),
+                pad=data.get("pad"),
+                hardware=data.get("hardware"),
+            )
         if etype == "done":
             return StreamChunk(
                 text="",

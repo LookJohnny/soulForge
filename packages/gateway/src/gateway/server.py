@@ -257,6 +257,9 @@ class WebSocketServer:
 
             self.audio_handler.add_audio(session, msg.payload)
             session._last_audio_time = time.monotonic()
+            # A device actively streaming mic audio is not idle — without this,
+            # always-on bodies (e.g. the Pi thin client) get idle-closed mid-turn.
+            session._last_activity = time.monotonic()
 
             # Start VAD monitor if not running
             if not getattr(session, "_silence_task", None):
@@ -295,9 +298,28 @@ class WebSocketServer:
                 await self._handle_reaction_event(ws, adapter, session, msg.payload)
 
         elif msg.type == MessageType.TEXT:
+            # Camera frame upload (reply to a "capture" control we sent)
+            if isinstance(msg.payload, dict) and msg.payload.get("type") == "vision_frame":
+                fut = getattr(session, "_pending_frame", None)
+                if fut is not None and not fut.done():
+                    fut.set_result(msg.payload.get("data") or "")
+                return
             text = msg.payload if isinstance(msg.payload, str) else str(msg.payload)
             if text:
-                await self._process_text_and_respond(ws, adapter, session, text)
+                if self._is_vision_trigger(text):
+                    # Run as a task: the receive loop must stay free to accept
+                    # the vision_frame reply, or the capture would deadlock.
+                    logger.info("gateway.vision_trigger text=%s", text[:30])
+
+                    async def _vision_turn(turn_text=text):
+                        image = await self._request_frame(ws, adapter, session) or ""
+                        await self._process_text_and_respond(
+                            ws, adapter, session, turn_text, image
+                        )
+
+                    session._vision_task = asyncio.create_task(_vision_turn())
+                else:
+                    await self._process_text_and_respond(ws, adapter, session, text)
 
         elif msg.type == MessageType.TOUCH:
             await self._handle_touch(ws, adapter, session, msg)
@@ -409,11 +431,19 @@ class WebSocketServer:
                             except Exception:
                                 logger.exception("gateway.plugin_error name=%s", name)
 
+                        # Vision turn: fetch one camera frame before the pipeline
+                        image_data = None
+                        if self._is_vision_trigger(asr_text):
+                            logger.info("gateway.vision_trigger text=%s", asr_text[:30])
+                            # "" = vision turn whose capture failed → ai-core makes
+                            # the character honestly say it can't see right now.
+                            image_data = await self._request_frame(ws, adapter, session) or ""
+
                         # No plugin match — full LLM pipeline
                         session._processing = True
                         try:
                             await self._process_text_and_respond_streaming(
-                                ws, adapter, session, asr_text
+                                ws, adapter, session, asr_text, image_data=image_data
                             )
                         finally:
                             session._processing = False
@@ -433,6 +463,72 @@ class WebSocketServer:
             session._silence_task = asyncio.create_task(self._vad_monitor(ws, adapter, session))
         except asyncio.CancelledError:
             pass
+
+    # Utterances that ask the character to look at something through the
+    # device camera. Substring match on the ASR text, same style as plugins.
+    VISION_TRIGGERS = (
+        "看看这",
+        "看看我",
+        "看一下这",
+        "看一眼",
+        "这是什么",
+        "这个是什么",
+        "我拿的是什么",
+        "我手里",
+        "你看到了什么",
+        "你能看到",
+        "前面有什么",
+        "帮我看看",
+        "识别一下",
+        "猜猜这是什么",
+    )
+
+    def _is_vision_trigger(self, text: str) -> bool:
+        t = (text or "").replace(" ", "")
+        return any(k in t for k in self.VISION_TRIGGERS)
+
+    async def _request_frame(self, ws, adapter, session, timeout_s: float = 5.0) -> str | None:
+        """Ask the device for one camera frame; None if it can't or won't.
+
+        Devices without a camera simply never answer — the timeout keeps the
+        turn moving and the pipeline degrades to an honest "看不到" reply.
+        """
+        loop = asyncio.get_running_loop()
+        session._pending_frame = loop.create_future()
+        try:
+            out = OutboundMessage(type=MessageType.CONTROL, payload={"type": "capture"})
+            await ws.send_text(await adapter.encode(out))
+            frame = await asyncio.wait_for(session._pending_frame, timeout=timeout_s)
+            return frame or None
+        except (TimeoutError, asyncio.TimeoutError):
+            logger.info("gateway.vision_capture_timeout device=%s", session.device_id)
+            return None
+        except Exception:
+            logger.exception("gateway.vision_capture_error")
+            return None
+        finally:
+            session._pending_frame = None
+
+    async def _send_emotion(self, ws, adapter, chunk):
+        """Forward a per-turn emotion event to the device as a control message.
+
+        Devices with expression hardware (servo face, LED) act on it; devices
+        that don't know the message type ignore it. Failures never interrupt
+        the audio playback path.
+        """
+        try:
+            out = OutboundMessage(
+                type=MessageType.CONTROL,
+                payload={
+                    "type": "emotion",
+                    "emotion": chunk.emotion,
+                    "pad": chunk.pad,
+                    "hardware": chunk.hardware,
+                },
+            )
+            await ws.send_text(await adapter.encode(out))
+        except Exception:
+            logger.exception("gateway.emotion_send_error")
 
     async def _send_quick_reply(self, ws, adapter, session, text: str):
         """Send a quick text+TTS reply without going through the full LLM pipeline.
@@ -502,7 +598,9 @@ class WebSocketServer:
             **{k: int(v) for k, v in stages.items()},
         )
 
-    async def _process_text_and_respond_streaming(self, ws, adapter, session, text: str):
+    async def _process_text_and_respond_streaming(
+        self, ws, adapter, session, text: str, image_data: str | None = None
+    ):
         """Process text from streaming ASR through AI pipeline with TTS playback.
 
         Same as _process_and_respond but takes pre-recognized text instead of
@@ -543,7 +641,7 @@ class WebSocketServer:
                 enc: StreamingMp3OpusEncoder | None = None
 
                 async for chunk in self.orchestrator.process_text_stream(
-                    session, text, stream_audio=True
+                    session, text, stream_audio=True, image_data=image_data
                 ):
                     if chunk.playback_receipt:
                         playback_receipts.add(chunk.playback_receipt)
@@ -582,6 +680,9 @@ class WebSocketServer:
                             if frames and not await pb.send_frames(frames):
                                 interrupted = True
                             enc = None
+
+                    elif chunk.kind == "emotion":
+                        await self._send_emotion(ws, adapter, chunk)
 
                     if interrupted:
                         break
@@ -631,7 +732,9 @@ class WebSocketServer:
             )
             await ws.send_text(await adapter.encode(error_out))
 
-    async def _process_text_and_respond(self, ws, adapter, session, text: str):
+    async def _process_text_and_respond(
+        self, ws, adapter, session, text: str, image_data: str | None = None
+    ):
         """Process text input through AI pipeline with streaming response."""
         playback_receipts: set[str] = set()
         try:
@@ -643,12 +746,18 @@ class WebSocketServer:
                 await pb.send_start()
 
                 full_text = ""
-                async for chunk in self.orchestrator.process_text_stream(session, text):
+                async for chunk in self.orchestrator.process_text_stream(
+                    session, text, image_data=image_data
+                ):
                     if chunk.playback_receipt:
                         playback_receipts.add(chunk.playback_receipt)
                     if chunk.is_done:
                         full_text = chunk.full_text or full_text
                         break
+
+                    if chunk.kind == "emotion":
+                        await self._send_emotion(ws, adapter, chunk)
+                        continue
 
                     await pb.send_sentence(chunk.text)
                     full_text += chunk.text
@@ -741,6 +850,7 @@ class WebSocketServer:
             user_text = ""
             interrupted = False
             total_opus_frames = 0
+            need_vision_text = None
 
             async with PlaybackChannel(ws, adapter, session) as pb:
                 await pb.send_start()
@@ -760,6 +870,16 @@ class WebSocketServer:
                     if pb.interrupted:
                         logger.info("gateway.interrupted by user")
                         interrupted = True
+                        break
+
+                    if chunk.kind == "emotion":
+                        await self._send_emotion(ws, adapter, chunk)
+                        continue
+
+                    if chunk.kind == "need_vision":
+                        # ai-core transcribed a vision request; capture a frame
+                        # and re-run the turn as text+image after playback closes.
+                        need_vision_text = chunk.text
                         break
 
                     logger.info(
@@ -791,6 +911,15 @@ class WebSocketServer:
                 played=not interrupted,
                 detail="user barge-in interrupted playback" if interrupted else "",
             )
+
+            if need_vision_text:
+                logger.info("gateway.vision_trigger text=%s", need_vision_text[:30])
+                image = await self._request_frame(ws, adapter, session) or ""
+                await self._process_text_and_respond_streaming(
+                    ws, adapter, session, need_vision_text, image_data=image
+                )
+                return
+
             logger.info(
                 "gateway.responding done text=%s frames=%d interrupted=%s",
                 full_text[:50],

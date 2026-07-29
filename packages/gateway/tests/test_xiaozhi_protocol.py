@@ -77,3 +77,28 @@ async def test_encode_text(adapter):
     assert parsed["type"] == "tts"
     assert parsed["text"] == "Hello!"
     assert parsed["state"] == "sentence"
+
+
+async def test_encode_control_emotion_translates_to_llm(adapter):
+    from gateway.protocols.base import OutboundMessage
+
+    msg = OutboundMessage(
+        type=MessageType.CONTROL,
+        payload={"type": "emotion", "emotion": "happy", "pad": {"p": 0.5, "a": 0.3, "d": 0.6}},
+    )
+    result = await adapter.encode(msg)
+    parsed = json.loads(result)
+    assert parsed["type"] == "llm"
+    assert parsed["emotion"] == "happy"
+
+
+async def test_encode_control_non_emotion_passthrough(adapter):
+    from gateway.protocols.base import OutboundMessage
+
+    msg = OutboundMessage(
+        type=MessageType.CONTROL,
+        payload={"type": "tts", "state": "stop"},
+    )
+    result = await adapter.encode(msg)
+    parsed = json.loads(result)
+    assert parsed == {"type": "tts", "state": "stop"}

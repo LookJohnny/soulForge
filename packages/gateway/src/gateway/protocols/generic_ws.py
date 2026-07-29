@@ -104,6 +104,10 @@ class GenericWSAdapter(ProtocolAdapter):
             )
         elif action == "ping":
             return InboundMessage(type=MessageType.HEARTBEAT, device_id="", payload=None)
+        elif action == "vision_frame" or msg.get("type") == "vision_frame":
+            # Camera frame upload (reply to a "capture" control) — keep the
+            # dict payload so the server can route it, never treat as chat.
+            return InboundMessage(type=MessageType.TEXT, device_id="", payload=msg)
         else:
             return InboundMessage(type=MessageType.TEXT, device_id="", payload=str(raw_data))
 
