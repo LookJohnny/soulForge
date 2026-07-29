@@ -268,7 +268,12 @@ class WakeGate:
                 keywords_threshold=0.15,  # 负样本(日常聊天)不误触
             )
             self.stream = self.spotter.create_stream()
-            print("[wake] keyword spotter loaded (你好维智)", flush=True)
+            try:
+                with open(KEYWORDS_FILE, encoding="utf-8") as f:
+                    words = [line.rsplit("@", 1)[-1].strip() for line in f if "@" in line]
+            except Exception:
+                words = []
+            print(f"[wake] keyword spotter loaded ({'、'.join(words) or KEYWORDS_FILE})", flush=True)
         except Exception as e:
             print(f"[wake] spotter unavailable, always streaming: {e}", flush=True)
 
