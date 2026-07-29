@@ -79,3 +79,12 @@ async def test_generic_ws_decodes_vision_frame_as_dict():
     msg = await adapter.decode(json.dumps({"type": "vision_frame", "data": "QUJD"}))
     assert msg.type == MessageType.TEXT
     assert msg.payload == {"type": "vision_frame", "data": "QUJD"}
+
+
+def test_vision_trigger_covers_real_user_phrasings():
+    s = _server()
+    # 实际用户语料（2026-07-29 真机日志里未命中的两句）
+    assert s._is_vision_trigger("能看到我吗？")
+    assert s._is_vision_trigger("我今天穿的什么？")
+    assert s._is_vision_trigger("帮我拍张照")
+    assert s._is_vision_trigger("你看我穿这什么衣服")
