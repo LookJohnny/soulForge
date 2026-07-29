@@ -70,7 +70,7 @@ UP_RATE = 16000  # uplink sample rate (gateway decodes 16 kHz)
 DOWN_RATE = 24000  # downlink sample rate (gateway encodes 24 kHz)
 FRAME_MS = 60
 UP_SAMPLES = UP_RATE * FRAME_MS // 1000  # 960
-SETTLE_SEC = 0.45  # echo settle after playback stops
+SETTLE_SEC = 0.7  # echo settle after real playback drain (喇叭与麦克风耦合极强)
 
 # SoulForge's 8 discrete emotions → ESP8266 face firmware endpoints
 FACE_MAP = {
@@ -171,11 +171,17 @@ def drive_face(emotion: str):
 
 
 class Player:
-    """Persistent aplay process; decoded 24 kHz PCM is piped to its stdin."""
+    """Persistent aplay process; decoded 24 kHz PCM is piped to its stdin.
+
+    ``playing_until`` tracks when the aplay buffer will actually drain — the
+    gateway's tts:stop arrives well before the speaker finishes, and unmuting
+    on it lets the mic hear our own tail and self-converse with the echo.
+    """
 
     def __init__(self):
         self.proc = None
         self.decoder = opuslib.Decoder(DOWN_RATE, 1)
+        self.playing_until = 0.0
 
     def _ensure(self):
         if self.proc is None or self.proc.poll() is not None:
@@ -203,6 +209,8 @@ class Player:
             self._ensure()
             self.proc.stdin.write(pcm)
             self.proc.stdin.flush()
+            now = time.monotonic()
+            self.playing_until = max(now, self.playing_until) + FRAME_MS / 1000
         except Exception as e:
             print(f"[play] {e}", flush=True)
             self.proc = None
@@ -400,6 +408,12 @@ async def run_once():
 
         def schedule_unmute():
             async def _later():
+                # wait for the aplay buffer to actually drain, then settle
+                while True:
+                    remain = player.playing_until - time.monotonic()
+                    if remain <= 0:
+                        break
+                    await asyncio.sleep(min(remain, 0.5))
                 await asyncio.sleep(SETTLE_SEC)
                 muted.clear()
 
@@ -408,6 +422,7 @@ async def run_once():
         try:
             async for msg in ws:
                 if isinstance(msg, bytes):
+                    muted.set()  # defensive: never listen while audio is arriving
                     player.play_opus(msg)
                     continue
                 data = json.loads(msg)
