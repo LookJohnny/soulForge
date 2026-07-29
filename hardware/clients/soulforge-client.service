@@ -1,0 +1,26 @@
+# 树莓派上的 SoulForge 瘦客户端服务（部署到 /etc/systemd/system/）
+# 音频设备按名字引用（编号会随启动漂移）：
+#   麦克风 = USB PnP Sound Device (PCM2902)  -> CARD=Device_1
+#   喇叭   = USB Composite Device (杰理)      -> CARD=Device
+#   注意：杰理设备自带的采集口是聋的，3.5mm 耳机口没接东西，都别用
+[Unit]
+Description=SoulForge Pi Voice Client (thin body -> Mac gateway)
+After=network-online.target sound.target
+Wants=network-online.target
+Conflicts=meimei.service
+
+[Service]
+Type=simple
+User=kuayueai
+WorkingDirectory=/home/kuayueai/soulforge
+Environment=SF_GATEWAY_URL=ws://192.168.1.172:8080/ws
+Environment=SF_DEVICE_ID=pi-kuayueai
+Environment=SF_MIC_DEV=plughw:CARD=Device_1,DEV=0
+Environment=SF_SPK_DEV=plughw:CARD=Device,DEV=0
+Environment=SF_FACE_HOST=
+ExecStart=/home/kuayueai/voice-deepseek/bin/python -u /home/kuayueai/soulforge/pi_voice_client.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
