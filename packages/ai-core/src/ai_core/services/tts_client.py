@@ -68,6 +68,24 @@ class TTSClient:
         if self._provider.name != "edge":
             with contextlib.suppress(Exception):
                 self._fallback = create_tts_provider(provider="edge")
+        # Voice-aware routing: cloned / Fish voices need the fish provider
+        # even when the primary is edge (the fast path for Neural voices).
+        self._fish = self._provider if self._provider.name == "fish" else None
+        if self._fish is None:
+            with contextlib.suppress(Exception):
+                self._fish = create_tts_provider(provider="fish")
+
+    def _route(self, voice: str | None):
+        """Pick (primary, fallback) for this request by voice style.
+
+        Edge voices end with "Neural"; anything else (fish preset nicknames,
+        32-hex clone ids) requires the fish provider — that is where voice
+        cloning lives, so switching the global provider must never lose it.
+        """
+        if voice and not voice.endswith("Neural") and self._fish is not None:
+            edge = self._provider if self._provider.name == "edge" else self._fallback
+            return self._fish, edge
+        return self._provider, self._fallback
 
     async def synthesize(
         self,
@@ -84,8 +102,9 @@ class TTSClient:
         speed = _coerce_float(speed, 1.0, 0.5, 2.0)
         ssml_pitch = _coerce_float(ssml_pitch, 1.0, 0.5, 2.0)
         ssml_rate = _coerce_float(ssml_rate, 1.0, 0.5, 2.0)
+        primary, fallback = self._route(voice)
         try:
-            return await self._provider.synthesize(
+            return await primary.synthesize(
                 text,
                 voice,
                 speed,
@@ -96,9 +115,9 @@ class TTSClient:
                 ssml_effect,
             )
         except Exception as e:
-            if self._fallback:
+            if fallback:
                 logger.warning("tts.primary_failed_using_fallback", error=str(e))
-                return await self._fallback.synthesize(
+                return await fallback.synthesize(
                     text,
                     voice,
                     speed,
@@ -125,8 +144,9 @@ class TTSClient:
         speed = _coerce_float(speed, 1.0, 0.5, 2.0)
         ssml_pitch = _coerce_float(ssml_pitch, 1.0, 0.5, 2.0)
         ssml_rate = _coerce_float(ssml_rate, 1.0, 0.5, 2.0)
+        primary, fallback = self._route(voice)
         try:
-            return await self._provider.synthesize_to_wav(
+            return await primary.synthesize_to_wav(
                 text,
                 voice,
                 speed,
@@ -137,9 +157,9 @@ class TTSClient:
                 ssml_effect,
             )
         except Exception as e:
-            if self._fallback:
+            if fallback:
                 logger.warning("tts.primary_failed_using_fallback", error=str(e))
-                return await self._fallback.synthesize_to_wav(
+                return await fallback.synthesize_to_wav(
                     text,
                     voice,
                     speed,
@@ -181,7 +201,8 @@ class TTSClient:
         ssml_pitch = _coerce_float(ssml_pitch, 1.0, 0.5, 2.0)
         ssml_rate = _coerce_float(ssml_rate, 1.0, 0.5, 2.0)
 
-        if not hasattr(self._provider, "synthesize_stream"):
+        primary, fallback = self._route(voice)
+        if not hasattr(primary, "synthesize_stream"):
             audio = await self.synthesize(
                 text, voice, speed, pitch_rate, speech_rate, ssml_pitch, ssml_rate, ssml_effect
             )
@@ -191,7 +212,7 @@ class TTSClient:
 
         emitted = False
         try:
-            async for chunk in self._provider.synthesize_stream(
+            async for chunk in primary.synthesize_stream(
                 text=text,
                 voice=voice,
                 speed=speed,
@@ -206,9 +227,9 @@ class TTSClient:
             if emitted:
                 logger.warning("tts.stream_failed_midway", error=str(e))
                 return
-            if self._fallback:
+            if fallback:
                 logger.warning("tts.stream_primary_failed_using_fallback", error=str(e))
-                audio = await self._fallback.synthesize(
+                audio = await fallback.synthesize(
                     text, voice, speed, pitch_rate, speech_rate, ssml_pitch, ssml_rate, ssml_effect
                 )
                 if audio:

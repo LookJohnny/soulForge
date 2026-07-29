@@ -16,7 +16,9 @@ def prepare_for_character(tts, prompt_result: dict) -> None:
     provider stores context in an asyncio ContextVar so concurrent
     requests don't step on each other.
     """
-    provider = getattr(tts, "_provider", None)
+    # The fish provider owns voice cloning; with voice-aware routing it may
+    # sit beside a non-fish primary, so seed it directly when present.
+    provider = getattr(tts, "_fish", None) or getattr(tts, "_provider", None)
     if provider is None or not hasattr(provider, "set_character_context"):
         return
     provider.set_character_context(
