@@ -63,8 +63,10 @@ try:
 except ValueError:
     INTENSITY = 0.4
 CALM = 1.0 - INTENSITY  # 安静程度（阅读用）
-# 说话口型风格：lips=上唇微动(默认，幅度小) | jaw=下颌开合(下颌修好后切回) | off=无口型
-MOUTH_STYLE = os.environ.get("SF_MOUTH_STYLE", "lips").strip().lower()
+# 说话口型风格：
+#   mixed(默认)=上唇微动+小幅下颌（张嘴后立刻跟闭嘴，用时序把下颌行程截短）
+#   lips=只上唇 | jaw=下颌全幅开合（大，慎用） | off=无口型
+MOUTH_STYLE = os.environ.get("SF_MOUTH_STYLE", "mixed").strip().lower()
 
 
 def _clamp(v, lo=-1.0, hi=1.0):
@@ -199,26 +201,40 @@ class PadFaceEngine:
             return
         DEVICE_LAG = 0.35  # 网络+设备缓冲：帧发出到喇叭出声的大致延迟
         if MOUTH_STYLE == "jaw":
-            # 下颌开合（幅度大；下颌机械修好并校准后用 SF_MOUTH_STYLE=jaw 启用）
-            open_path, close_path, t_open, t_rest = "/mouthOpen", "/mouthClose", 0.2, 0.68
+            # 下颌全幅开合（幅度大）
+            cycle = [("/mouthOpen", 0.2), ("/mouthClose", 0.68)]
+            settle = ["/mouthClose"]
+        elif MOUTH_STYLE == "lips":
+            # 只上唇轻抬→回位，完全不碰下颌
+            cycle = [("/lipUpRaise", 0.25), ("/lipCenter", 0.9)]
+            settle = ["/lipCenter"]
         else:
-            # lips（默认）：上唇轻抬→回位。幅度天然小，不碰不可靠的下颌
-            open_path, close_path, t_open, t_rest = "/lipUpRaise", "/lipCenter", 0.25, 0.9
+            # mixed（默认）：小幅下颌 + 上唇。mouthOpen 后零间隔跟 mouthClose，
+            # 串行队列的 ~0.1-0.2s 发送间距让下颌刚起步就折返 = 小幅度
+            cycle = [
+                ("/mouthOpen", 0.0),
+                ("/mouthClose", 0.0),
+                ("/lipUpRaise", 0.3),
+                ("/lipCenter", 0.95),
+            ]
+            settle = ["/mouthClose", "/lipCenter"]
 
         def _flap():
             while True:
                 now = time.monotonic()
                 if now > getattr(self, "_mouth_until", 0.0) + DEVICE_LAG:
                     break
-                self._fire(open_path)
-                time.sleep(t_open)
-                self._fire(close_path)
-                time.sleep(t_rest)
+                for path, pause in cycle:
+                    self._fire(path)
+                    if pause:
+                        time.sleep(pause)
             # 收尾：先清掉队列里可能积压的开口指令，再双发回位保险
             self._purge_queue()
-            self._fire(close_path)
+            for path in settle:
+                self._fire(path)
             time.sleep(0.5)
-            self._fire(close_path)
+            for path in settle:
+                self._fire(path)
 
         self._mouth_thread = threading.Thread(target=_flap, daemon=True)
         self._mouth_thread.start()
