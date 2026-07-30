@@ -313,9 +313,7 @@ class WebSocketServer:
 
                     async def _vision_turn(turn_text=text):
                         image = await self._request_frame(ws, adapter, session) or ""
-                        await self._process_text_and_respond(
-                            ws, adapter, session, turn_text, image
-                        )
+                        await self._process_text_and_respond(ws, adapter, session, turn_text, image)
 
                     session._vision_task = asyncio.create_task(_vision_turn())
                 else:
@@ -723,7 +721,10 @@ class WebSocketServer:
             )
 
             await self.session_manager.add_to_history(session.session_id, "user", text)
-            await self.session_manager.add_to_history(session.session_id, "assistant", full_text)
+            if full_text:
+                await self.session_manager.add_to_history(
+                    session.session_id, "assistant", full_text
+                )
             if getattr(session, "_life", None):
                 session._life.notify_activity()
             logger.info(
@@ -779,7 +780,10 @@ class WebSocketServer:
             await self._confirm_playback_receipts(playback_receipts, played=True)
 
             await self.session_manager.add_to_history(session.session_id, "user", text)
-            await self.session_manager.add_to_history(session.session_id, "assistant", full_text)
+            if full_text:
+                await self.session_manager.add_to_history(
+                    session.session_id, "assistant", full_text
+                )
 
         except Exception:
             await self._confirm_playback_receipts(
@@ -940,7 +944,10 @@ class WebSocketServer:
 
             if user_text:
                 await self.session_manager.add_to_history(session.session_id, "user", user_text)
-            await self.session_manager.add_to_history(session.session_id, "assistant", full_text)
+            if full_text:
+                await self.session_manager.add_to_history(
+                    session.session_id, "assistant", full_text
+                )
             if getattr(session, "_life", None):
                 session._life.notify_activity()
 

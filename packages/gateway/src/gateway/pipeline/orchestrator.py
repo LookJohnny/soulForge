@@ -531,6 +531,13 @@ class PipelineOrchestrator:
             json=payload,
             headers=headers,
         ) as resp:
+            # 400 here means the utterance produced nothing usable (batch ASR
+            # heard only noise/cough and returned empty text). That's a normal
+            # quiet-room event, not a pipeline failure — swallow and resume
+            # listening instead of erroring the device.
+            if resp.status_code == 400:
+                logger.info("orchestrator.empty_utterance_rejected device=%s", session.device_id)
+                return
             resp.raise_for_status()
             async for line in resp.aiter_lines():
                 if not line.startswith("data: "):
