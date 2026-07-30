@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     # Gateway
     gateway_port: int = 8080
     output_audio_gain: float = 1.0
+    # ESP8266 servo face driven from the gateway (host/IP; empty disables).
+    # Used when the network topology lets the gateway reach the face but the
+    # device body (e.g. the Pi) cannot.
+    face_host: str = ""
     # OTA fallback: WebSocket host returned to devices when the request has no
     # Host header. Empty = "localhost:<gateway_port>". Set to the LAN IP the
     # device can reach, e.g. "192.168.1.172:8080".

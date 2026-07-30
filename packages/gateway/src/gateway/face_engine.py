@@ -1,4 +1,8 @@
-"""PAD → 舵机脸 自主表情引擎。
+"""PAD → 舵机脸 自主表情引擎（gateway 侧）。
+
+源头副本：hardware/clients/pad_face.py（Pi 侧同款）。当前网络拓扑下
+只有 Mac 能到达脸板（Pi 与脸隔在不同路由段），故由 gateway 直接驱动。
+两份文件的配方表应保持同步。
 
 把 SoulForge 的三维连续情绪 (P 愉悦 / A 唤醒 / D 掌控) 实时映射到
 ESP8266 仿生脸的 35 个 HTTP 端点上，让脸成为内在情绪状态的持续外显，
@@ -80,7 +84,12 @@ def select_recipe(p, a, d):
     if p > 0.30:  # 明快微笑：两嘴角 + 鼓颊
         return Recipe(
             "warm_smile",
-            [("/lipLeftPull", 0.15), ("/lipRightPull", 0.3), ("/leftCheekPush", 0.15), ("/rightCheekPush", 0)],
+            [
+                ("/lipLeftPull", 0.15),
+                ("/lipRightPull", 0.3),
+                ("/leftCheekPush", 0.15),
+                ("/rightCheekPush", 0),
+            ],
         )
     if p > 0.15:  # 浅笑：只动嘴角
         return Recipe("soft_smile", [("/lipLeftPull", 0.15), ("/lipRightPull", 0)])

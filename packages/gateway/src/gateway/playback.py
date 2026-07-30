@@ -35,6 +35,11 @@ INTERRUPT_SETTLE_SECS = 0.2  # pause after "stop" when barged in
 DRAIN_MARGIN_SECS = 2.0  # device-side buffer already consumed while sending
 MIN_DRAIN_SECS = 0.5
 
+# Optional observer of the playing state (claimed playback only). The
+# gateway-side face engine uses this to hand the mouth to the firmware's
+# speaking animation during TTS. Set once at startup; never raises.
+speaking_hook = None
+
 
 class PlaybackChannel:
     """One TTS playback transaction to a device.
@@ -71,6 +76,11 @@ class PlaybackChannel:
             s._playing = True
             s._interrupted = False
             s._interrupt_count = 0
+            if speaking_hook:
+                try:
+                    speaking_hook(True)
+                except Exception:
+                    logger.debug("playback.speaking_hook_error", exc_info=True)
         return self
 
     async def __aexit__(self, *exc) -> None:
@@ -79,6 +89,11 @@ class PlaybackChannel:
             s._playing = False
             s._interrupted = False
             s._interrupt_count = 0
+            if speaking_hook:
+                try:
+                    speaking_hook(False)
+                except Exception:
+                    logger.debug("playback.speaking_hook_error", exc_info=True)
 
     @property
     def interrupted(self) -> bool:

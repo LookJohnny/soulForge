@@ -32,6 +32,22 @@ class WebSocketServer:
             dashscope_api_key=settings.dashscope_api_key,
         )
         self.orchestrator = PipelineOrchestrator()
+        # Gateway-side servo face: PAD-driven autonomous expressions. Enabled
+        # when FACE_HOST is set and the gateway (not the device body) can
+        # reach the ESP8266 on the current network topology.
+        self.face_engine = None
+        if settings.face_host:
+            try:
+                from gateway import playback as _playback
+                from gateway.face_engine import PadFaceEngine
+
+                self.face_engine = PadFaceEngine(settings.face_host)
+                self.face_engine.start()
+                _playback.speaking_hook = self.face_engine.on_speaking
+                logger.info("gateway.face_engine_started", host=settings.face_host)
+            except Exception:
+                self.face_engine = None
+                logger.exception("gateway.face_engine_init_failed")
 
     async def startup(self):
         await self.session_manager.connect()
@@ -526,6 +542,9 @@ class WebSocketServer:
         the audio playback path.
         """
         try:
+            face_engine = getattr(self, "face_engine", None)
+            if face_engine and chunk.pad:
+                face_engine.on_pad(chunk.pad)
             out = OutboundMessage(
                 type=MessageType.CONTROL,
                 payload={
