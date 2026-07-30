@@ -73,6 +73,7 @@ UP_SAMPLES = UP_RATE * FRAME_MS // 1000  # 960
 SETTLE_SEC = 0.7  # echo settle after real playback drain (喇叭与麦克风耦合极强)
 
 # SoulForge's 8 discrete emotions → ESP8266 face firmware endpoints
+# (fallback path — used only when the gateway message carries no PAD)
 FACE_MAP = {
     "happy": "/expr/happy",
     "sad": "/expr/sad",
@@ -83,6 +84,18 @@ FACE_MAP = {
     "worried": "/expr/sad",
     "calm": "/expr/neutral",
 }
+
+# Continuous PAD → autonomous expression engine (emotional inertia, mild-state
+# AU compositions, idle micro-behaviors). Falls back to FACE_MAP when absent.
+FACE_ENGINE = None
+if FACE_HOST:
+    try:
+        from pad_face import PadFaceEngine
+
+        FACE_ENGINE = PadFaceEngine(FACE_HOST)
+        FACE_ENGINE.start()
+    except Exception as _e:  # engine is optional; label path still works
+        print(f"[face] pad engine unavailable, label fallback only: {_e}", flush=True)
 
 
 def _capture_picamera2() -> str:
@@ -438,15 +451,21 @@ async def run_once():
                         if unmute_task:
                             unmute_task.cancel()
                         muted.set()
+                        if FACE_ENGINE:
+                            FACE_ENGINE.on_speaking(True)
                     elif state == "sentence":
                         print(f"AI: {data.get('text', '')}", flush=True)
                     elif state == "stop":
                         unmute_task = schedule_unmute()
                         gate.extend()  # 每轮回复后续满对话窗口，连续聊天无需重新唤醒
-                elif mtype == "llm":
-                    drive_face(data.get("emotion", ""))
-                elif mtype == "emotion":
-                    drive_face(data.get("emotion", ""))
+                        if FACE_ENGINE:
+                            FACE_ENGINE.on_speaking(False)
+                elif mtype in ("llm", "emotion"):
+                    # Prefer the continuous PAD snapshot; label is the fallback
+                    if FACE_ENGINE and data.get("pad"):
+                        FACE_ENGINE.on_pad(data["pad"])
+                    else:
+                        drive_face(data.get("emotion", ""))
                 elif mtype == "capture":
                     # Gateway wants one camera frame for this turn
                     loop = asyncio.get_running_loop()

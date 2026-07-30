@@ -187,10 +187,15 @@ class XiaozhiAdapter(ProtocolAdapter):
             payload = message.payload
             # Stock xiaozhi firmware has no "emotion" message; it displays
             # emotions carried on "llm" messages, so translate on the wire.
+            # The continuous PAD snapshot rides along as an extra field —
+            # stock firmware ignores unknown keys (cJSON reads only
+            # "emotion"), while richer bodies (Pi face client) use it to
+            # drive expressions continuously instead of one canned pose.
             if isinstance(payload, dict) and payload.get("type") == "emotion":
-                return json.dumps(
-                    {"type": "llm", "text": "", "emotion": payload.get("emotion", "")}
-                )
+                out: dict = {"type": "llm", "text": "", "emotion": payload.get("emotion", "")}
+                if payload.get("pad"):
+                    out["pad"] = payload["pad"]
+                return json.dumps(out)
             return json.dumps(payload)
 
         if message.type == MessageType.TEXT:
