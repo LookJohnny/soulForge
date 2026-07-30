@@ -194,9 +194,9 @@ class PadFaceEngine:
                 # 脉冲节奏：短促张嘴→快速闭上→停顿。嘴大部分时间闭着，
                 # 观感幅度小；节奏 ~1.4 次/秒贴近说话韵律
                 self._fire("/mouthOpen")
-                time.sleep(0.18)
+                time.sleep(0.2)
                 self._fire("/mouthClose")
-                time.sleep(0.52)
+                time.sleep(0.68)
             # 停嘴：先清掉队列里可能积压的张嘴，再双重闭嘴保险
             self._purge_queue()
             self._fire("/mouthClose")
@@ -351,7 +351,13 @@ class PadFaceEngine:
         while True:
             path = self._q.get()
             try:
-                requests.get(f"http://{self.host}{path}", timeout=TIMEOUT)
+                # Connection: close 至关重要——ESP8266 单线程服务器的 socket
+                # 表只有几个位置，keep-alive 连接几分钟就把它占满挂死
+                requests.get(
+                    f"http://{self.host}{path}",
+                    timeout=TIMEOUT,
+                    headers={"Connection": "close"},
+                )
                 self._fails = 0
             except Exception:
                 self._fails += 1
