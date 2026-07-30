@@ -146,14 +146,34 @@ class PadFaceEngine:
         threading.Thread(target=_react, daemon=True).start()
 
     def on_speaking(self, speaking):
-        """TTS 播放开始/结束：说话期间口型让给固件 speaking 动画。"""
+        """TTS 播放开始/结束：说话期间由引擎自己驱动嘴巴开合。
+
+        固件的 /expr/speaking 只是一次性姿态而非持续动画（实测），
+        所以口型循环在这里做：0.45s 交替张闭嘴，说完闭嘴回位。
+        """
         self._speaking = bool(speaking)
         if speaking:
-            self._fire("/expr/speaking")
+            self._start_mouth_loop()
         else:
             # 说完话，脸回到当前情绪该有的样子（同样不能阻塞调用方）
             self._last_key = None
             threading.Thread(target=self._express, kwargs={"force": True}, daemon=True).start()
+
+    def _start_mouth_loop(self):
+        t = getattr(self, "_mouth_thread", None)
+        if t is not None and t.is_alive():
+            return
+
+        def _flap():
+            open_ = True
+            while self._speaking:
+                self._fire("/mouthOpen" if open_ else "/mouthClose")
+                open_ = not open_
+                time.sleep(0.45)
+            self._fire("/mouthClose")
+
+        self._mouth_thread = threading.Thread(target=_flap, daemon=True)
+        self._mouth_thread.start()
 
     def on_face_pos(self, dx, dy):
         """设备摄像头报告的人脸偏移（画面中心为原点，-1..1，右/下为正）。
@@ -169,7 +189,9 @@ class PadFaceEngine:
             dx = -dx
         now = time.monotonic()
         self._track_seen = now
-        if now - self._last_eye < EYE_MIN_INTERVAL:
+        # 说话期间嘴部循环占用 HTTP 带宽，眼球降频
+        min_gap = 1.2 if self._speaking else EYE_MIN_INTERVAL
+        if now - self._last_eye < min_gap:
             return
 
         path = None
