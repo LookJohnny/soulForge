@@ -136,21 +136,26 @@ class FaceTracker:
                 )
             )
             cam.start()
-            cascade = "haarcascade_frontalface_default.xml"
-            candidates = []
-            if hasattr(cv2, "data"):  # pip 版 opencv
-                candidates.append(cv2.data.haarcascades + cascade)
-            candidates += [  # apt 版 python3-opencv (树莓派系统包)
-                f"/usr/share/opencv4/haarcascades/{cascade}",
-                f"/usr/local/share/opencv4/haarcascades/{cascade}",
-            ]
-            det = None
-            for c in candidates:
-                if os.path.exists(c):
-                    det = cv2.CascadeClassifier(c)
-                    break
-            if det is None or det.empty():
-                raise RuntimeError(f"no usable haarcascade in {candidates}")
+            def _load_cascade(name):
+                dirs = []
+                if hasattr(cv2, "data"):  # pip 版 opencv
+                    dirs.append(cv2.data.haarcascades)
+                dirs += [  # apt 版 python3-opencv (树莓派系统包)
+                    "/usr/share/opencv4/haarcascades/",
+                    "/usr/local/share/opencv4/haarcascades/",
+                ]
+                for dpath in dirs:
+                    fp = dpath + name
+                    if os.path.exists(fp):
+                        c = cv2.CascadeClassifier(fp)
+                        if not c.empty():
+                            return c
+                return None
+
+            det = _load_cascade("haarcascade_frontalface_default.xml")
+            det_prof = _load_cascade("haarcascade_profileface.xml")  # 侧脸（朝画面左）
+            if det is None:
+                raise RuntimeError("no usable frontal haarcascade")
             self.ok = True
             print("[track] face tracker running (640x480 @ ~2.5fps)", flush=True)
         except Exception as e:
@@ -178,7 +183,15 @@ class FaceTracker:
                 # 全分辨率检测（640x480）：1米外的脸也有 60-80px，检出稳定
                 gray = cv2.equalizeHist(cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY))
                 fh, fw = gray.shape[:2]
-                faces = det.detectMultiScale(gray, 1.1, 3, minSize=(48, 48))
+                # 正脸 → 左侧脸 → 右侧脸（镜像后检）三连；命中即止
+                faces = det.detectMultiScale(gray, 1.1, 3, minSize=(40, 40))
+                if not len(faces) and det_prof is not None:
+                    faces = det_prof.detectMultiScale(gray, 1.1, 3, minSize=(40, 40))
+                    if not len(faces):
+                        flipped = cv2.flip(gray, 1)
+                        faces = det_prof.detectMultiScale(flipped, 1.1, 3, minSize=(40, 40))
+                        if len(faces):  # 坐标系翻回来
+                            faces = [(fw - x - w, y, w, h) for x, y, w, h in faces]
                 sender = self._sender
                 if len(faces):
                     hits += 1

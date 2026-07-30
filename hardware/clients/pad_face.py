@@ -46,7 +46,7 @@ FAIL_BACKOFF_S = 60  # 连续失败后休眠，等脸重新上线
 FAIL_LIMIT = 5
 EYE_MIN_INTERVAL = 0.35  # 眼球追踪指令最小间隔（ESP8266 HTTP 上限约 3req/s）
 EYE_DEADZONE = 0.18  # 画面中心死区，人在中间时不追
-TRACK_FRESH_S = 4.0  # 最近这么久内有追踪信号，随机目光游移让位
+TRACK_FRESH_S = 8.0  # 最近这么久内有追踪信号，随机目光游移让位
 # 摄像头成像与眼球方向的镜像关系因安装而异；方向反了把此环境变量设为 1
 EYE_MIRROR = os.environ.get("FACE_TRACK_MIRROR", "0") == "1"
 
