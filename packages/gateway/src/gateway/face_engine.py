@@ -48,6 +48,11 @@ APPROACH = 0.35  # 每 tick 向目标 PAD 靠近的比例（情绪惯性）
 DECAY = 0.06  # 每 tick 目标向基线回落的比例（心情淡去）
 FAIL_BACKOFF_S = 60  # 连续失败后休眠，等脸重新上线
 FAIL_LIMIT = 5
+EYE_MIN_INTERVAL = 0.7  # 眼球追踪指令最小间隔（ESP8266 HTTP 扛不住高频）
+EYE_DEADZONE = 0.18  # 画面中心死区，人在中间时不追
+TRACK_FRESH_S = 4.0  # 最近这么久内有追踪信号，随机目光游移让位
+# 摄像头成像与眼球方向的镜像关系因安装而异；方向反了把此环境变量设为 1
+EYE_MIRROR = os.environ.get("FACE_TRACK_MIRROR", "0") == "1"
 
 
 def _clamp(v, lo=-1.0, hi=1.0):
@@ -118,6 +123,9 @@ class PadFaceEngine:
         self._fails = 0
         self._sleep_until = 0.0
         self._thread = None
+        self._last_eye = 0.0  # 上次眼球追踪指令时间
+        self._last_center = 0.0
+        self._track_seen = 0.0  # 上次收到人脸位置的时间
 
     # ── 外部事件 ─────────────────────────────
     def on_pad(self, pad):
@@ -146,6 +154,41 @@ class PadFaceEngine:
             # 说完话，脸回到当前情绪该有的样子（同样不能阻塞调用方）
             self._last_key = None
             threading.Thread(target=self._express, kwargs={"force": True}, daemon=True).start()
+
+    def on_face_pos(self, dx, dy):
+        """设备摄像头报告的人脸偏移（画面中心为原点，-1..1，右/下为正）。
+
+        眼球端点是档位式触发（无连续角度），所以做限速的方向轻推：
+        偏得多就朝那个方向拨一档，回到中心死区后拨回正视。
+        """
+        try:
+            dx, dy = float(dx), float(dy)
+        except (TypeError, ValueError):
+            return
+        if EYE_MIRROR:
+            dx = -dx
+        now = time.monotonic()
+        self._track_seen = now
+        if now - self._last_eye < EYE_MIN_INTERVAL:
+            return
+
+        path = None
+        if abs(dx) >= abs(dy):
+            if dx > EYE_DEADZONE:
+                path = "/moveRight"
+            elif dx < -EYE_DEADZONE:
+                path = "/moveLeft"
+        if path is None:
+            if dy > EYE_DEADZONE:
+                path = "/moveDown"
+            elif dy < -EYE_DEADZONE:
+                path = "/moveUp"
+        if path is None and now - self._last_center > 4.0:
+            path = "/moveCenter"  # 人回到画面中央：正视对方
+            self._last_center = now
+        if path:
+            self._last_eye = now
+            self._fire(path)
 
     def start(self):
         if self._thread:
@@ -190,6 +233,11 @@ class PadFaceEngine:
         r = random.random()
         if self._speaking:
             if r < 0.25:
+                self._fire("/blink")
+            return
+        # 正在追踪真人时，目光归追踪管；只保留眨眼
+        if time.monotonic() - self._track_seen < TRACK_FRESH_S:
+            if r < 0.30:
                 self._fire("/blink")
             return
         if r < 0.30:

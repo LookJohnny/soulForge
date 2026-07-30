@@ -313,6 +313,12 @@ class WebSocketServer:
             elif action == "reaction_event":
                 await self._handle_reaction_event(ws, adapter, session, msg.payload)
 
+            elif action == "face_pos":
+                # Device camera saw a human face — servo-eye tracking
+                face_engine = getattr(self, "face_engine", None)
+                if face_engine:
+                    face_engine.on_face_pos(msg.payload.get("dx"), msg.payload.get("dy"))
+
         elif msg.type == MessageType.TEXT:
             # Camera frame upload (reply to a "capture" control we sent)
             if isinstance(msg.payload, dict) and msg.payload.get("type") == "vision_frame":
@@ -662,8 +668,9 @@ class WebSocketServer:
                         await pb.send_clip(filler, pace=False)
                     except Exception:
                         logger.exception("gateway.filler_error")
-                    # The filler must not count as the reply's first word
-                    pb.first_frame_at = None
+                    # The filler must not count as the reply's first word,
+                    # and the mouth goes back to idle during the think gap
+                    pb.mark_aside_done()
 
                 # Per-sentence incremental MP3→Opus encoder (streaming TTS path).
                 enc: StreamingMp3OpusEncoder | None = None

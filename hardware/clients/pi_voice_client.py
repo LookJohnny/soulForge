@@ -98,6 +98,101 @@ if FACE_HOST:
         print(f"[face] pad engine unavailable, label fallback only: {_e}", flush=True)
 
 
+class FaceTracker:
+    """CSI 摄像头人脸追踪：持续检测人脸在画面中的位置，经网关驱动眼球。
+
+    独占持有 Picamera2（相机不能被两处同时打开），因此也承担"最新一帧"
+    的供应者角色——视觉问答的拍照直接取这里的缓存帧。
+    检测失败/缺依赖只打日志，绝不影响语音主循环。
+    """
+
+    def __init__(self):
+        self._latest_jpeg = ""
+        self._sender = None  # callable(dict)->None，连接建立后注入
+        self._lock = threading.Lock()
+        self.ok = False
+
+    def start(self):
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def set_sender(self, fn):
+        self._sender = fn
+
+    def latest_jpeg_b64(self) -> str:
+        with self._lock:
+            return self._latest_jpeg
+
+    def _run(self):
+        try:
+            import base64
+
+            import cv2
+            from picamera2 import Picamera2
+
+            cam = Picamera2()
+            cam.configure(
+                cam.create_video_configuration(
+                    main={"size": (640, 480), "format": "RGB888"}
+                )
+            )
+            cam.start()
+            cascade = "haarcascade_frontalface_default.xml"
+            candidates = []
+            if hasattr(cv2, "data"):  # pip 版 opencv
+                candidates.append(cv2.data.haarcascades + cascade)
+            candidates += [  # apt 版 python3-opencv (树莓派系统包)
+                f"/usr/share/opencv4/haarcascades/{cascade}",
+                f"/usr/local/share/opencv4/haarcascades/{cascade}",
+            ]
+            det = None
+            for c in candidates:
+                if os.path.exists(c):
+                    det = cv2.CascadeClassifier(c)
+                    break
+            if det is None or det.empty():
+                raise RuntimeError(f"no usable haarcascade in {candidates}")
+            self.ok = True
+            print("[track] face tracker running (640x480 @ ~1.4fps)", flush=True)
+        except Exception as e:
+            print(f"[track] disabled: {e}", flush=True)
+            return
+        while True:
+            try:
+                arr = cam.capture_array()
+                okj, buf = cv2.imencode(
+                    ".jpg",
+                    cv2.cvtColor(arr, cv2.COLOR_RGB2BGR),
+                    [cv2.IMWRITE_JPEG_QUALITY, 85],
+                )
+                if okj:
+                    with self._lock:
+                        self._latest_jpeg = base64.b64encode(buf).decode()
+                gray = cv2.resize(cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY), (320, 240))
+                faces = det.detectMultiScale(gray, 1.2, 4, minSize=(36, 36))
+                sender = self._sender
+                if len(faces) and sender:
+                    x, y, w, h = max(faces, key=lambda f: int(f[2]) * int(f[3]))
+                    dx = ((x + w / 2) / 320 - 0.5) * 2
+                    dy = ((y + h / 2) / 240 - 0.5) * 2
+                    sender(
+                        {
+                            "type": "face_pos",
+                            "dx": round(float(dx), 3),
+                            "dy": round(float(dy), 3),
+                        }
+                    )
+            except Exception as e:
+                print(f"[track] frame error: {e}", flush=True)
+                time.sleep(3)
+            time.sleep(0.7)
+
+
+TRACKER = None
+if os.environ.get("SF_FACE_TRACK", "1") == "1":
+    TRACKER = FaceTracker()
+    TRACKER.start()
+
+
 def _capture_picamera2() -> str:
     """CSI camera via Picamera2/libcamera (the camera on this Pi)."""
     import base64
@@ -151,9 +246,14 @@ def _capture_cv2() -> str:
 def capture_jpeg_b64() -> str:
     """Grab one JPEG frame; "" on any failure (client stays camera-optional).
 
-    Tries the CSI camera (Picamera2) first, then a USB camera (cv2). Both
-    imports are lazy so camera-less devices run this client unchanged.
+    When the face tracker owns the camera, serve its cached latest frame —
+    Picamera2 cannot be opened twice. Otherwise fall back to one-shot capture
+    (CSI via Picamera2, then USB via cv2), all imports lazy.
     """
+    if TRACKER and TRACKER.ok:
+        data = TRACKER.latest_jpeg_b64()
+        if data:
+            return data
     for grab in (_capture_picamera2, _capture_cv2):
         try:
             data = grab()
@@ -238,15 +338,29 @@ class Player:
 
 
 ARECORD_CMD = [
-    "arecord", "-q", "-D", MIC_DEV, "-r", str(UP_RATE),
-    "-f", "S16_LE", "-c", "1", "-t", "raw",
+    "arecord",
+    "-q",
+    "-D",
+    MIC_DEV,
+    "-r",
+    str(UP_RATE),
+    "-f",
+    "S16_LE",
+    "-c",
+    "1",
+    "-t",
+    "raw",
 ]
 
 KWS_DIR = os.environ.get(
     "SF_KWS_DIR",
-    os.path.expanduser("~/soulforge/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"),
+    os.path.expanduser(
+        "~/soulforge/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
+    ),
 )
-KEYWORDS_FILE = os.environ.get("SF_KEYWORDS", os.path.expanduser("~/soulforge/keywords.txt"))
+KEYWORDS_FILE = os.environ.get(
+    "SF_KEYWORDS", os.path.expanduser("~/soulforge/keywords.txt")
+)
 WAKE_WINDOW_SEC = float(os.environ.get("SF_WAKE_WINDOW", "45"))
 KEEPALIVE_SEC = 25.0  # idle: one silence frame keeps the gateway session alive
 
@@ -277,16 +391,21 @@ class WakeGate:
                 joiner=f"{KWS_DIR}/joiner-epoch-12-avg-2-chunk-16-left-64.onnx",
                 keywords_file=KEYWORDS_FILE,
                 num_threads=2,
-                keywords_score=3.0,       # 实测 piper/真人语音在此组合下稳定命中
+                keywords_score=3.0,  # 实测 piper/真人语音在此组合下稳定命中
                 keywords_threshold=0.15,  # 负样本(日常聊天)不误触
             )
             self.stream = self.spotter.create_stream()
             try:
                 with open(KEYWORDS_FILE, encoding="utf-8") as f:
-                    words = [line.rsplit("@", 1)[-1].strip() for line in f if "@" in line]
+                    words = [
+                        line.rsplit("@", 1)[-1].strip() for line in f if "@" in line
+                    ]
             except Exception:
                 words = []
-            print(f"[wake] keyword spotter loaded ({'、'.join(words) or KEYWORDS_FILE})", flush=True)
+            print(
+                f"[wake] keyword spotter loaded ({'、'.join(words) or KEYWORDS_FILE})",
+                flush=True,
+            )
         except Exception as e:
             print(f"[wake] spotter unavailable, always streaming: {e}", flush=True)
 
@@ -368,7 +487,10 @@ async def mic_loop(ws, muted: asyncio.Event, gate: WakeGate):
             proc.terminate()
             proc.wait()
             proc = None
-            print(f"[mic] capture not ready (attempt {attempt + 1}/5), retrying", flush=True)
+            print(
+                f"[mic] capture not ready (attempt {attempt + 1}/5), retrying",
+                flush=True,
+            )
             await asyncio.sleep(1.0)
         if proc is None:
             print("[mic] giving up on capture device", flush=True)
@@ -416,6 +538,20 @@ async def run_once():
         )
         hello = json.loads(await ws.recv())
         print(f"[client] session {hello.get('session_id', '?')}", flush=True)
+
+        # 人脸位置上报走当前连接；断线后 sender 失效自动静默
+        if TRACKER:
+            _loop = asyncio.get_running_loop()
+
+            def _send_face_pos(payload: dict):
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        ws.send(json.dumps(payload)), _loop
+                    )
+                except Exception:
+                    pass
+
+            TRACKER.set_sender(_send_face_pos)
         await ws.send(json.dumps({"type": "listen", "state": "start"}))
 
         muted = asyncio.Event()
@@ -472,6 +608,8 @@ async def run_once():
                     b64 = await loop.run_in_executor(None, capture_jpeg_b64)
                     await ws.send(json.dumps({"type": "vision_frame", "data": b64}))
         finally:
+            if TRACKER:
+                TRACKER.set_sender(None)
             mic_task.cancel()
             try:
                 await mic_task  # wait for arecord to release the device

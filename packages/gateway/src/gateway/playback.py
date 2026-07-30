@@ -67,6 +67,7 @@ class PlaybackChannel:
         self.total_frames = 0
         self.first_frame_at: float | None = None  # time.monotonic() of first frame
         self._frames_sent = 0  # prebuffer counter, global across the response
+        self._spoke_hook = False  # speaking_hook announced (lip-sync starts at 1st frame)
 
     # ── session playing state ──────────────────────────────
 
@@ -76,11 +77,6 @@ class PlaybackChannel:
             s._playing = True
             s._interrupted = False
             s._interrupt_count = 0
-            if speaking_hook:
-                try:
-                    speaking_hook(True)
-                except Exception:
-                    logger.debug("playback.speaking_hook_error", exc_info=True)
         return self
 
     async def __aexit__(self, *exc) -> None:
@@ -89,11 +85,26 @@ class PlaybackChannel:
             s._playing = False
             s._interrupted = False
             s._interrupt_count = 0
-            if speaking_hook:
-                try:
-                    speaking_hook(False)
-                except Exception:
-                    logger.debug("playback.speaking_hook_error", exc_info=True)
+        # Mouth animation off only if we ever announced it on (first frame)
+        if self._spoke_hook:
+            self._spoke_hook = False
+            self._notify_speaking(False)
+
+    def _notify_speaking(self, speaking: bool) -> None:
+        if speaking_hook:
+            try:
+                speaking_hook(speaking)
+            except Exception:
+                logger.debug("playback.speaking_hook_error", exc_info=True)
+
+    def mark_aside_done(self) -> None:
+        """Audio sent so far was an aside (e.g. the thinking filler): exclude
+        it from first-word latency and return the mouth to idle until the
+        real reply audio starts."""
+        self.first_frame_at = None
+        if self._spoke_hook:
+            self._spoke_hook = False
+            self._notify_speaking(False)
 
     @property
     def interrupted(self) -> bool:
@@ -126,6 +137,11 @@ class PlaybackChannel:
                 return False
             if self.first_frame_at is None:
                 self.first_frame_at = time.monotonic()
+                # Lip-sync: announce speech only when audio actually starts
+                # flowing — not while the LLM is still thinking.
+                if not self._spoke_hook:
+                    self._spoke_hook = True
+                    self._notify_speaking(True)
             await self._ws.send_bytes(frame)
             self.total_frames += 1
             if do_pace and self._frames_sent >= PRE_BUFFER_FRAMES:
@@ -155,6 +171,9 @@ class PlaybackChannel:
         if isinstance(raw, bytes):
             if self.first_frame_at is None:
                 self.first_frame_at = time.monotonic()
+                if not self._spoke_hook:
+                    self._spoke_hook = True
+                    self._notify_speaking(True)
             await self._ws.send_bytes(raw)
         return True
 

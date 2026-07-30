@@ -146,6 +146,19 @@ class XiaozhiAdapter(ProtocolAdapter):
                 device_id="",
                 payload={"action": "iot", "data": msg.get("descriptors", {})},
             )
+        elif msg_type == "face_pos":
+            # Device camera saw a human face at this normalized offset from
+            # frame center (-1..1). Drives servo-eye tracking; must never fall
+            # through to the chat-text path.
+            return InboundMessage(
+                type=MessageType.CONTROL,
+                device_id="",
+                payload={
+                    "action": "face_pos",
+                    "dx": msg.get("dx"),
+                    "dy": msg.get("dy"),
+                },
+            )
         elif msg_type == "touch":
             return InboundMessage(
                 type=MessageType.TOUCH,
