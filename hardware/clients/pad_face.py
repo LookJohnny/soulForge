@@ -27,6 +27,7 @@ ESP8266 仿生脸的 35 个 HTTP 端点上，让脸成为内在情绪状态的�
 """
 
 import os
+import queue
 import random
 import threading
 import time
@@ -124,6 +125,9 @@ class PadFaceEngine:
         self._last_eye = 0.0  # 上次眼球追踪指令时间
         self._last_center = 0.0
         self._track_seen = 0.0  # 上次收到人脸位置的时间
+        # 所有 HTTP 指令经单工人队列串行发送：并发线程发送会乱序到达
+        # （闭嘴可能先于之前的张嘴到达 → 嘴卡在张开），串行是唯一保序方式
+        self._q: queue.Queue = queue.Queue(maxsize=8)
 
     # ── 外部事件 ─────────────────────────────
     def on_pad(self, pad):
@@ -193,9 +197,10 @@ class PadFaceEngine:
                 time.sleep(0.18)
                 self._fire("/mouthClose")
                 time.sleep(0.52)
-            # 双重闭嘴：ESP8266 忙时会丢单条请求，补一发保险
+            # 停嘴：先清掉队列里可能积压的张嘴，再双重闭嘴保险
+            self._purge_queue()
             self._fire("/mouthClose")
-            time.sleep(0.3)
+            time.sleep(0.5)
             self._fire("/mouthClose")
 
         self._mouth_thread = threading.Thread(target=_flap, daemon=True)
@@ -257,6 +262,7 @@ class PadFaceEngine:
             return
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
+        threading.Thread(target=self._http_worker, daemon=True).start()
 
     # ── 内部 ────────────────────────────────
     def _step(self, approach=APPROACH):
@@ -318,12 +324,32 @@ class PadFaceEngine:
             self._fire("/moveCenter")
 
     def _fire(self, path):
+        """入队（保序）。队满丢最旧——最新指令永远优先。"""
         if not HAS_REQUESTS or not self.host:
             return
         if time.monotonic() < self._sleep_until:
             return
+        try:
+            self._q.put_nowait(path)
+        except queue.Full:
+            try:
+                self._q.get_nowait()
+                self._q.put_nowait(path)
+            except Exception:
+                pass
 
-        def _get():
+    def _purge_queue(self):
+        """清空积压指令（停嘴前用：确保闭嘴后没有迟到的张嘴）。"""
+        try:
+            while True:
+                self._q.get_nowait()
+        except queue.Empty:
+            pass
+
+    def _http_worker(self):
+        """唯一真正发 HTTP 的线程：严格按序、逐条、限速。"""
+        while True:
+            path = self._q.get()
             try:
                 requests.get(f"http://{self.host}{path}", timeout=TIMEOUT)
                 self._fails = 0
@@ -332,12 +358,9 @@ class PadFaceEngine:
                 if self._fails >= FAIL_LIMIT:
                     self._sleep_until = time.monotonic() + FAIL_BACKOFF_S
                     self._fails = 0
-                    print(
-                        f"[pad_face] face offline, backing off {FAIL_BACKOFF_S}s",
-                        flush=True,
-                    )
-
-        threading.Thread(target=_get, daemon=True).start()
+                    self._purge_queue()
+                    print(f"[pad_face] face offline, backing off {FAIL_BACKOFF_S}s", flush=True)
+            time.sleep(0.05)  # 给 ESP8266 的单线程服务器喘息
 
     def _run(self):
         while True:
