@@ -35,10 +35,13 @@ INTERRUPT_SETTLE_SECS = 0.2  # pause after "stop" when barged in
 DRAIN_MARGIN_SECS = 2.0  # device-side buffer already consumed while sending
 MIN_DRAIN_SECS = 0.5
 
-# Optional observer of the playing state (claimed playback only). The
-# gateway-side face engine uses this to hand the mouth to the firmware's
-# speaking animation during TTS. Set once at startup; never raises.
+# Optional observers (set once at startup; never raise):
+# - speaking_hook(bool): claimed playback started/ended — face engine state
+# - audio_hook(secs): this much real audio was just queued to the device —
+#   drives the mouth-flap window so lips track actual speech, not the
+#   whole thinking+gaps envelope
 speaking_hook = None
+audio_hook = None
 
 
 class PlaybackChannel:
@@ -132,6 +135,11 @@ class PlaybackChannel:
         Returns False if playback was interrupted mid-way (barge-in).
         """
         do_pace = self._pace if pace is None else pace
+        if frames and audio_hook and self._claim:
+            try:
+                audio_hook(len(frames) * FRAME_SECS)
+            except Exception:
+                logger.debug("playback.audio_hook_error", exc_info=True)
         for frame in frames:
             if self._check_interrupt and self.interrupted:
                 return False

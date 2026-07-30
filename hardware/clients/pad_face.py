@@ -148,32 +148,54 @@ class PadFaceEngine:
         threading.Thread(target=_react, daemon=True).start()
 
     def on_speaking(self, speaking):
-        """TTS 播放开始/结束：说话期间由引擎自己驱动嘴巴开合。
+        """TTS 播放开始/结束。
 
-        固件的 /expr/speaking 只是一次性姿态而非持续动画（实测），
-        所以口型循环在这里做：0.45s 交替张闭嘴，说完闭嘴回位。
+        口型不在这里驱动——嘴部循环由 feed_audio 按真实排入的音频时长
+        精确驱动（思考期、句间空隙自动停嘴）。这里只管状态切换和
+        说完后的表情恢复。
         """
         self._speaking = bool(speaking)
         if speaking:
-            self._start_mouth_loop()
-        else:
-            # 说完话，脸回到当前情绪该有的样子（同样不能阻塞调用方）
-            self._last_key = None
-            threading.Thread(
-                target=self._express, kwargs={"force": True}, daemon=True
-            ).start()
+            return
+        self._mouth_until = 0.0  # 立刻停嘴（打断/播放结束）
+        # 说完话，脸回到当前情绪该有的样子（同样不能阻塞调用方）
+        self._last_key = None
+        threading.Thread(target=self._express, kwargs={"force": True}, daemon=True).start()
+    def feed_audio(self, secs):
+        """网关刚向设备排入 secs 秒真实音频——嘴部窗口精确延长这么多。
+
+        口型只在音频真正播放的时间段动：思考期、句间空隙自动停嘴。
+        """
+        try:
+            secs = float(secs)
+        except (TypeError, ValueError):
+            return
+        now = time.monotonic()
+        base = max(getattr(self, "_mouth_until", 0.0), now)
+        self._mouth_until = base + secs
+        self._start_mouth_loop()
 
     def _start_mouth_loop(self):
         t = getattr(self, "_mouth_thread", None)
         if t is not None and t.is_alive():
             return
 
+        DEVICE_LAG = 0.35  # 网络+设备缓冲：帧发出到喇叭出声的大致延迟
+
         def _flap():
-            open_ = True
-            while self._speaking:
-                self._fire("/mouthOpen" if open_ else "/mouthClose")
-                open_ = not open_
-                time.sleep(0.45)
+            while True:
+                now = time.monotonic()
+                if now > getattr(self, "_mouth_until", 0.0) + DEVICE_LAG:
+                    break
+                # 脉冲节奏：短促张嘴→快速闭上→停顿。嘴大部分时间闭着，
+                # 观感幅度小；节奏 ~1.4 次/秒贴近说话韵律
+                self._fire("/mouthOpen")
+                time.sleep(0.18)
+                self._fire("/mouthClose")
+                time.sleep(0.52)
+            # 双重闭嘴：ESP8266 忙时会丢单条请求，补一发保险
+            self._fire("/mouthClose")
+            time.sleep(0.3)
             self._fire("/mouthClose")
 
         self._mouth_thread = threading.Thread(target=_flap, daemon=True)

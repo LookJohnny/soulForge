@@ -44,6 +44,7 @@ class WebSocketServer:
                 self.face_engine = PadFaceEngine(settings.face_host)
                 self.face_engine.start()
                 _playback.speaking_hook = self.face_engine.on_speaking
+                _playback.audio_hook = self.face_engine.feed_audio
                 logger.info("gateway.face_engine_started", host=settings.face_host)
             except Exception:
                 self.face_engine = None
