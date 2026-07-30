@@ -1,5 +1,8 @@
 """PAD → 舵机脸 自主表情引擎。
 
+孪生关系：本文件与 packages/gateway/src/gateway/face_engine.py 内容
+同步（由 gateway 版生成，改动请改 gateway 版后重新生成）。
+
 把 SoulForge 的三维连续情绪 (P 愉悦 / A 唤醒 / D 掌控) 实时映射到
 ESP8266 仿生脸的 35 个 HTTP 端点上，让脸成为内在情绪状态的持续外显，
 而不是"每次回复贴一张罐头表情"。
@@ -51,6 +54,17 @@ TRACK_FRESH_S = 8.0  # 最近这么久内有追踪信号，随机目光游移让
 # 摄像头成像与眼球方向的镜像关系因安装而异；方向反了把此环境变量设为 1
 EYE_MIRROR = os.environ.get("FACE_TRACK_MIRROR", "0") == "1"
 
+# ── 温柔化总控 ─────────────────────────────
+# FACE_INTENSITY 0~1：表情烈度总旋钮，越小越安静。影响三处：
+# 全脸大表情的触发门槛、配方步骤间隔、主循环节拍
+try:
+    INTENSITY = max(0.0, min(1.0, float(os.environ.get("FACE_INTENSITY", "0.4"))))
+except ValueError:
+    INTENSITY = 0.4
+CALM = 1.0 - INTENSITY  # 安静程度（阅读用）
+# 说话口型风格：lips=上唇微动(默认，幅度小) | jaw=下颌开合(下颌修好后切回) | off=无口型
+MOUTH_STYLE = os.environ.get("SF_MOUTH_STYLE", "lips").strip().lower()
+
 
 def _clamp(v, lo=-1.0, hi=1.0):
     return max(lo, min(hi, v))
@@ -69,18 +83,20 @@ def select_recipe(p, a, d):
     m = max(abs(p), abs(a), abs(d))
 
     # ── 强烈象限：交给固件的成熟编排 ──
-    if p > 0.45:
+    # 门槛随 CALM 抬升：低烈度设置下，全脸大表情是罕见的高光时刻
+    strong = 0.35 * CALM
+    if p > 0.45 + strong:
         return Recipe("big_happy", [("/expr/happy", 0)])
-    if a > 0.55 and abs(p) < 0.35:
+    if a > 0.55 + strong and abs(p) < 0.35:
         return Recipe("surprised", [("/expr/surprised", 0)])
-    if p < -0.35 and d > 0.25:
+    if p < -0.35 - strong and d > 0.25:
         return Recipe("angry", [("/expr/angry", 0)])
-    if p < -0.45:
+    if p < -0.45 - strong:
         return Recipe("big_sad", [("/expr/sad", 0)])
 
     # ── 温和状态：原子 AU 自己拼 ──
-    if a < -0.45:  # 困倦：眼帘沉、目光垂
-        return Recipe("sleepy", [("/expr/neutral", 0.3), ("/moveDown", 0)])
+    if a < -0.45:  # 困倦：眉回落、目光垂（不借用固件复合姿态）
+        return Recipe("sleepy", [("/browCenter", 0.3), ("/moveDown", 0)])
     if p > 0.12 and d < -0.25:  # 害羞：单侧嘴角 + 目光回避
         return Recipe("shy", [("/lipRightPull", 0.4), ("/moveDown", 0)])
     if p > 0.30:  # 明快微笑：两嘴角 + 鼓颊
@@ -102,10 +118,8 @@ def select_recipe(p, a, d):
     if p < -0.15:  # 低落：嘴角回位 + 目光垂
         return Recipe("down", [("/lipCenter", 0.2), ("/moveDown", 0)])
     if m < 0.15:  # 静息
-        return Recipe(
-            "rest", [("/lipCenter", 0.2), ("/browCenter", 0.2), ("/cheekCenter", 0)]
-        )
-    return Recipe("neutralish", [("/expr/neutral", 0)])
+        return Recipe("rest", [("/lipCenter", 0.2), ("/browCenter", 0.2), ("/cheekCenter", 0)])
+    return Recipe("neutralish", [("/lipCenter", 0.3), ("/browCenter", 0)])
 
 
 class PadFaceEngine:
@@ -133,11 +147,7 @@ class PadFaceEngine:
     def on_pad(self, pad):
         """网关推来新的 PAD 快照（每轮回复一次）。"""
         try:
-            p, a, d = (
-                float(pad.get("p", 0)),
-                float(pad.get("a", 0)),
-                float(pad.get("d", 0)),
-            )
+            p, a, d = float(pad.get("p", 0)), float(pad.get("a", 0)), float(pad.get("d", 0))
         except (TypeError, ValueError, AttributeError):
             return
         with self._lock:
@@ -184,24 +194,30 @@ class PadFaceEngine:
         if t is not None and t.is_alive():
             return
 
+        if MOUTH_STYLE == "off":
+            return
         DEVICE_LAG = 0.35  # 网络+设备缓冲：帧发出到喇叭出声的大致延迟
+        if MOUTH_STYLE == "jaw":
+            # 下颌开合（幅度大；下颌机械修好并校准后用 SF_MOUTH_STYLE=jaw 启用）
+            open_path, close_path, t_open, t_rest = "/mouthOpen", "/mouthClose", 0.2, 0.68
+        else:
+            # lips（默认）：上唇轻抬→回位。幅度天然小，不碰不可靠的下颌
+            open_path, close_path, t_open, t_rest = "/lipUpRaise", "/lipCenter", 0.25, 0.9
 
         def _flap():
             while True:
                 now = time.monotonic()
                 if now > getattr(self, "_mouth_until", 0.0) + DEVICE_LAG:
                     break
-                # 脉冲节奏：短促张嘴→快速闭上→停顿。嘴大部分时间闭着，
-                # 观感幅度小；节奏 ~1.4 次/秒贴近说话韵律
-                self._fire("/mouthOpen")
-                time.sleep(0.2)
-                self._fire("/mouthClose")
-                time.sleep(0.68)
-            # 停嘴：先清掉队列里可能积压的张嘴，再双重闭嘴保险
+                self._fire(open_path)
+                time.sleep(t_open)
+                self._fire(close_path)
+                time.sleep(t_rest)
+            # 收尾：先清掉队列里可能积压的开口指令，再双发回位保险
             self._purge_queue()
-            self._fire("/mouthClose")
+            self._fire(close_path)
             time.sleep(0.5)
-            self._fire("/mouthClose")
+            self._fire(close_path)
 
         self._mouth_thread = threading.Thread(target=_flap, daemon=True)
         self._mouth_thread.start()
@@ -272,9 +288,9 @@ class PadFaceEngine:
                 self._target[i] += (BASELINE[i] - self._target[i]) * DECAY
 
     def _tick_interval(self):
-        # A 高 → 动作频密（0.9s），A 低 → 迟缓（3.2s）
+        # A 高 → 动作频密，A 低 → 迟缓；CALM 整体放缓节拍
         a = self._cur[1]
-        return _clamp(2.1 - 1.2 * a, 0.9, 3.2)
+        return _clamp(2.1 - 1.2 * a + CALM, 0.9 + CALM, 3.2 + CALM)
 
     def _express(self, force=False):
         if self._speaking:
@@ -287,14 +303,12 @@ class PadFaceEngine:
             if not force and recipe.key == self._last_key:
                 return
             self._last_key = recipe.key
-            print(
-                f"[pad_face] P={p:+.2f} A={a:+.2f} D={d:+.2f} -> {recipe.key}",
-                flush=True,
-            )
+            print(f"[pad_face] P={p:+.2f} A={a:+.2f} D={d:+.2f} -> {recipe.key}", flush=True)
             for path, delay in recipe.steps:
                 self._fire(path)
                 if delay:
-                    time.sleep(delay)
+                    # CALM 拉长步骤间隔：多舵机动作依次缓慢呈现，不"整脸炸开"
+                    time.sleep(delay * (1.0 + CALM))
         finally:
             self._express_lock.release()
 
@@ -303,9 +317,7 @@ class PadFaceEngine:
         _p, a, d = self._cur
         r = random.random()
         if self._speaking:
-            if r < 0.25:
-                self._fire("/blink")
-            return
+            return  # 说话时除口型外完全安静：不眨眼不眼跳
         # 正在追踪真人时，目光归追踪管；只保留眨眼
         if time.monotonic() - self._track_seen < TRACK_FRESH_S:
             if r < 0.30:
@@ -313,14 +325,12 @@ class PadFaceEngine:
             return
         if r < 0.30:
             self._fire("/blink")
-        elif r < 0.42 and d < -0.2:  # 弱势/害羞：目光向下回避
+        elif r < 0.36 and d < -0.2:  # 弱势/害羞：目光向下回避（概率已减半）
             self._fire("/moveDown")
-        elif r < 0.55 and a > 0.15:  # 兴奋/好奇：左右张望
+        elif r < 0.44 and a > 0.15:  # 兴奋/好奇：左右张望（概率已减半）
             self._fire(random.choice(["/moveLeft", "/moveRight"]))
-            threading.Timer(
-                random.uniform(0.6, 1.4), self._fire, ["/moveCenter"]
-            ).start()
-        elif r < 0.62:
+            threading.Timer(random.uniform(0.8, 1.6), self._fire, ["/moveCenter"]).start()
+        elif r < 0.5:
             self._fire("/moveCenter")
 
     def _fire(self, path):
@@ -386,9 +396,7 @@ if __name__ == "__main__":
     eng = PadFaceEngine(host)
     eng.start()
     if len(sys.argv) == 4:
-        eng.on_pad(
-            {"p": float(sys.argv[1]), "a": float(sys.argv[2]), "d": float(sys.argv[3])}
-        )
+        eng.on_pad({"p": float(sys.argv[1]), "a": float(sys.argv[2]), "d": float(sys.argv[3])})
         time.sleep(15)
     else:
         # 演示轨迹：开心 → 好奇 → 害羞 → 低落 → 回归平静
