@@ -209,13 +209,13 @@ class PadFaceEngine:
             cycle = [("/lipUpRaise", 0.25), ("/lipCenter", 0.9)]
             settle = ["/lipCenter"]
         else:
-            # mixed（默认）：小幅下颌 + 上唇。mouthOpen 后零间隔跟 mouthClose，
-            # 串行队列的 ~0.1-0.2s 发送间距让下颌刚起步就折返 = 小幅度
+            # mixed（默认）：双唇微张——上唇抬+下唇降同时发，视觉上嘴轻轻
+            # 张开一条缝，再回位。完全不驱动下颌（时序截断法实测截不住：
+            # 舵机 0.1s 走完行程 > HTTP 最小间隔，任何脉冲都接近全开）
             cycle = [
-                ("/mouthOpen", 0.0),
-                ("/mouthClose", 0.0),
-                ("/lipUpRaise", 0.3),
-                ("/lipCenter", 0.95),
+                ("/lipUpRaise", 0.0),
+                ("/lipDownLower", 0.35),
+                ("/lipCenter", 1.0),
             ]
             settle = ["/mouthClose", "/lipCenter"]
 
