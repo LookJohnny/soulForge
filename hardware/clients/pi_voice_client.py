@@ -152,13 +152,21 @@ class FaceTracker:
             if det is None or det.empty():
                 raise RuntimeError(f"no usable haarcascade in {candidates}")
             self.ok = True
-            print("[track] face tracker running (640x480 @ ~1.4fps)", flush=True)
+            print("[track] face tracker running (640x480 @ ~2.5fps)", flush=True)
         except Exception as e:
             print(f"[track] disabled: {e}", flush=True)
             return
+        # 摄像头物理安装角度（0/90/180/270，顺时针）；歪着装会让 haar 检不出脸
+        rot = int(os.environ.get("SF_CAM_ROT", "0"))
+        rot_code = {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}.get(rot)
+        last_diag = 0.0
+        hits = 0
+        misses = 0
         while True:
             try:
                 arr = cam.capture_array()
+                if rot_code is not None:
+                    arr = cv2.rotate(arr, rot_code)
                 okj, buf = cv2.imencode(
                     ".jpg",
                     cv2.cvtColor(arr, cv2.COLOR_RGB2BGR),
@@ -167,24 +175,40 @@ class FaceTracker:
                 if okj:
                     with self._lock:
                         self._latest_jpeg = base64.b64encode(buf).decode()
-                gray = cv2.resize(cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY), (320, 240))
-                faces = det.detectMultiScale(gray, 1.2, 4, minSize=(36, 36))
+                # 全分辨率检测（640x480）：1米外的脸也有 60-80px，检出稳定
+                gray = cv2.equalizeHist(cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY))
+                fh, fw = gray.shape[:2]
+                faces = det.detectMultiScale(gray, 1.1, 3, minSize=(48, 48))
                 sender = self._sender
-                if len(faces) and sender:
+                if len(faces):
+                    hits += 1
                     x, y, w, h = max(faces, key=lambda f: int(f[2]) * int(f[3]))
-                    dx = ((x + w / 2) / 320 - 0.5) * 2
-                    dy = ((y + h / 2) / 240 - 0.5) * 2
-                    sender(
-                        {
-                            "type": "face_pos",
-                            "dx": round(float(dx), 3),
-                            "dy": round(float(dy), 3),
-                        }
-                    )
+                    dx = ((x + w / 2) / fw - 0.5) * 2
+                    dy = ((y + h / 2) / fh - 0.5) * 2
+                    if sender:
+                        sender(
+                            {
+                                "type": "face_pos",
+                                "dx": round(float(dx), 3),
+                                "dy": round(float(dy), 3),
+                            }
+                        )
+                else:
+                    misses += 1
+                now = time.monotonic()
+                if now - last_diag > 10:
+                    last_diag = now
+                    detail = f"face {w}x{h}px dx={dx:+.2f} dy={dy:+.2f}" if len(faces) else "no face"
+                    print(f"[track] 10s: {hits} hit / {misses} miss, last: {detail}", flush=True)
+                    hits = misses = 0
+                    try:  # 诊断快照：看看摄像头此刻到底看到什么
+                        cv2.imwrite("/tmp/track_latest.jpg", cv2.cvtColor(arr, cv2.COLOR_RGB2BGR))
+                    except Exception:
+                        pass
             except Exception as e:
                 print(f"[track] frame error: {e}", flush=True)
                 time.sleep(3)
-            time.sleep(0.7)
+            time.sleep(0.3)
 
 
 TRACKER = None

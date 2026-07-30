@@ -48,7 +48,7 @@ APPROACH = 0.35  # 每 tick 向目标 PAD 靠近的比例（情绪惯性）
 DECAY = 0.06  # 每 tick 目标向基线回落的比例（心情淡去）
 FAIL_BACKOFF_S = 60  # 连续失败后休眠，等脸重新上线
 FAIL_LIMIT = 5
-EYE_MIN_INTERVAL = 0.7  # 眼球追踪指令最小间隔（ESP8266 HTTP 扛不住高频）
+EYE_MIN_INTERVAL = 0.35  # 眼球追踪指令最小间隔（ESP8266 HTTP 上限约 3req/s）
 EYE_DEADZONE = 0.18  # 画面中心死区，人在中间时不追
 TRACK_FRESH_S = 4.0  # 最近这么久内有追踪信号，随机目光游移让位
 # 摄像头成像与眼球方向的镜像关系因安装而异；方向反了把此环境变量设为 1
@@ -189,6 +189,20 @@ class PadFaceEngine:
         if path:
             self._last_eye = now
             self._fire(path)
+            # 两轴都偏得多时，第二轴稍后跟上（对角线追踪更跟手）
+            second = None
+            if path in ("/moveLeft", "/moveRight"):
+                if dy > EYE_DEADZONE:
+                    second = "/moveDown"
+                elif dy < -EYE_DEADZONE:
+                    second = "/moveUp"
+            elif path in ("/moveUp", "/moveDown"):
+                if dx > EYE_DEADZONE:
+                    second = "/moveRight"
+                elif dx < -EYE_DEADZONE:
+                    second = "/moveLeft"
+            if second:
+                threading.Timer(0.15, self._fire, [second]).start()
 
     def start(self):
         if self._thread:
