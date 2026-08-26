@@ -12,8 +12,8 @@
      {"type":"control","payload":{"type":"tts","state":"stop"}}
      二进制 Opus 帧（24kHz, 60ms）
 
-   Opus 编解码用 WebCodecs（Chrome/Edge）。下行 Opus 包与采样率无关，
-   统一按 48kHz 解码再交给 AudioContext。 */
+   下行音频：web_audio 会话默认每句一整段 MP3（decodeAudioData）；小智式裸 Opus 帧
+   则用 WebCodecs（与采样率无关，统一按 48kHz 解）。按魔数自动分流。 */
 
 export class GatewayClient extends EventTarget {
   constructor({ url, sessionName = 'vrm' } = {}) {
@@ -100,39 +100,55 @@ export class GatewayClient extends EventTarget {
     this.analyser = this.audioCtx.createAnalyser();
     this.analyser.fftSize = 256;
     this.analyser.connect(this.audioCtx.destination);
-    if (!('AudioDecoder' in window)) {
-      this._emit('error', new Error('WebCodecs AudioDecoder 不可用（需 Chrome/Edge）'));
-      return;
-    }
+    // 整段 MP3/WAV 不需要 WebCodecs；裸 Opus（小智同款分支）才需要
+    this._makeDecoder();
+  }
+
+  /** 二进制帧分流：MP3/WAV 整段（web_audio 默认）走 decodeAudioData，裸 Opus 帧走 WebCodecs。 */
+  _onAudio(buf) {
+    if (!this.audioCtx) return;
+    if (!this.speaking) this._setSpeaking(true);
+    const u8 = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
+    const isMp3 = (u8[0] === 0xff && (u8[1] & 0xe0) === 0xe0) || (u8[0] === 0x49 && u8[1] === 0x44 && u8[2] === 0x33); // frame sync / 'ID3'
+    const isWav = u8[0] === 0x52 && u8[1] === 0x49 && u8[2] === 0x46 && u8[3] === 0x46; // 'RIFF'
+    if (isMp3 || isWav) { this._decodeClip(buf); return; }
+    if (!this.decoder || this.decoder.state !== 'configured') this._makeDecoder();
+    if (!this.decoder) return;
+    try {
+      this.decoder.decode(new EncodedAudioChunk({ type: 'key', timestamp: this._ts, data: buf }));
+      this._ts += 60000;
+    } catch (e) { this._emit('error', e); this._makeDecoder(); }
+  }
+
+  _makeDecoder() {
+    if (!('AudioDecoder' in window)) { this.decoder = null; return; }
+    try { this.decoder?.close(); } catch { /* already closed */ }
     this.decoder = new AudioDecoder({
       output: (frame) => this._playFrame(frame),
-      error: (e) => this._emit('error', e),
+      error: (e) => { this._emit('error', new Error('Opus 解码失败: ' + (e?.message ?? e))); this._makeDecoder(); },
     });
     this.decoder.configure({ codec: 'opus', sampleRate: 48000, numberOfChannels: 1 });
     this._ts = 0;
   }
 
-  _onAudio(buf) {
-    if (!this.decoder || this.decoder.state !== 'configured') return;
-    if (!this.speaking) this._setSpeaking(true);
-    this.decoder.decode(new EncodedAudioChunk({ type: 'key', timestamp: this._ts, data: buf }));
-    this._ts += 60000;
+  /** 整段 MP3/WAV：顺序排队播放，保持句间连续。 */
+  _decodeClip(buf) {
+    const seq = (this._clipChain ??= Promise.resolve());
+    this._clipChain = seq.then(async () => {
+      let audio;
+      try { audio = await this.audioCtx.decodeAudioData(buf.slice(0)); }
+      catch (e) { this._emit('error', new Error('音频解码失败: ' + (e?.message ?? e))); return; }
+      this._schedule(audio);
+    });
   }
 
-  _playFrame(frame) {
+  _schedule(buffer) {
     const ctx = this.audioCtx;
-    const n = frame.numberOfFrames;
-    const pcm = new Float32Array(n);
-    frame.copyTo(pcm, { planeIndex: 0, format: 'f32-planar' });
-    const buffer = ctx.createBuffer(1, n, frame.sampleRate);
-    buffer.copyToChannel(pcm, 0);
-    frame.close();
-
     const src = ctx.createBufferSource();
     src.buffer = buffer;
     src.connect(this.analyser);
     const now = ctx.currentTime;
-    if (this.playHead < now + 0.02) this.playHead = now + 0.08; // 预缓冲，避免首帧撕裂
+    if (this.playHead < now + 0.02) this.playHead = now + 0.08;
     src.start(this.playHead);
     this.playHead += buffer.duration;
     this.sources.add(src);
@@ -142,9 +158,19 @@ export class GatewayClient extends EventTarget {
     };
   }
 
+  _playFrame(frame) {
+    const n = frame.numberOfFrames;
+    const pcm = new Float32Array(n);
+    frame.copyTo(pcm, { planeIndex: 0, format: 'f32-planar' });
+    const buffer = this.audioCtx.createBuffer(1, n, frame.sampleRate);
+    buffer.copyToChannel(pcm, 0);
+    frame.close();
+    this._schedule(buffer);
+  }
+
   _drainThenStop() {
-    if (this.sources.size === 0) this._setSpeaking(false);
-    else this._stopPending = true;
+    const finish = () => { if (this.sources.size === 0) this._setSpeaking(false); else this._stopPending = true; };
+    if (this._clipChain) this._clipChain.then(finish); else finish();
   }
 
   _stopPlayback() {
@@ -179,14 +205,22 @@ export class GatewayClient extends EventTarget {
     }
     let stream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
+      if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('no mediaDevices'), { name: 'NotSupportedError' });
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
+      } catch (first) {
+        // 约束不满足（部分设备/虚拟麦）时退回最宽松的请求
+        if (first?.name === 'OverconstrainedError' || first?.name === 'NotFoundError') stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        else throw first;
+      }
     } catch (err) {
       // DOMException → 可读中文（aikeya groq-stt 的错误映射）
       const messages = {
-        NotAllowedError: '麦克风权限被拒绝，请检查浏览器/系统权限',
-        NotFoundError: '没有找到麦克风',
+        NotAllowedError: '麦克风权限被拒绝：点地址栏左侧 🔒/ⓘ 允许麦克风，并检查 系统设置→隐私→麦克风 里 Chrome 已勾选',
+        NotFoundError: '没有找到麦克风：系统设置→声音→输入 里确认有设备，Chrome 设置→隐私→麦克风 选中它',
+        NotSupportedError: '当前页面不支持麦克风（需要 https 或 localhost/127.0.0.1）',
         NotReadableError: '麦克风被其他应用占用',
         OverconstrainedError: '麦克风不满足采样要求',
       };

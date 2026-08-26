@@ -7,7 +7,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from 'playwright';
 
 const STUDIO_PORT = process.env.STUDIO_PORT ?? '8899';
-const GW_PORT = process.env.FAKE_GW_PORT ?? '8081';
+const GW_PORT = process.env.FAKE_GW_PORT ?? '8082'; // 8081 = real gateway on this machine
 const OUT = process.env.SMOKE_OUT ?? 'outputs/live_smoke.png';
 
 const procs = [];
@@ -53,12 +53,16 @@ await page.press('#text', 'Enter');
 await page.waitForFunction(() => window.__live.gw.speaking === true, null, { timeout: 8000 });
 checks.talkingRunning = await page.evaluate(() => !!window.__live.body.talkingAction?.isRunning());
 let maxViseme = 0, maxLevel = 0;
-for (let i = 0; i < 20; i++) {
+const decodeErrors = [];
+await page.evaluate(() => { window.__decodeErrs = []; window.__live.gw.addEventListener('error', (e) => window.__decodeErrs.push(String(e.detail?.message ?? e.detail))); });
+for (let i = 0; i < 40; i++) {
   await sleep(60);
   const w = await page.evaluate(() => ({ ...window.__live.body.lipsync.weights, lvl: window.__live.body.speakingLevel }));
   maxViseme = Math.max(maxViseme, w.aa, w.oh, w.ee, w.ih, w.ou); maxLevel = Math.max(maxLevel, w.lvl);
 }
 checks.maxViseme = +maxViseme.toFixed(3);
+checks.decodeErrors = await page.evaluate(() => window.__decodeErrs);
+checks.audioClipsQueued = await page.evaluate(() => window.__live.gw.sources.size >= 0);
 checks.maxLevel = +maxLevel.toFixed(3);
 checks.bubble = await page.evaluate(() => document.getElementById('bubble-text').textContent);
 checks.bubbleVisible = await page.evaluate(() => !document.getElementById('bubble').classList.contains('hidden'));
@@ -112,6 +116,7 @@ const ok = errors.length === 0 && checks.modelLoaded && checks.idleAnimated && c
   && checks.maxViseme > 0.02 && checks.bubble === 'echo: 你好 事件' && checks.eventChoices === 2
   && ['big_happy', 'warm_smile'].includes(checks.moodKey)
   && checks.graphNodes === 4 && checks.exportEnabled && String(checks.companionToggle).includes('陪伴')
+  && checks.decodeErrors.length === 0
   && checks.bodyWelcome && checks.bodyActionsLogged >= 4 && (checks.bodyStatuses ?? []).filter((s) => s === 'done').length >= 4;
 console.log(JSON.stringify({ ok, checks, errors }, null, 1));
 process.exit(ok ? 0 : 1);

@@ -18,7 +18,7 @@ from pathlib import Path
 from aiohttp import web
 
 HERE = Path(__file__).parent
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8081
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8082
 
 
 def load_frames() -> list[bytes]:
@@ -34,6 +34,11 @@ def load_frames() -> list[bytes]:
 
 
 FRAMES = load_frames()
+# Real gateway web_audio sessions send one whole MP3 per sentence; a raw-Opus
+# frame burst is what xiaozhi-style devices get. The fixture exercises both.
+MP3_CLIP = (
+    (HERE / "clip_24k.mp3").read_bytes() if (HERE / "clip_24k.mp3").exists() else b""
+)
 
 RELATIONSHIP = {
     "type": "relationship",
@@ -132,7 +137,10 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
             await ws.send_json(
                 {"type": "text", "content": "echo: " + content, "state": "sentence"}
             )
-            for fr in FRAMES:
+            if MP3_CLIP:  # sentence 1 as a whole MP3 clip (real web_audio behaviour)
+                await ws.send_bytes(MP3_CLIP)
+                await asyncio.sleep(0.3)
+            for fr in FRAMES:  # sentence 2 as raw Opus frames
                 await ws.send_bytes(fr)
                 await asyncio.sleep(0.06)
             await ws.send_json({"type": "text", "content": "", "state": "stop"})
