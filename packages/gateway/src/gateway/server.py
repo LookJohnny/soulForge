@@ -191,6 +191,7 @@ class WebSocketServer:
             # Start the life loop — idle hums/yawns/snores + thinking fillers
             session._life = LifeLoop(self, ws, adapter, session)
             session._life.start()
+            await self._push_relationship_snapshot(ws, adapter, session)
 
             # Keep one configured character voice online even when a visual or
             # system event (rather than microphone speech) caused the line.
@@ -541,29 +542,53 @@ class WebSocketServer:
         finally:
             session._pending_frame = None
 
-    async def _send_emotion(self, ws, adapter, chunk):
-        """Forward a per-turn emotion event to the device as a control message.
+    async def _send_control(self, ws, adapter, payload: dict) -> None:
+        """Forward a control payload (emotion / relationship / event …) to the device.
 
-        Devices with expression hardware (servo face, LED) act on it; devices
-        that don't know the message type ignore it. Failures never interrupt
-        the audio playback path.
+        Devices that don't know the payload type ignore it. Failures never
+        interrupt the audio playback path.
         """
         try:
-            face_engine = getattr(self, "face_engine", None)
-            if face_engine and chunk.pad:
-                face_engine.on_pad(chunk.pad)
-            out = OutboundMessage(
-                type=MessageType.CONTROL,
-                payload={
-                    "type": "emotion",
-                    "emotion": chunk.emotion,
-                    "pad": chunk.pad,
-                    "hardware": chunk.hardware,
-                },
-            )
+            out = OutboundMessage(type=MessageType.CONTROL, payload=payload)
             await ws.send_text(await adapter.encode(out))
         except Exception:
-            logger.exception("gateway.emotion_send_error")
+            logger.exception("gateway.control_send_error", payload_type=payload.get("type"))
+
+    async def _send_emotion(self, ws, adapter, chunk):
+        """Forward a per-turn emotion event (PAD snapshot + hardware hint)."""
+        face_engine = getattr(self, "face_engine", None)
+        if face_engine and chunk.pad:
+            try:
+                face_engine.on_pad(chunk.pad)
+            except Exception:
+                logger.exception("gateway.face_engine_error")
+        await self._send_control(
+            ws,
+            adapter,
+            {
+                "type": "emotion",
+                "emotion": chunk.emotion,
+                "pad": chunk.pad,
+                "hardware": chunk.hardware,
+            },
+        )
+
+    async def _send_relationship(self, ws, adapter, chunk):
+        if chunk.relationship:
+            await self._send_control(ws, adapter, {**chunk.relationship, "type": "relationship"})
+
+    async def _push_relationship_snapshot(self, ws, adapter, session) -> None:
+        """On connect: tell the body where the relationship stands right now."""
+        if not (session.end_user_id and session.character_id):
+            return
+        try:
+            resp = await self.orchestrator.client.get(
+                f"/relationship/{session.end_user_id}/{session.character_id}"
+            )
+            if resp.status_code == 200:
+                await self._send_control(ws, adapter, {**resp.json(), "type": "relationship"})
+        except Exception:
+            logger.debug("gateway.relationship_snapshot_unavailable", exc_info=True)
 
     async def _send_quick_reply(self, ws, adapter, session, text: str):
         """Send a quick text+TTS reply without going through the full LLM pipeline.
@@ -719,6 +744,8 @@ class WebSocketServer:
 
                     elif chunk.kind == "emotion":
                         await self._send_emotion(ws, adapter, chunk)
+                    elif chunk.kind == "relationship":
+                        await self._send_relationship(ws, adapter, chunk)
 
                     if interrupted:
                         break
@@ -796,6 +823,9 @@ class WebSocketServer:
 
                     if chunk.kind == "emotion":
                         await self._send_emotion(ws, adapter, chunk)
+                        continue
+                    if chunk.kind == "relationship":
+                        await self._send_relationship(ws, adapter, chunk)
                         continue
 
                     await pb.send_sentence(chunk.text)
@@ -916,6 +946,9 @@ class WebSocketServer:
 
                     if chunk.kind == "emotion":
                         await self._send_emotion(ws, adapter, chunk)
+                        continue
+                    if chunk.kind == "relationship":
+                        await self._send_relationship(ws, adapter, chunk)
                         continue
 
                     if chunk.kind == "need_vision":

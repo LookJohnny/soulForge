@@ -9,6 +9,7 @@ from ai_core.api.memory import router as memory_router
 from ai_core.api.pipeline import router as pipeline_router
 from ai_core.api.prompt import router as prompt_router
 from ai_core.api.rag import router as rag_router
+from ai_core.api.relationship import router as relationship_router
 from ai_core.api.soul_packs import router as soul_packs_router
 from ai_core.api.tts import router as tts_router
 from ai_core.api.voice_clone import router as voice_clone_router
@@ -20,6 +21,7 @@ api_router.include_router(cache_admin_router)
 api_router.include_router(prompt_router)
 api_router.include_router(rag_router)
 api_router.include_router(memory_router)
+api_router.include_router(relationship_router)
 api_router.include_router(pipeline_router)
 api_router.include_router(tts_router)
 api_router.include_router(chat_router)

@@ -63,6 +63,10 @@ class StructuredResponse:
     pad: PADValues = field(default_factory=PADValues)
     voice: VoiceParams = field(default_factory=VoiceParams)
     stance: str = ""
+    # Optional relationship suggestion (clamped by RelationshipEngine.merge_updates):
+    # {"affection": ±n, "trust": ±n, "intimacy": ±n, "comfort": ±n, "respect": ±n,
+    #  "mood_cause": "..."}
+    state_changes: dict | None = None
     raw: str = ""  # original LLM output for debugging
     parsed_ok: bool = True  # whether JSON parsing succeeded
 
@@ -181,6 +185,9 @@ def parse_llm_response(raw_text: str) -> StructuredResponse:
             d=_safe_float(pad_raw[2], lo=-1, hi=1),
         ).clamp()
 
+    # Relationship suggestion (either nested or flat *_delta keys)
+    resp.state_changes = _parse_state_changes(data)
+
     # Voice
     voice_raw = data.get("voice", {})
     if isinstance(voice_raw, dict):
@@ -199,6 +206,28 @@ def parse_llm_response(raw_text: str) -> StructuredResponse:
         resp.parsed_ok = False
 
     return resp
+
+
+_STATE_KEYS = ("affection", "trust", "intimacy", "comfort", "respect")
+
+
+def _parse_state_changes(data: dict) -> dict | None:
+    """Pull relationship deltas + mood cause out of the LLM JSON, if present."""
+    raw = data.get("state_changes")
+    src = raw if isinstance(raw, dict) else data
+    out: dict = {}
+    for key in _STATE_KEYS:
+        v = src.get(key, src.get(f"{key}_delta"))
+        if v is None:
+            continue
+        try:
+            out[key] = int(round(float(v)))
+        except (TypeError, ValueError):
+            continue
+    cause = src.get("mood_cause")
+    if isinstance(cause, str) and cause.strip():
+        out["mood_cause"] = cause.strip()[:80]
+    return out or None
 
 
 def _clean_legacy_text(text: str) -> str:

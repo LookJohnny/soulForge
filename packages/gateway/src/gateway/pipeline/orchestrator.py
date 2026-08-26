@@ -43,6 +43,8 @@ class StreamChunk:
     # Only populated on 'emotion' chunks (PAD snapshot + mapped hardware command)
     pad: dict | None = None
     hardware: dict | None = None
+    # Only populated on 'relationship' chunks (five-axis state + turn deltas)
+    relationship: dict | None = None
     latency_ms: int = 0
     stages: dict | None = None  # ai-core per-stage latency breakdown (ms)
     # Opaque receipt for the downstream playback sink.  The sink calls
@@ -668,6 +670,10 @@ class PipelineOrchestrator:
                 emotion=data.get("emotion", ""),
                 pad=data.get("pad"),
                 hardware=data.get("hardware"),
+            )
+        if etype == "relationship":
+            return StreamChunk(
+                text="", audio_data=None, index=-1, kind="relationship", relationship=data
             )
         if etype == "done":
             return StreamChunk(

@@ -144,11 +144,17 @@ USER_MOOD_PAD: dict[str, PADState] = {
 # ──────────────────────────────────────────────
 
 RELATIONSHIP_WEIGHTS: dict[str, dict[str, float]] = {
+    "COMPANION": {"touch": 0.6, "empathy": 0.25, "transition": 0.4},
     "STRANGER": {"touch": 0.3, "empathy": 0.1, "transition": 0.3},
     "ACQUAINTANCE": {"touch": 0.5, "empathy": 0.15, "transition": 0.35},
-    "FAMILIAR": {"touch": 0.7, "empathy": 0.2, "transition": 0.4},
-    "FRIEND": {"touch": 0.9, "empathy": 0.3, "transition": 0.45},
-    "BESTFRIEND": {"touch": 1.2, "empathy": 0.4, "transition": 0.5},
+    "FAMILIAR": {"touch": 0.7, "empathy": 0.2, "transition": 0.4},  # legacy alias of FRIEND
+    "FRIEND": {"touch": 0.8, "empathy": 0.25, "transition": 0.42},
+    "BESTFRIEND": {"touch": 1.0, "empathy": 0.35, "transition": 0.47},  # legacy alias
+    "CLOSE_FRIEND": {"touch": 1.0, "empathy": 0.35, "transition": 0.47},
+    "ROMANTIC_INTEREST": {"touch": 1.1, "empathy": 0.4, "transition": 0.5},
+    "DATING": {"touch": 1.2, "empathy": 0.45, "transition": 0.52},
+    "COMMITTED": {"touch": 1.3, "empathy": 0.5, "transition": 0.55},
+    "SOULMATE": {"touch": 1.4, "empathy": 0.55, "transition": 0.6},
 }
 
 _DEFAULT_REL_WEIGHTS = {"touch": 0.5, "empathy": 0.2, "transition": 0.4}

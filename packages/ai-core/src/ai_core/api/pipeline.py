@@ -207,6 +207,7 @@ async def chat(req: ChatRequest, request: Request):
             user_mood=user_mood,
             memories=memories,
             relationship_stage=rel_state["stage"],
+            relationship_state=rel_state if req.end_user_id else None,
             proactive_trigger=proactive_line,
             time_context=time_context,
             touch_context=touch_prompt,
@@ -282,7 +283,25 @@ async def chat(req: ChatRequest, request: Request):
         audio_b64 = base64.b64encode(audio_bytes).decode()
         sw.mark("tts")
 
-    # 12. Async post-processing (memory + relationship + drift).
+    # 12. Relationship turn (inline: one cached read + one upsert) so the
+    # response can carry the deltas. Idle musings never move the relationship.
+    rel_payload = None
+    if req.end_user_id and not req.idle_mode:
+        rel_payload = await _apply_relationship_turn(
+            req,
+            user_mood=user_mood,
+            user_text=user_text,
+            touch_bonus=touch_affinity_bonus,
+            llm_suggestion=parsed.state_changes if parsed.parsed_ok else None,
+        )
+        if rel_payload:
+            rel_state = {
+                **rel_state,
+                "stage": rel_payload["stage"],
+                "affinity": rel_payload["axes"]["affection"],
+            }
+
+    # 13. Async post-processing (memory + drift).
     # Idle musings are the character talking to itself — they must not
     # create memories or earn relationship points.
     if req.end_user_id and not req.idle_mode:
@@ -325,6 +344,7 @@ async def chat(req: ChatRequest, request: Request):
         pad=PADStateSchema(**pad_state.to_dict()),
         relationship_stage=rel_state["stage"],
         affinity=rel_state.get("affinity", 0),
+        relationship=rel_payload,
         latency_ms=latency,
         stages=stages,
     )
@@ -567,6 +587,7 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
             user_mood=user_mood,
             memories=memories,
             relationship_stage=rel_state["stage"],
+            relationship_state=rel_state if req.end_user_id else None,
             proactive_trigger=proactive_line,
             time_context=time_context,
             touch_context=touch_prompt,
@@ -742,6 +763,20 @@ async def chat_stream(req: ChatRequest, request: Request):
             }
         )
 
+        # Relationship turn — emitted before `done` so the body can animate
+        # the HUD while audio is still playing.
+        rel_payload = None
+        if req.end_user_id and not req.idle_mode:
+            rel_payload = await _apply_relationship_turn(
+                req,
+                user_mood=ctx["user_mood"],
+                user_text=user_text,
+                touch_bonus=ctx["touch_affinity_bonus"],
+                llm_suggestion=None,
+            )
+            if rel_payload:
+                yield _sse(rel_payload)
+
         # Done event
         latency = int((time.monotonic() - start) * 1000)
         stages = {k: int(v) for k, v in stage_ms.items()}
@@ -753,7 +788,8 @@ async def chat_stream(req: ChatRequest, request: Request):
             "user_text": user_text,
             "emotion": new_emotion,
             "pad": pad_state.to_dict(),
-            "relationship_stage": rel_state["stage"],
+            "relationship_stage": rel_payload["stage"] if rel_payload else rel_state["stage"],
+            "relationship": rel_payload,
             "latency_ms": latency,
             "stages": stages,
         }
@@ -792,6 +828,34 @@ async def chat_stream(req: ChatRequest, request: Request):
     )
 
 
+async def _apply_relationship_turn(
+    req: ChatRequest,
+    *,
+    user_mood: str | None,
+    user_text: str,
+    touch_bonus: int = 0,
+    llm_suggestion: dict | None = None,
+) -> dict | None:
+    """Move the five-axis relationship for this turn; returns the wire payload.
+
+    Never raises — a relationship hiccup must not break a reply.
+    """
+    try:
+        rel_engine = await get_relationship_engine()
+        result = await rel_engine.apply_turn(
+            req.end_user_id,
+            req.character_id,
+            user_mood=user_mood,
+            user_text=user_text,
+            llm_suggestion=llm_suggestion,
+            touch_bonus=touch_bonus,
+        )
+        return result.to_payload()
+    except Exception:
+        logger.exception("relationship.apply_turn_error")
+        return None
+
+
 async def _post_turn_processing(
     end_user_id: str,
     character_id: str,
@@ -799,20 +863,12 @@ async def _post_turn_processing(
     new_emotion: str,
     touch_bonus: int = 0,
 ) -> None:
-    """Async post-turn: relationship scoring + personality drift."""
+    """Async post-turn: personality drift (relationship moved inline via
+    ``_apply_relationship_turn`` so the turn's deltas can be streamed)."""
     try:
-        # Relationship scoring
-        rel_engine = await get_relationship_engine()
         memory_svc = await get_memory_service()
         memories = await memory_svc.retrieve_memories(end_user_id, character_id, limit=5)
         recent_types = [m["type"] for m in memories[:3]]
-
-        await rel_engine.award_points(
-            end_user_id=end_user_id,
-            character_id=character_id,
-            memory_types=recent_types,
-            touch_bonus=touch_bonus,
-        )
 
         # Personality drift
         cache = get_cache()

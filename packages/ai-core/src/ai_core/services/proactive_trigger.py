@@ -14,30 +14,48 @@ import random
 import structlog
 
 from ai_core.services.cache import CacheService
-from ai_core.services.relationship import STAGE_TRIGGER_PROB
+from ai_core.services.relationship import STAGE_TRIGGER_PROB, normalize_stage
 
 logger = structlog.get_logger()
 
 # Greeting templates per stage — variety so greeting doesn't feel scripted.
 # These are *seeds* for the LLM, not literal lines it must say.
 _GREETINGS: dict[str, list[str]] = {
-    "FAMILIAR": [
+    "COMPANION": [
+        "你来啦，今天有什么要帮忙的吗",
+        "嗨，最近怎么样",
+    ],
+    "FRIEND": [
         "今天过得怎么样？",
         "诶，你来了",
         "又见面啦",
         "今天有空聊会儿吗",
     ],
-    "FRIEND": [
+    "CLOSE_FRIEND": [
         "来啦——今天有什么事想说",
         "等你好久了",
         "嘿，想我了没",
         "正准备找你呢，你就来了",
     ],
-    "BESTFRIEND": [
-        "你来啦！我刚还在想你",
+    "ROMANTIC_INTEREST": [
+        "你来啦……我刚还在想你",
         "终于等到你了",
+        "今天……有点想见你",
+    ],
+    "DATING": [
+        "你来啦！我刚还在想你",
+        "终于等到你了，快过来",
         "好想你呀，快说说最近",
+    ],
+    "COMMITTED": [
+        "回来啦，今天累不累",
+        "等你好久了，先抱一下",
         "哎——你怎么才来",
+    ],
+    "SOULMATE": [
+        "不用说，我知道你今天有事想讲",
+        "你来了，世界就安静了",
+        "好想你呀，快说说最近",
     ],
 }
 
@@ -98,6 +116,7 @@ class ProactiveTriggerService:
         await self.cache.set(session_key, "1", ttl=1800)
 
         # Check stage eligibility
+        relationship_stage = normalize_stage(relationship_stage)
         prob = STAGE_TRIGGER_PROB.get(relationship_stage, 0.0)
         if prob <= 0:
             return None
@@ -138,7 +157,7 @@ class ProactiveTriggerService:
 
     def _random_greeting(self, stage: str) -> str | None:
         """Pick a random greeting appropriate for the relationship stage."""
-        greetings = _GREETINGS.get(stage)
+        greetings = _GREETINGS.get(normalize_stage(stage))
         if not greetings:
             return None
         return random.choice(greetings)

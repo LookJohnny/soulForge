@@ -100,3 +100,46 @@ async def test_get_character_uses_brand_scoped_cache_before_db():
     cache.get_json.assert_awaited_once_with("char:brand-2:char-1")
     conn.fetchrow.assert_not_awaited()
     cache.set_json.assert_not_awaited()
+
+
+def test_templates_render_relationship_state_block():
+    from pathlib import Path
+
+    from jinja2 import Environment, FileSystemLoader
+
+    from ai_core.services.relationship import default_state, describe_for_prompt
+
+    tdir = Path(__file__).resolve().parents[1] / "src" / "ai_core" / "templates"
+    env = Environment(loader=FileSystemLoader(str(tdir)), autoescape=False)
+    state = {**default_state(), "affection": 312, "trust": 54, "stage": "FRIEND"}
+    block = describe_for_prompt(state)
+    for name in ("system_prompt.jinja2", "idol_prompt.jinja2", "vocalized_prompt.jinja2"):
+        out = env.get_template(name).render(
+            name="小星",
+            archetype="ANIMAL",
+            personality_description="温柔",
+            user_ref="你",
+            user_title="朋友",
+            relationship_state_block=block,
+            response_length_instruction="",
+            catchphrases=[],
+            interests=[],
+            forbidden=[],
+            structured_output=True,
+        )
+        assert "312/1000" in out, name
+        assert "关系阶段：朋友" in out, name
+    # structured-output contract advertises the optional relationship suggestion
+    out = env.get_template("system_prompt.jinja2").render(
+        name="小星",
+        archetype="ANIMAL",
+        personality_description="温柔",
+        user_ref="你",
+        user_title="朋友",
+        response_length_instruction="",
+        catchphrases=[],
+        interests=[],
+        forbidden=[],
+        structured_output=True,
+    )
+    assert '"state_changes"' in out and "mood_cause" in out

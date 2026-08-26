@@ -91,9 +91,14 @@ enum MemoryUseMode {
 enum RelationshipStage {
   STRANGER
   ACQUAINTANCE
-  FAMILIAR
+  FAMILIAR // legacy → FRIEND
   FRIEND
-  BESTFRIEND
+  BESTFRIEND // legacy → CLOSE_FRIEND
+  CLOSE_FRIEND
+  ROMANTIC_INTEREST
+  DATING
+  COMMITTED
+  SOULMATE
 }
 
 enum LanguageMode {
@@ -458,6 +463,19 @@ model RelationshipState {
   streakDays          Int               @default(0) @map("streak_days")
   lastInteractionDate DateTime?         @map("last_interaction_date") @db.Date
   turnCountToday      Int               @default(0) @map("turn_count_today")
+  // Five-axis model (005): affinity doubles as the affection axis (0-1000)
+  trust               Int               @default(0) @db.SmallInt
+  intimacy            Int               @default(0) @db.SmallInt
+  comfort             Int               @default(0) @db.SmallInt
+  respect             Int               @default(0) @db.SmallInt
+  energy              Int               @default(100) @db.SmallInt
+  appMode             String            @default("dating_sim") @map("app_mode")
+  savedStage          String?           @map("saved_stage")
+  totalInteractions   Int               @default(0) @map("total_interactions")
+  firstInteractionAt  DateTime?         @map("first_interaction_at")
+  lastInteractionAt   DateTime?         @map("last_interaction_at")
+  decayClocks         Json              @default("{}") @map("decay_clocks")
+  completedEvents     Json              @default("[]") @map("completed_events")
   createdAt           DateTime          @default(now()) @map("created_at")
   updatedAt           DateTime          @updatedAt @map("updated_at")
 

@@ -147,3 +147,36 @@ class TestFallbackChains:
     def test_raw_is_preserved(self):
         raw = '{"dialogue": "hi"}'
         assert parse_llm_response(raw).raw == raw
+
+
+class TestStateChanges:
+    def test_nested_state_changes(self):
+        raw = json.dumps(
+            {
+                "dialogue": "嗯",
+                "pad": {"p": 0.1, "a": 0, "d": 0},
+                "state_changes": {
+                    "affection": 2.6,
+                    "trust": "1",
+                    "respect": None,
+                    "mood_cause": "你记得我的生日",
+                },
+            }
+        )
+        r = parse_llm_response(raw)
+        assert r.parsed_ok
+        assert r.state_changes == {"affection": 3, "trust": 1, "mood_cause": "你记得我的生日"}
+
+    def test_flat_delta_keys(self):
+        r = parse_llm_response('{"dialogue":"好","affection_delta":-2,"intimacy_delta":1}')
+        assert r.state_changes == {"affection": -2, "intimacy": 1}
+
+    def test_absent_is_none(self):
+        assert parse_llm_response('{"dialogue":"好"}').state_changes is None
+        assert parse_llm_response("纯文本回复").state_changes is None
+
+    def test_garbage_values_dropped(self):
+        r = parse_llm_response(
+            '{"dialogue":"好","state_changes":{"affection":"many","mood_cause":42}}'
+        )
+        assert r.state_changes is None

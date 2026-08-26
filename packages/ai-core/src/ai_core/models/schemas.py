@@ -113,13 +113,40 @@ class PADStateSchema(BaseModel):
     d: float = 0.0  # Dominance: -1 (submissive) → +1 (dominant)
 
 
+class RelationshipAxesSchema(BaseModel):
+    affection: int = 0  # 0-1000
+    trust: int = 0
+    intimacy: int = 0
+    comfort: int = 0
+    respect: int = 0
+    energy: int = 100
+
+
+class RelationshipStateSchema(BaseModel):
+    """Wire shape shared by SSE `relationship`, ChatResponse and GET /relationship."""
+
+    type: str = "relationship"
+    stage: str = "STRANGER"
+    app_mode: str = "dating_sim"
+    axes: RelationshipAxesSchema = Field(default_factory=RelationshipAxesSchema)
+    deltas: dict[str, int] = Field(default_factory=dict)
+    stage_changed: bool = False
+    from_stage: str | None = None
+    near_stage: dict | None = None
+    days_known: int = 0
+    total_interactions: int = 0
+    streak_days: int = 0
+    behavior: dict | None = None
+
+
 class ChatResponse(BaseModel):
     text: str
     audio_data: str | None = None  # base64 audio
     emotion: str | None = None  # character's detected emotion state
     pad: PADStateSchema | None = None  # continuous PAD emotional state
-    relationship_stage: str | None = None  # STRANGER → BESTFRIEND
-    affinity: int | None = None  # 0-1000
+    relationship_stage: str | None = None  # STRANGER → SOULMATE (or COMPANION)
+    affinity: int | None = None  # 0-1000 (= affection axis)
+    relationship: RelationshipStateSchema | None = None
     latency_ms: int
     stages: dict[str, int] | None = None  # per-stage latency breakdown (ms)
 

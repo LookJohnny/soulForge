@@ -67,3 +67,44 @@ async def test_server_send_emotion_swallows_ws_errors():
     chunk = PipelineOrchestrator._parse_stream_event({"type": "emotion", "emotion": "happy"})
     await server._send_emotion(ws, adapter, chunk)  # must not raise
     assert MessageType.CONTROL is not None
+
+
+def test_parse_relationship_event():
+    payload = {
+        "type": "relationship",
+        "stage": "FRIEND",
+        "app_mode": "dating_sim",
+        "axes": {
+            "affection": 312,
+            "trust": 54,
+            "intimacy": 12,
+            "comfort": 40,
+            "respect": 30,
+            "energy": 88,
+        },
+        "deltas": {"affection": 4},
+        "stage_changed": False,
+        "from_stage": None,
+    }
+    chunk = PipelineOrchestrator._parse_stream_event(payload)
+    assert chunk is not None
+    assert chunk.kind == "relationship"
+    assert chunk.is_done is False
+    assert chunk.relationship == payload
+
+
+async def test_relationship_chunk_forwarded_as_control():
+    from gateway.server import WebSocketServer
+
+    server = WebSocketServer.__new__(WebSocketServer)
+    ws = AsyncMock()
+    adapter = GenericWSAdapter()
+    chunk = PipelineOrchestrator._parse_stream_event(
+        {"type": "relationship", "stage": "DATING", "axes": {"affection": 640}}
+    )
+    await server._send_relationship(ws, adapter, chunk)
+    ws.send_text.assert_awaited_once()
+    sent = json.loads(ws.send_text.await_args.args[0])
+    assert sent["type"] == MessageType.CONTROL.value
+    assert sent["payload"]["type"] == "relationship"
+    assert sent["payload"]["stage"] == "DATING"

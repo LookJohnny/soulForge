@@ -123,6 +123,7 @@ class PromptBuilder:
         user_mood: str | None = None,
         memories: list[dict] | None = None,
         relationship_stage: str | None = None,
+        relationship_state: dict | None = None,
         proactive_trigger: str | None = None,
         time_context: str | None = None,
         scene: str | None = None,
@@ -137,7 +138,8 @@ class PromptBuilder:
             emotion_state: Character's current emotion for prompt injection.
             user_mood: Detected user mood for empathetic response.
             memories: Past-conversation memories for recall.
-            relationship_stage: Dynamic stage (STRANGER→BESTFRIEND) for tone control.
+            relationship_stage: Dynamic stage (STRANGER→SOULMATE / COMPANION) for tone control.
+            relationship_state: Full five-axis state dict → rendered `<current_state>` block.
             proactive_trigger: Optional opening line for the character to say.
             time_context: Time-of-day + absence duration context.
             structured_output: If True, prompt asks for JSON output. If False,
@@ -244,7 +246,16 @@ class PromptBuilder:
 
         # Relationship stage description (use romance stages for idol archetype)
         relationship_description = ""
+        relationship_state_block = ""
+        if relationship_state:
+            from ai_core.services.relationship import describe_for_prompt, normalize_stage
+
+            relationship_state_block = describe_for_prompt(relationship_state)
+            relationship_stage = relationship_stage or relationship_state.get("stage")
         if relationship_stage:
+            from ai_core.services.relationship import normalize_stage
+
+            relationship_stage = normalize_stage(relationship_stage)
             archetype = base.get("archetype", "ANIMAL")
             if archetype == "HUMAN" and base.get("relationship", "") in (
                 "暗恋对象",
@@ -324,6 +335,7 @@ class PromptBuilder:
             suffix=base.get("suffix", ""),
             relationship=base.get("relationship", pctx.rel_default),
             relationship_description=relationship_description,
+            relationship_state_block=relationship_state_block,
             user_title=safe_user_title,
             user_ref=pctx.user_ref,
             section_title=pctx.section_title,
