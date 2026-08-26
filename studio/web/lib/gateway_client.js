@@ -201,6 +201,8 @@ export class GatewayClient extends EventTarget {
   async startMic() {
     if (this.mic) return;
     const webcodecs = 'AudioEncoder' in window && 'MediaStreamTrackProcessor' in window;
+    // Tauri 桌面壳：WKWebView 不给 getUserMedia，改由宿主用 cpal 采集（原生 TCC 弹窗）
+    if (window.__TAURI__?.core?.invoke && !webcodecs) { await this._startMicNative(); return; }
     let stream;
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('no mediaDevices'), { name: 'NotSupportedError' });
@@ -267,7 +269,27 @@ export class GatewayClient extends EventTarget {
     })();
   }
 
-  /** 无 WebCodecs（Tauri/WKWebView、Safari）：ScriptProcessor 采集 → 16 kHz PCM16 → gateway。 */
+  /** Tauri 宿主原生麦克风：Rust cpal → base64 `mic-pcm` 事件 → gateway pcm16。 */
+  async _startMicNative() {
+    const { invoke } = window.__TAURI__.core;
+    const { listen } = window.__TAURI__.event;
+    const unlisten = await listen('mic-pcm', (ev) => {
+      if (!this.mic || this.ws?.readyState !== 1) return;
+      const bin = atob(ev.payload);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      this.ws.send(bytes.buffer);
+    });
+    const unlistenErr = await listen('mic-error', (ev) => this._emit('error', new Error('原生麦克风: ' + ev.payload)));
+    let info;
+    try { info = await invoke('start_native_mic'); }
+    catch (e) { unlisten(); unlistenErr(); throw new Error(String(e)); }
+    this.mic = { native: true, unlisten, unlistenErr, info };
+    this.ws?.send(JSON.stringify({ type: 'listen', state: 'start', format: 'pcm16' }));
+    this._emit('mic', { on: true, format: 'pcm16', native: info });
+  }
+
+  /** 无 WebCodecs（Safari）：ScriptProcessor 采集 → 16 kHz PCM16 → gateway。 */
   async _startMicPcm(stream, track) {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     await ctx.resume().catch(() => {});
@@ -300,6 +322,13 @@ export class GatewayClient extends EventTarget {
     const m = this.mic;
     if (!m) return;
     this.mic = null;
+    if (m.native) {
+      window.__TAURI__.core.invoke('stop_native_mic').catch(() => {});
+      m.unlisten(); m.unlistenErr();
+      this.ws?.send(JSON.stringify({ type: 'listen', state: 'stop' }));
+      this._emit('mic', { on: false });
+      return;
+    }
     if (m.pcm) {
       try { m.proc.disconnect(); m.src.disconnect(); m.ctx.close(); } catch { /* noop */ }
       m.track.stop();

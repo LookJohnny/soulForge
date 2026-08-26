@@ -2,8 +2,16 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "SoulForge Live pages (served by studio/server.py) may drive the windows.",
-  "remote": { "urls": ["http://127.0.0.1:8899/*", "http://localhost:8899/*"] },
-  "windows": ["main", "overlay"],
+  "remote": {
+    "urls": [
+      "http://127.0.0.1:8899/*",
+      "http://localhost:8899/*"
+    ]
+  },
+  "windows": [
+    "main",
+    "overlay"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
@@ -11,6 +19,8 @@
     "core:window:allow-hide",
     "core:window:allow-set-focus",
     "global-shortcut:allow-register",
-    "global-shortcut:allow-unregister"
+    "global-shortcut:allow-unregister",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
   ]
 }

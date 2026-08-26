@@ -11,6 +11,8 @@
 //! 3. the page paints nothing behind the canvas (live.js `host.transparent`)
 //! 4. no post-processing composer in transparent mode (it swallows alpha)
 
+mod native_mic;
+
 use tauri::Manager;
 
 #[tauri::command]
@@ -56,11 +58,14 @@ fn start_drag(window: tauri::WebviewWindow) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .manage(native_mic::MicState::default())
         .invoke_handler(tauri::generate_handler![
             show_overlay,
             hide_overlay,
             toggle_overlay,
-            start_drag
+            start_drag,
+            native_mic::start_native_mic,
+            native_mic::stop_native_mic
         ])
         .setup(|app| {
             // Ctrl/Cmd+Shift+U toggles the floating companion from anywhere.

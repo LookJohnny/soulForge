@@ -313,7 +313,7 @@ async function connect() {
   });
   gw.addEventListener('control:relationship', (e) => { renderRelationship(e.detail); $('opt-companion').checked = e.detail.app_mode === 'companion'; });
   gw.addEventListener('control:event', (e) => showEvent(e.detail));
-  gw.addEventListener('mic', (e) => $('mic').classList.toggle('on', e.detail.on));
+  gw.addEventListener('mic', (e) => { $('mic').classList.toggle('on', e.detail.on); if (e.detail.on) toast(`🎙 ${e.detail.native ?? e.detail.format ?? ''} 常听中（停顿约 1 秒断句）`); });
   try { await gw.ensureAudio(); await gw.connect(); }
   catch (e) { log('连接失败: ' + (e.message ?? e), 'sys'); $('status').textContent = '连接失败'; }
 }

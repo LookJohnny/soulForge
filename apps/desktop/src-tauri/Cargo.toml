@@ -16,6 +16,8 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-global-shortcut = "2"
 serde = { version = "1", features = ["derive"] }
+cpal = "0.15"
+base64 = "0.22"
 serde_json = "1"
 
 [profile.release]
