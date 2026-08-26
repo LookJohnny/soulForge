@@ -4,7 +4,7 @@
 
 SoulForge 是一个通用 AI 人格引擎平台。为毛绒玩具、耳机、手机 App、桌面应用、智能音箱等任何设备注入有灵魂的 AI 角色——不只是问答，而是有情感、有记忆、有关系进化的真实陪伴。
 
-**支持的设备类型**: 小智 ESP32-S3 / 毛绒玩具 / 蓝牙耳机 / 手机 App / 桌面客户端 / 智能音箱 / 网页
+**支持的设备类型**: 小智 ESP32-S3 / 毛绒玩具 / 蓝牙耳机 / 手机 App / 桌面客户端 (Tauri) / 智能音箱 / 网页 / **VRM 虚拟形象 (浏览器 + 桌面悬浮伴侣)**
 **支持的角色类型**: 动物角色 / 人类角色(学长/朋友) / 幻想角色(精灵/机器人) / 抽象助手
 
 ## 架构
@@ -126,6 +126,25 @@ LLM 直接输出 PAD 值，驱动一切下游系统：
 | p=0.8, a=0.5 | 语音轻快 + LED 暖黄 + 弹跳动作 |
 | p=-0.4, a=-0.3 | 语速放慢 + LED 冷蓝 + 无动作 |
 | d=-0.5 | 语音变轻 + LED 粉色 + 歪头动作 |
+
+### VRM 虚拟身体 (`/live`) — 2026-08 新增
+
+VRM 形象是 gateway 的一个**身体**，和小智 ESP32 平级：语音 / 记忆 / 关系 / 事件全部走同一条管道，页面只负责渲染。
+
+- **一个共享身体库** `studio/web/lib/vrm_body.js`：idle 动捕轮换（不连续重复、忙时推迟、crossfade）、说话动捕、注视"眼先头后"、呼吸/眨眼/fidget、PAD 情绪→表情+头姿阻尼、五视素口型、坐/跪/忙手等姿态叠加、缺表情通道自动退化
+- **Protocol 0.2 `backend:"web"`**：`lib/body_client.js` 连 Runtime Server `/body`，规划器 ActionCommand 经 `engine/embodiment/web_adapter.py` ↔ `lib/action_map.js` 同一张步表变成 clip/gaze/pose 原语（JS/Python 表由测试钉死）
+- **完整陪伴 UI**：头部跟随气泡、五轴关系 HUD、情绪与原因、视觉小说事件卡（选项经 gateway 回传并念出台词）、记忆图（力导向）、陪伴/恋爱模式切换、存档导出导入
+- **桌面壳** `apps/desktop/`（Tauri 2）：主窗 + ⌘⇧U 透明置顶可拖拽的悬浮伴侣；WKWebView 无 WebCodecs → Rust `cpal` 原生麦克风
+- 冒烟：`pnpm test:studio`（假 gateway + 假 ai-core + 假 Runtime，Playwright 无头 Chromium）
+
+### 五轴关系 + 事件 + 语义记忆 — 从 aikeya 移植的设计
+
+设计取自开源项目 [aikeya](https://github.com/aikeyaorg/aikeya)（MIT），在 Python 大脑里重写并修掉了它未实现/有错的部分：
+
+- **关系**：affection(0–1000) + trust/intimacy/comfort/respect/energy，8 阶段合取门控（含必需事件）；"应用是 GM"——启发式基线 + LLM 建议夹钳；按轴墙钟衰减；`companion` / `dating_sim` 双模式；SSE `relationship` 事件、`GET/PATCH /relationship/{u}/{c}`
+- **情绪因果**：PAD "为什么这样"5 条环 + 离线墙钟衰减；久别小时级提示
+- **事件**：28 个里程碑/随机/恋爱/时段事件、21 种条件；每轮最多 1 个，随机每日 1 个；**事件结果进入下一轮 prompt**；`POST .../events/{id}/choice`
+- **语义记忆**：本地 `BAAI/bge-small-zh-v1.5` + pgvector 接入五层记忆检索（保留记忆策略审计），`GET /memory/graph`，全量存档 `export/import`
 
 ### 声优级 TTS (Fish Audio S1)
 
@@ -324,7 +343,8 @@ soulForge/
 │   │       ├── api/chat/       # 公开聊天 API (角色列表 + 流式对话)
 │   │       ├── api/memories/   # 后台记忆查询/停用 API
 │   │       └── dashboard/      # 设计师管理面板 (含 /dashboard/memories)
-│   └── mini-program/           # 微信小程序 (WIP)
+│   ├── mini-program/           # 微信小程序 (WIP)
+│   └── desktop/                # Tauri 2 桌面壳 (主窗 + 透明悬浮伴侣, cpal 原生麦克风)
 ├── packages/
 │   ├── ai-core/                # Python FastAPI 灵魂引擎
 │   │   └── src/ai_core/
@@ -344,7 +364,10 @@ soulForge/
 │   │       │   │   ├── fish_audio_tts.py # Fish Audio S1 (克隆 refId + audio_clips)
 │   │       │   │   ├── dashscope_tts.py  # CosyVoice (备选)
 │   │       │   │   └── edge_tts_provider.py # Edge TTS (免费降级)
-│   │       │   ├── memory.py             # 五层陪伴记忆服务
+│   │       │   ├── relationship.py       # 五轴关系 / 8 阶段 / 衰减 / LLM 夹钳
+│   │       │   ├── events/               # 视觉小说事件 (definitions/conditions/engine)
+│   │       │   ├── embeddings.py         # 本地句向量 (bge-small-zh, pgvector)
+│   │       │   ├── memory.py             # 五层陪伴记忆服务 (向量检索 + 记忆图 + 存档)
 │   │       │   ├── memory_policy.py      # 敏感度/读写策略
 │   │       │   ├── companion_reaction.py # 事件 → react/ignore 决策
 │   │       │   ├── action_plan.py        # ActionPlan DSL 预览 + Safety Gate
@@ -375,9 +398,11 @@ soulForge/
 │   ├── planner/                # 三层规划 (day/hour/minute) + 四级重规划 + 记忆适配
 │   ├── server/                 # Protocol 0.2 运行时服务器 (/body /control)
 │   ├── perception/             # 多模态感知 (vision/audio/fusion, 确定性安全钳制)
-│   ├── embodiment/             # IR → 身体适配器 (机器人: watchdog/故障锁存/安全姿态)
+│   ├── embodiment/             # IR → 身体适配器 (robot_adapter 真机 / web_adapter 浏览器 VRM)
 │   └── legacy/                 # Gen1 行为/伺服栈 (已退役, 仅供 embodiment 调用)
-├── studio/                     # 人格×音色×VRM 可视化对话台 (aiohttp + three-vrm)
+├── studio/                     # /live 陪伴应用 + 工作台 (aiohttp + three-vrm)
+│   ├── web/lib/                # vrm_body / lipsync / pad_expression / body_client / action_map / memory_graph
+│   └── tests/                  # fake_gateway.py (假 gateway+ai-core+Runtime) + Playwright 冒烟
 ├── configs/
 │   └── characters.json         # 角色单一来源 (人格/音色/模型/原型)
 ├── docs/
@@ -388,6 +413,7 @@ soulForge/
 ├── hardware/                   # 硬件接入测试
 ├── scripts/
 │   ├── dev.sh                  # 一键启动开发环境
+│   ├── live-up.sh              # ai-core + gateway + Runtime Server + studio (VRM 全链路)
 │   └── mobile.sh               # 手机测试模式 (ngrok/cloudflared)
 └── .env.example                # 环境变量模板
 ```
@@ -428,6 +454,17 @@ pnpm install                   # Node.js
 
 自动完成：Docker 服务 → 数据库迁移 → Prisma 生成 → AI Core (8100) + Gateway (8080) + Next.js (3000)。
 
+### 3b. VRM 虚拟形象 / 桌面伴侣
+
+```bash
+./scripts/live-up.sh                    # ai-core 8100 + gateway (GATEWAY_PORT, 默认 8080) + Runtime 8765 + studio 8899
+open http://127.0.0.1:8899/live         # 浏览器：语音/记忆/关系/事件 + 引擎动作驱动
+# 桌面壳（需 cargo install tauri-cli --version '^2'）：
+cd apps/desktop/src-tauri && cargo tauri build --debug --bundles app && open "target/debug/bundle/macos/SoulForge Live.app"
+```
+
+语义记忆需要 `pgvector/pgvector:pg16` 镜像（compose 已切换）+ 迁移 005–007 + `uv sync --all-packages --extra semantic`（首次下载约 95 MB 模型，国内可设 `HF_ENDPOINT=https://hf-mirror.com`）；缺任一项自动退回词法检索。页面默认连接的 gateway/runtime 地址由 `.env` 的 `GATEWAY_WS_URL` / `RUNTIME_WS_URL` 决定。
+
 ### 4. 手机测试
 
 ```bash
@@ -444,7 +481,7 @@ make test-py                            # 全部 Python 测试 (~800 项, 三套
 pnpm --dir apps/admin-web build         # 管理后台构建
 ```
 
-> 测试命令**都从仓库根目录跑**。`make test-py` 依次执行三套：ai-core (562)、gateway (40)、Character Runtime (197)。ai-core 和 gateway 的 `tests/` 目录同名，**不能合并进一条 pytest 命令**（模块名冲突）；根目录的 `tests/test_gateway_*` 同理不能与 `packages/gateway/tests` 同跑。
+> 测试命令**都从仓库根目录跑**。`make test-py` 依次执行三套：ai-core (655)、gateway (65)、Character Runtime (204)；前端 `pnpm test:studio` / `pnpm test:studio:workbench`。ai-core 和 gateway 的 `tests/` 目录同名，**不能合并进一条 pytest 命令**（模块名冲突）；根目录的 `tests/test_gateway_*` 同理不能与 `packages/gateway/tests` 同跑。
 
 单套/单文件验证示例：
 
@@ -466,7 +503,10 @@ uv tool run ruff check packages/ai-core/src packages/gateway/src engine tests st
 | `sentence` | 每句完成 | `{text, audio_data (base64\|null), index}` |
 | `audio_chunk` | 流式 TTS 边合成边推 | `{index, audio_data (base64)}` — 仅当请求带 `audio_streaming:true` |
 | `audio_end` | 某句音频结束 | `{index}` — 流式 TTS 的收尾标记 |
-| `done` | 全部完成 | `{full_text, emotion, pad, relationship_stage, latency_ms, stages}` |
+| `emotion` | 情绪更新 | `{emotion, pad, hardware, causes[], energy}` |
+| `relationship` | 关系轴变化 | `{stage, app_mode, axes{}, deltas{}, stage_changed, near_stage}` |
+| `event` | 视觉小说事件触发 | `{event_id, name, scene{intro,dialogue,choices[]}, state_changes}` |
+| `done` | 全部完成 | `{full_text, emotion, pad, relationship_stage, relationship, latency_ms, stages}` |
 
 请求带 `audio_streaming:true`（且 `TTS_STREAMING` 开启、provider 支持）时，音频以 `audio_chunk` 逐块下发，`sentence` 只携带文本（`audio_data:null`）；否则走 legacy 整段路径——`sentence` 直接带完整 `audio_data`。
 
@@ -523,10 +563,12 @@ data: {"type":"done","full_text":"嘿嘿，太棒啦！","emotion":"curious","la
 **后端**: Python 3.12+ / FastAPI / asyncpg / Redis / Milvus
 **前端**: Next.js 16 / NextAuth v5 / Prisma / React 19
 **AI**: DeepSeek (LLM) / DashScope (ASR) / Fish Audio (TTS) / Silero (VAD)
-**引擎**: Character Runtime (零三方依赖可嵌入) / Protocol 0.2 (JSON over WS) / three-vrm (Studio)
+**引擎**: Character Runtime (零三方依赖可嵌入) / Protocol 0.2 (JSON over WS, robot + web 身体) / three-vrm + VRMA (Studio & /live)
+**桌面**: Tauri 2 / cpal / WKWebView (透明悬浮窗)
+**记忆**: pgvector / sentence-transformers (bge-small-zh-v1.5)
 **硬件**: 小智 ESP32-S3 (Opus 16kHz / WebSocket) / opuslib / ffmpeg
 **基建**: PostgreSQL / Redis / Milvus / MinIO / Docker / ffmpeg
-**质量**: ~800 项测试 (make test-py) / ruff / GitHub Actions CI (lint + 三套测试 + Docker build)
+**质量**: ~920 项 Python 测试 (make test-py: ai-core 655 / gateway 65 / Runtime 204) + 2 套 Playwright 冒烟 / ruff / GitHub Actions CI (lint + 三套测试 + Docker build)
 
 ## License
 
