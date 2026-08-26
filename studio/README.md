@@ -58,6 +58,14 @@ uv run python studio/server.py --port 8899 && open http://127.0.0.1:8899/live
 - 冒烟测试：`pnpm test:studio`（自起 studio + `studio/tests/fake_gateway.py`，Playwright
   无头 Chromium 断言模型/idle/口型/气泡/HUD/事件卡，截图到 `outputs/live_smoke.png`）
 
+## 桌面悬浮窗预留（Tauri，未实现）
+
+`live.js` 读 `window.__SOULFORGE_HOST__ = { transparent: bool }`：为 true 时渲染器开
+alpha、清屏透明、去掉背景/地面/圆盘。后续接 Tauri 时照 aikeya 的四层清单做：
+窗口 `transparent + decorations:false + alwaysOnTop`，macOS 必须 `macOSPrivateApi: true`；
+`html/body` 背景透明；**透明模式不能挂后处理（composer 会吃掉 alpha）**；点击穿透需要
+把模型轮廓与 HTML UI 的 rect 做并集（aikeya 的 raycast 方案未解决，勿照搬）。
+
 ## 语音输入 + 打断（Chrome）
 
 点聊天框左侧 🎙 开启常听模式（Web Speech API，中文，需联网）。

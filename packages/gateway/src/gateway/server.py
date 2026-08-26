@@ -604,6 +604,16 @@ class WebSocketServer:
         if chunk.relationship:
             await self._send_control(ws, adapter, {**chunk.relationship, "type": "relationship"})
 
+    @staticmethod
+    def _remember_energy(session, payload: dict | None) -> None:
+        """Keep the relationship's energy axis on the session for the life loop."""
+        try:
+            energy = (payload or {}).get("axes", {}).get("energy")
+            if energy is not None:
+                session._energy = int(energy)
+        except (TypeError, ValueError, AttributeError):
+            pass
+
     async def _send_event(self, ws, adapter, chunk):
         if chunk.event:
             await self._send_control(ws, adapter, {**chunk.event, "type": "event"})
@@ -655,7 +665,9 @@ class WebSocketServer:
                 f"/relationship/{session.end_user_id}/{session.character_id}"
             )
             if resp.status_code == 200:
-                await self._send_control(ws, adapter, {**resp.json(), "type": "relationship"})
+                payload = resp.json()
+                self._remember_energy(session, payload)
+                await self._send_control(ws, adapter, {**payload, "type": "relationship"})
         except Exception:
             logger.debug("gateway.relationship_snapshot_unavailable", exc_info=True)
 
@@ -814,6 +826,7 @@ class WebSocketServer:
                     elif chunk.kind == "emotion":
                         await self._send_emotion(ws, adapter, chunk)
                     elif chunk.kind == "relationship":
+                        self._remember_energy(session, chunk.relationship)
                         await self._send_relationship(ws, adapter, chunk)
                     elif chunk.kind == "event":
                         await self._send_event(ws, adapter, chunk)
@@ -896,6 +909,7 @@ class WebSocketServer:
                         await self._send_emotion(ws, adapter, chunk)
                         continue
                     if chunk.kind == "relationship":
+                        self._remember_energy(session, chunk.relationship)
                         await self._send_relationship(ws, adapter, chunk)
                         continue
                     if chunk.kind == "event":
@@ -1022,6 +1036,7 @@ class WebSocketServer:
                         await self._send_emotion(ws, adapter, chunk)
                         continue
                     if chunk.kind == "relationship":
+                        self._remember_energy(session, chunk.relationship)
                         await self._send_relationship(ws, adapter, chunk)
                         continue
                     if chunk.kind == "event":

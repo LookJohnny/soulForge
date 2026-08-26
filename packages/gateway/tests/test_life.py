@@ -89,3 +89,16 @@ class TestVocab:
 
     def test_pick_ambient_unknown_state_uses_bored(self):
         assert vocab.pick_ambient("nonsense", random.Random(1)) in vocab.BORED
+
+
+class TestEnergyBias:
+    def test_low_energy_gets_sleepy_sooner(self):
+        # thresholds: sleepy 600 / asleep 1200 at noon
+        assert compute_state(400, 12, **CFG, energy=100) is LifeState.BORED
+        assert compute_state(400, 12, **CFG, energy=0) is LifeState.SLEEPY  # halved → 300
+        assert compute_state(700, 12, **CFG, energy=0) is LifeState.ASLEEP  # halved → 600
+        assert compute_state(500, 12, **CFG, energy=50) is LifeState.SLEEPY  # ×0.75 → 450
+
+    def test_energy_stacks_with_night(self):
+        assert compute_state(200, 23, **CFG, energy=0) is LifeState.SLEEPY  # 600/2×0.5 = 150
+        assert compute_state(200, 23, **CFG, energy=100) is LifeState.BORED  # 300 → not yet sleepy

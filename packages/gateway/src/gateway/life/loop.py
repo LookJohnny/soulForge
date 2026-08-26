@@ -62,15 +62,19 @@ def compute_state(
     asleep_after: float,
     night_start: int,
     night_end: int,
+    energy: int = 100,
 ) -> LifeState:
-    """Map idle duration + local hour to a life state.
+    """Map idle duration + local hour (+ relationship energy) to a life state.
 
     At night the sleepy/asleep thresholds halve — the character gets
-    drowsy sooner, like anything alive would.
+    drowsy sooner, like anything alive would. Low ``energy`` (the five-axis
+    relationship's 0–100 stamina, refilled by rest) has the same effect on a
+    sliding scale: 0 energy halves the thresholds, 100 leaves them alone.
     """
     night = is_night(hour, night_start, night_end)
-    sleepy_th = sleepy_after / 2 if night else sleepy_after
-    asleep_th = asleep_after / 2 if night else asleep_after
+    tired = 0.5 + 0.5 * max(0, min(100, energy)) / 100
+    sleepy_th = (sleepy_after / 2 if night else sleepy_after) * tired
+    asleep_th = (asleep_after / 2 if night else asleep_after) * tired
     if idle_s >= asleep_th:
         return LifeState.ASLEEP
     if idle_s >= sleepy_th:
@@ -152,6 +156,7 @@ class LifeLoop:
                     asleep_after=settings.life_asleep_after_s,
                     night_start=settings.life_night_start_hour,
                     night_end=settings.life_night_end_hour,
+                    energy=int(getattr(self.session, "_energy", 100) or 100),
                 )
                 if state is LifeState.AWAKE:
                     self._next_due = None
