@@ -159,6 +159,7 @@ function padUI() {
 
 // ── 气泡 ──────────────────────────────────────────────
 let bubbleUntil = 0;
+let typingTimer = 0;
 function showBubble(text) {
   $('bubble-text').textContent = text;
   $('bubble').classList.remove('hidden'); $('typing').classList.add('hidden');
@@ -272,14 +273,20 @@ $('runtime-agents').value = params.get('agents') ?? '';
 
 // ── Gateway ───────────────────────────────────────────
 let gw = null;
+let reconnectTimer = null;
 async function connect() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   gw?.close();
   const url = $('gw').value.trim() || params.get('gateway') || `ws://${location.hostname}:8080/ws`;
   gw = new GatewayClient({ url, sessionName: 'vrm-live' });
   gw.addEventListener('open', (e) => { $('status').textContent = `已连接 ${e.detail.device_id}`; $('hud-stage').textContent = '已连接'; log('gateway 已连接', 'sys'); body.setAudioAnalyser(gw.analyser); });
-  gw.addEventListener('close', () => { $('status').textContent = '连接断开'; $('hud-stage').textContent = '未连接'; $('mic').classList.remove('on'); body.setAudioAnalyser(null); });
-  gw.addEventListener('error', (e) => { const m = e.detail?.message ?? String(e.detail); log('⚠ ' + m, 'sys'); toast('⚠ ' + m); });
-  gw.addEventListener('sentence', (e) => { log(e.detail.text); showBubble(e.detail.text); });
+  gw.addEventListener('close', () => {
+    $('status').textContent = '连接断开，3 秒后重连…'; $('hud-stage').textContent = '未连接'; $('mic').classList.remove('on'); body.setAudioAnalyser(null);
+    $('typing').classList.add('hidden'); body.setSpeaking(false);
+    if (!reconnectTimer) reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(); }, 3000);
+  });
+  gw.addEventListener('error', (e) => { const m = e.detail?.message ?? String(e.detail); log('⚠ ' + m, 'sys'); toast('⚠ ' + m); $('typing').classList.add('hidden'); });
+  gw.addEventListener('sentence', (e) => { clearTimeout(typingTimer); log(e.detail.text); showBubble(e.detail.text); });
   gw.addEventListener('speaking', (e) => { body.setSpeaking(e.detail.speaking); if (!e.detail.speaking) { bubbleUntil = performance.now() + 2500; setTimeout(() => { refreshMemoryGraph(); refreshNearEvents(); }, 4000); } });
   gw.addEventListener('emotion', (e) => { body.setPad(e.detail.pad); renderMood(e.detail); padUI(); });
   gw.addEventListener('control:session', (e) => {
@@ -301,11 +308,13 @@ $('chatbar').onsubmit = (e) => {
   e.preventDefault();
   const t = $('text').value.trim();
   if (!t) return;
-  if (gw) { gw.sendText(t); }
+  if (gw?.ws?.readyState === 1) { gw.sendText(t); }
+  else if (gw) { toast('gateway 未连接，正在重连…'); connect(); return; }
   else if (bodyClient?.welcome) { bodyClient.sendUtterance(t); }
   else { toast('先连接 gateway 或 Runtime Server（⚙ 设置）'); return; }
   log(t, 'user'); $('text').value = '';
   $('typing').classList.remove('hidden'); $('bubble').classList.add('hidden');
+  clearTimeout(typingTimer); typingTimer = setTimeout(() => { if (!$('typing').classList.contains('hidden')) { $('typing').classList.add('hidden'); toast('等了 40 秒没有回复——看看 gateway/ai-core 日志'); } }, 40000);
 };
 $('stop').onclick = () => gw?.abort();
 $('mic').onclick = async () => {

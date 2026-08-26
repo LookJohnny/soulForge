@@ -628,8 +628,17 @@ async def live(_request: web.Request) -> web.FileResponse:
     return web.FileResponse(STUDIO_WEB / "live.html")
 
 
+@web.middleware
+async def no_cache(request: web.Request, handler):
+    """Page/lib assets change constantly; WKWebView (Tauri) caches them hard."""
+    resp = await handler(request)
+    if request.path.startswith(("/studio/", "/live", "/api/")) or request.path == "/":
+        resp.headers["Cache-Control"] = "no-store, must-revalidate"
+    return resp
+
+
 def build_app() -> web.Application:
-    app = web.Application(client_max_size=2 * 1024 * 1024)
+    app = web.Application(client_max_size=2 * 1024 * 1024, middlewares=[no_cache])
     app.router.add_get("/", index)
     app.router.add_get("/live", live)
     app.router.add_route("*", "/api/core/{path:.*}", api_core_proxy)
