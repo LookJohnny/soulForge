@@ -120,7 +120,7 @@ async function loadAssets() {
     // 优先带完整表情的模型：aikeya utsuwa(VRM1) → VRoid 样例 → 其它
     const pref = params.get('model');
     const first = (pref && vrms.find((m) => m.url.includes(pref)))
-      ?? vrms.find((m) => /utsuwa/i.test(m.url)) ?? vrms.find((m) => /AvatarSample_B/i.test(m.url)) ?? vrms[0];
+      ?? vrms.find((m) => /AvatarSample_B/i.test(m.url)) ?? vrms.find((m) => /utsuwa/i.test(m.url)) ?? vrms[0];
     if (first) { sel.value = first.url; await pick(first.url); }
   } catch (e) { log('模型列表获取失败: ' + e.message, 'sys'); }
   sel.onchange = () => pick(sel.value);
@@ -274,18 +274,27 @@ $('runtime-agents').value = params.get('agents') ?? '';
 // ── Gateway ───────────────────────────────────────────
 let gw = null;
 let reconnectTimer = null;
+let reconnectTries = 0;
+let lastErrorToast = 0;
 async function connect() {
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   gw?.close();
   const url = $('gw').value.trim() || params.get('gateway') || `ws://${location.hostname}:8080/ws`;
   gw = new GatewayClient({ url, sessionName: 'vrm-live' });
-  gw.addEventListener('open', (e) => { $('status').textContent = `已连接 ${e.detail.device_id}`; $('hud-stage').textContent = '已连接'; log('gateway 已连接', 'sys'); body.setAudioAnalyser(gw.analyser); });
+  gw.addEventListener('open', (e) => { reconnectTries = 0; $('status').textContent = `已连接 ${e.detail.device_id}`; $('hud-stage').textContent = '已连接'; log('gateway 已连接', 'sys'); body.setAudioAnalyser(gw.analyser); });
   gw.addEventListener('close', () => {
     $('status').textContent = '连接断开，3 秒后重连…'; $('hud-stage').textContent = '未连接'; $('mic').classList.remove('on'); body.setAudioAnalyser(null);
     $('typing').classList.add('hidden'); body.setSpeaking(false);
+    if (++reconnectTries > 5) { $('status').textContent = '连接断开（已停止重连，点"重新连接"）'; return; }
     if (!reconnectTimer) reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(); }, 3000);
   });
-  gw.addEventListener('error', (e) => { const m = e.detail?.message ?? String(e.detail); log('⚠ ' + m, 'sys'); toast('⚠ ' + m); $('typing').classList.add('hidden'); });
+  gw.addEventListener('error', (e) => {
+    const d = e.detail;
+    const m = d?.message ?? (d instanceof Event ? `连接 ${url} 失败` : String(d));
+    log('⚠ ' + m, 'sys');
+    if (Date.now() - lastErrorToast > 4000) { lastErrorToast = Date.now(); toast('⚠ ' + m); }
+    $('typing').classList.add('hidden');
+  });
   gw.addEventListener('sentence', (e) => { clearTimeout(typingTimer); log(e.detail.text); showBubble(e.detail.text); });
   gw.addEventListener('speaking', (e) => { body.setSpeaking(e.detail.speaking); if (!e.detail.speaking) { bubbleUntil = performance.now() + 2500; setTimeout(() => { refreshMemoryGraph(); refreshNearEvents(); }, 4000); } });
   gw.addEventListener('emotion', (e) => { body.setPad(e.detail.pad); renderMood(e.detail); padUI(); });

@@ -14,7 +14,7 @@
       {
         "label": "main",
         "title": "SoulForge Live",
-        "url": "/live",
+        "url": "/live?model=AvatarSample_B",
         "width": 1280,
         "height": 820,
         "minWidth": 900,
@@ -24,7 +24,7 @@
       {
         "label": "overlay",
         "title": "SoulForge Companion",
-        "url": "/live?transparent=1&hud=0",
+        "url": "/live?transparent=1&hud=0&model=AvatarSample_B",
         "width": 420,
         "height": 640,
         "transparent": true,
@@ -36,12 +36,19 @@
         "shadow": false
       }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": false,
     "targets": "all",
-    "icon": ["icons/icon.png"],
-    "macOS": { "minimumSystemVersion": "12.0", "signingIdentity": "-" }
+    "icon": [
+      "icons/icon.png"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "signingIdentity": "-"
+    }
   }
 }

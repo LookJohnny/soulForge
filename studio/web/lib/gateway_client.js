@@ -220,7 +220,7 @@ export class GatewayClient extends EventTarget {
         NotFoundError: '没有找到麦克风：系统设置→声音→输入 里确认有设备，Chrome 设置→隐私→麦克风 选中它',
         NotSupportedError: '当前页面不支持麦克风（需要 https 或 localhost/127.0.0.1）',
         NotReadableError: '麦克风被其他应用占用',
-        OverconstrainedError: '麦克风不满足采样要求',
+        OverconstrainedError: '麦克风约束不满足（已尝试最宽松参数仍失败）——桌面壳需要 Info.plist 的麦克风权限描述，浏览器请检查站点权限',
       };
       throw new Error(messages[err?.name] || `无法访问麦克风: ${err?.message ?? err}`);
     }

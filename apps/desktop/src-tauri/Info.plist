@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Without these macOS silently rejects getUserMedia inside WKWebView. -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>SoulForge Live 需要麦克风来听你说话。</string>
+  <key>NSCameraUsageDescription</key>
+  <string>SoulForge Live 需要摄像头来看见你（视觉触发词）。</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>用于语音输入。</string>
+</dict>
+</plist>
