@@ -159,3 +159,12 @@ def test_build_memory_graph_vector_and_lexical_fallback():
         r["embedding"] = None
     g2 = build_memory_graph(rows, threshold=0.6)
     assert any({e["a"], e["b"]} == {"m0", "m1"} for e in g2["edges"])
+
+
+def test_extraction_prompt_formats_without_keyerror():
+    # Regression: the JSON example in the prompt was an unescaped {…} → str.format
+    # raised KeyError('"type"') on every turn, so no memory was ever extracted.
+    from ai_core.services.memory import _EXTRACTION_PROMPT
+
+    out = _EXTRACTION_PROMPT.format(user_input="我喜欢抹茶", ai_response="记住啦")
+    assert '{"type": "PREFERENCE"' in out and "我喜欢抹茶" in out

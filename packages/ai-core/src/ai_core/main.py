@@ -33,6 +33,24 @@ logger = structlog.get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("ai_core.startup", environment=settings.environment)
+
+    # Warm the local embedding model off the request path: the first
+    # sentence-transformers load costs 10–20 s and used to land on the first
+    # user's turn.
+    async def _warm_embeddings() -> None:
+        try:
+            from ai_core.dependencies import get_embedding_service
+
+            svc = get_embedding_service()
+            if svc.available:
+                await svc.embed_one("预热")
+                logger.info("ai_core.embeddings_warm", model=svc.model_name, dim=svc.dim)
+        except Exception:
+            logger.exception("ai_core.embeddings_warm_failed")
+
+    import asyncio
+
+    asyncio.create_task(_warm_embeddings())
     yield
     logger.info("ai_core.shutdown")
     await close_pool()

@@ -345,6 +345,7 @@ def _engine(axes_schema=True):
     pool = MagicMock()
     conn = MagicMock()
     conn.fetchrow = AsyncMock(return_value=None)
+    conn.fetchval = AsyncMock(return_value=1 if axes_schema else None)
     conn.execute = AsyncMock()
     acq = MagicMock()
     acq.__aenter__ = AsyncMock(return_value=conn)
@@ -481,3 +482,14 @@ class TestRelationshipEngine:
         conn.fetchrow = AsyncMock(return_value=row)
         s = await eng._load("u", "c")
         assert s["stage"] == "CLOSE_FRIEND" and s["affection"] == 900 and s["decay_clocks"]["at"]
+
+    @pytest.mark.asyncio
+    async def test_cache_hit_still_sniffs_schema_before_save(self):
+        # Regression: a warm Redis cache skipped _load, leaving _axes_schema None and
+        # _save silently falling back to the affinity-only legacy upsert.
+        eng, conn = _engine()
+        eng._axes_schema = None
+        await eng.cache.set_json("rel:u:c", _state(affection=100, trust=20))
+        await eng.apply_turn("u", "c", user_mood="happy", user_text="你好呀")
+        assert eng._axes_schema is True
+        assert "total_interactions" in conn.execute.await_args.args[0]

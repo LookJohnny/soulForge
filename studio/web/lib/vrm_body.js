@@ -118,6 +118,7 @@ export class VrmBody {
     if (vrm.lookAt) vrm.lookAt.target = this.gazeTarget;
     this.vrm = vrm;
     this.metaVersion = vrm.meta?.metaVersion === '1' ? '1' : '0';
+    this._shin = null;
     this._restPose();
     this.mixer = new THREE.AnimationMixer(vrm.scene);
     this.animated = false;
@@ -346,7 +347,7 @@ export class VrmBody {
 
   /** 保持姿态叠加：不覆盖动画层，只在其上加一点身体语言。 */
   _poseLayer(t, dt) {
-    if (!this.pose) { this.poseAmt = damp(this.poseAmt ?? 0, 0, 4, dt); if (this.poseAmt < 0.01) return; }
+    if (!this.pose) { this.poseAmt = damp(this.poseAmt ?? 0, 0, 4, dt); if (this.poseAmt < 0.01) { if (this.vrm && this.lastPose && (this.lastPose === 'sit' || this.lastPose === 'kneel')) this.vrm.scene.position.y = this.vrm.scene.userData.floorY ?? this.vrm.scene.position.y; return; } }
     else if (t >= this.pose.until) this.pose = null;
     this.poseAmt = damp(this.poseAmt ?? 0, this.pose ? 1 : 0, 4, dt);
     const a = this.poseAmt, name = this.pose?.name ?? this.lastPose; if (this.pose) this.lastPose = name;
@@ -360,15 +361,17 @@ export class VrmBody {
         this.addBone(B.Chest, 0.12 * a, 0, 0); break;
       case 'lean_back':
         this.addBone(B.Spine, -0.18 * a, 0, 0); this.addBone(B.Chest, -0.08 * a, 0, 0); break;
-      case 'sit':
-        this.addBone(B.LeftUpperLeg, -1.4 * a, 0, 0); this.addBone(B.RightUpperLeg, -1.4 * a, 0, 0);
-        this.addBone(B.LeftLowerLeg, 1.4 * a, 0, 0); this.addBone(B.RightLowerLeg, 1.4 * a, 0, 0);
-        if (this.vrm) this.vrm.scene.position.y = (this.vrm.scene.userData.floorY ?? 0) - 0.42 * a; break;
-      case 'kneel':
-        this.addBone(B.LeftUpperLeg, -0.3 * a, 0, 0); this.addBone(B.RightUpperLeg, -1.5 * a, 0, 0);
-        this.addBone(B.LeftLowerLeg, 1.8 * a, 0, 0); this.addBone(B.RightLowerLeg, 1.6 * a, 0, 0);
-        this.addBone(B.Spine, 0.2 * a, 0, 0);
-        if (this.vrm) this.vrm.scene.position.y = (this.vrm.scene.userData.floorY ?? 0) - 0.5 * a; break;
+      case 'sit': // 腿部覆盖动捕（相加会变成"马腿"），大腿水平、小腿垂直
+        this.blendBone(B.LeftUpperLeg, -1.45, 0.08, 0, a); this.blendBone(B.RightUpperLeg, -1.45, -0.08, 0, a);
+        this.blendBone(B.LeftLowerLeg, 1.45, 0, 0, a); this.blendBone(B.RightLowerLeg, 1.45, 0, 0, a);
+        this.blendBone(B.LeftFoot, 0, 0, 0, a); this.blendBone(B.RightFoot, 0, 0, 0, a);
+        this.addBone(B.Spine, -0.06 * a, 0, 0);
+        if (this.vrm) this.vrm.scene.position.y = (this.vrm.scene.userData.floorY ?? 0) - this._shinLength() * a; break;
+      case 'kneel': // 单膝跪：右腿跪地、左腿前弓
+        this.blendBone(B.LeftUpperLeg, -1.3, 0.05, 0, a); this.blendBone(B.LeftLowerLeg, 1.3, 0, 0, a);
+        this.blendBone(B.RightUpperLeg, -0.1, -0.05, 0, a); this.blendBone(B.RightLowerLeg, 2.2, 0, 0, a);
+        this.addBone(B.Spine, 0.15 * a, 0, 0);
+        if (this.vrm) this.vrm.scene.position.y = (this.vrm.scene.userData.floorY ?? 0) - this._shinLength() * a; break;
       default: break;
     }
   }
@@ -437,6 +440,23 @@ export class VrmBody {
   setBone(name, x, y, z) {
     const node = this.vrm?.humanoid?.getNormalizedBoneNode(name);
     if (node) node.rotation.set(x, y, z);
+  }
+
+  /** 按权重 a 把骨骼从当前（动捕）旋转混合到目标旋转：姿态覆盖而非叠加。 */
+  blendBone(name, x, y, z, a) {
+    const node = this.vrm?.humanoid?.getNormalizedBoneNode(name);
+    if (!node) return;
+    node.rotation.set(node.rotation.x + (x - node.rotation.x) * a, node.rotation.y + (y - node.rotation.y) * a, node.rotation.z + (z - node.rotation.z) * a);
+  }
+
+  /** 小腿长度（世界单位）：坐下时身体要下沉的高度。 */
+  _shinLength() {
+    if (this._shin != null) return this._shin;
+    const h = this.vrm?.humanoid; if (!h) return 0.4;
+    const k = h.getNormalizedBoneNode(B.LeftLowerLeg), f = h.getNormalizedBoneNode(B.LeftFoot);
+    if (!k || !f) return 0.4;
+    this._shin = Math.max(0.2, Math.abs(k.getWorldPosition(this._v3a).y - f.getWorldPosition(this._v3b).y)) || 0.4;
+    return this._shin;
   }
 
   addBone(name, x, y, z) {

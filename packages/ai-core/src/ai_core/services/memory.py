@@ -117,7 +117,7 @@ _EXTRACTION_PROMPT = """你是一个记忆提取助手。请从以下对话中�
 - 日常寒暄不需要记住
 - 以JSON数组格式回复，如果没有值得记住的信息回复 []
 
-格式: [{"type": "PREFERENCE", "content": "喜欢机械眼球"}]"""
+格式: [{{"type": "PREFERENCE", "content": "喜欢机械眼球"}}]"""
 
 _LEGACY_MEMORY_FORMAT = {
     "TOPIC": "上次聊了{content}",

@@ -239,12 +239,32 @@ async function connectBody() {
   const url = $('runtime').value.trim() || params.get('runtime');
   if (!url) { $('body-status').textContent = '未连接（可选）'; return; }
   const agentIds = ($('runtime-agents').value || params.get('agents') || '').split(',').map((x) => x.trim()).filter(Boolean);
-  bodyClient = new BodyClient({ url, bodyId: 'web-vrm-live', agentIds }).attach(body, { animations: animationsList });
+  // 没有 gateway 时身体自己说话（standalone）：引擎下发 dialogue，经 studio /api/tts 念出
+  const standalone = !gw;
+  bodyClient = new BodyClient({ url, bodyId: 'web-vrm-live', agentIds, speech: standalone }).attach(body, { animations: animationsList, speak: standalone ? speakStandalone : undefined });
+  bodyClient.addEventListener('action', (e) => { if (e.detail.cmd.dialogue && standalone) { log(e.detail.cmd.dialogue); showBubble(e.detail.cmd.dialogue); } });
   bodyClient.addEventListener('welcome', (e) => { $('body-status').textContent = `身体已注册 ${e.detail.body_id} · ${e.detail.supported_steps.length} 步`; log('runtime 已接入（web 身体）', 'sys'); });
   bodyClient.addEventListener('action', (e) => { log(`▶ ${e.detail.cmd.name} → ${e.detail.prim.kind}${e.detail.prim.clip ? ':' + e.detail.prim.clip : ''}`, 'sys'); });
   bodyClient.addEventListener('close', () => { $('body-status').textContent = '身体连接断开'; });
   bodyClient.addEventListener('error', () => { $('body-status').textContent = '身体连接失败'; });
   try { await bodyClient.connect(); } catch { /* status shown */ }
+}
+let standaloneAudio = null;
+async function speakStandalone(text) {
+  if (!text) return;
+  try {
+    const res = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, voice: { provider: 'edge', id: 'zh-CN-XiaoxiaoNeural', rate: 0, pitch: 0 } }) });
+    if (!res.ok) return;
+    const url = URL.createObjectURL(await res.blob());
+    await new Promise((resolve) => {
+      const audio = new Audio(url); standaloneAudio = audio;
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = ctx.createMediaElementSource(audio); const an = ctx.createAnalyser(); an.fftSize = 256; src.connect(an); an.connect(ctx.destination);
+      body.setAudioAnalyser(an); body.setSpeaking(true);
+      const done = () => { body.setSpeaking(false); body.setAudioAnalyser(null); URL.revokeObjectURL(url); standaloneAudio = null; resolve(); };
+      audio.onended = audio.onerror = done; audio.play().catch(done);
+    });
+  } catch { /* TTS optional */ }
 }
 $('connect-body').onclick = connectBody;
 $('runtime').value = params.get('runtime') ?? '';
@@ -280,13 +300,16 @@ $('connect').onclick = connect;
 $('chatbar').onsubmit = (e) => {
   e.preventDefault();
   const t = $('text').value.trim();
-  if (!t || !gw) return;
-  log(t, 'user'); gw.sendText(t); $('text').value = '';
+  if (!t) return;
+  if (gw) { gw.sendText(t); }
+  else if (bodyClient?.welcome) { bodyClient.sendUtterance(t); }
+  else { toast('先连接 gateway 或 Runtime Server（⚙ 设置）'); return; }
+  log(t, 'user'); $('text').value = '';
   $('typing').classList.remove('hidden'); $('bubble').classList.add('hidden');
 };
 $('stop').onclick = () => gw?.abort();
 $('mic').onclick = async () => {
-  if (!gw) return toast('先连接 gateway');
+  if (!gw) return toast('麦克风需要 gateway（语音链路）；无 gateway 时请用文字');
   try { if (gw.mic) gw.stopMic(); else await gw.startMic(); }
   catch (e) { toast('⚠ ' + e.message); }
 };

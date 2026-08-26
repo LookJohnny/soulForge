@@ -714,7 +714,27 @@ class RelationshipEngine:
             await self._save(end_user_id, character_id, state)
         return state
 
+    async def _ensure_schema(self) -> bool:
+        """Sniff once whether migration 005 columns exist (cache hits skip _load)."""
+        if self._axes_schema is None:
+            try:
+                async with self.pool.acquire() as conn:
+                    exists = await conn.fetchval(
+                        """SELECT 1 FROM information_schema.columns
+                           WHERE table_name = 'relationship_states' AND column_name = 'decay_clocks'"""
+                    )
+                self._axes_schema = bool(exists)
+                if not self._axes_schema:
+                    logger.warning(
+                        "relationship.schema_legacy — run migration 005_relationship_axes"
+                    )
+            except Exception:
+                logger.exception("relationship.schema_check_failed")
+                self._axes_schema = False
+        return self._axes_schema
+
     async def _load(self, end_user_id: str, character_id: str) -> dict:
+        await self._ensure_schema()
         async with self.pool.acquire() as conn:
             row = None
             if self._axes_schema is not False:
@@ -771,6 +791,7 @@ class RelationshipEngine:
     # ── write ────────────────────────────────────
 
     async def _save(self, end_user_id: str, character_id: str, state: dict) -> None:
+        await self._ensure_schema()
         state = {k: v for k, v in state.items() if not k.startswith("_")}
         last_date = (
             date.fromisoformat(state["last_interaction_date"])
