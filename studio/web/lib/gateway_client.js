@@ -57,7 +57,7 @@ export class GatewayClient extends EventTarget {
     });
   }
 
-  close() { this.ws?.close(); }
+  close() { this.stopMic(); this._stopPlayback(); this.ws?.close(); }
 
   sendText(content) {
     this.ws?.send(JSON.stringify({ type: 'text', content }));
@@ -83,8 +83,15 @@ export class GatewayClient extends EventTarget {
       if (p.type === 'emotion') this._emit('emotion', p);
       else if (p.type === 'tts' && p.state === 'stop') this._drainThenStop();
       else if (p.type === 'reaction') this._emit('reaction', p);
-      else this._emit('control', p);
+      // 通用分发：relationship / event / memory … 由页面按 `control:<type>` 订阅
+      if (p.type) this._emit('control:' + p.type, p);
+      this._emit('control', p);
     }
+  }
+
+  /** 发送任意 JSON 控制消息（event_choice / set_app_mode …）。 */
+  send(obj) {
+    if (this.ws?.readyState === 1) this.ws.send(JSON.stringify(obj));
   }
 
   async ensureAudio() {
@@ -170,10 +177,24 @@ export class GatewayClient extends EventTarget {
     if (!('AudioEncoder' in window) || !('MediaStreamTrackProcessor' in window)) {
       throw new Error('浏览器不支持 WebCodecs 麦克风编码（需 Chrome/Edge）');
     }
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    });
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+    } catch (err) {
+      // DOMException → 可读中文（aikeya groq-stt 的错误映射）
+      const messages = {
+        NotAllowedError: '麦克风权限被拒绝，请检查浏览器/系统权限',
+        NotFoundError: '没有找到麦克风',
+        NotReadableError: '麦克风被其他应用占用',
+        OverconstrainedError: '麦克风不满足采样要求',
+      };
+      throw new Error(messages[err?.name] || `无法访问麦克风: ${err?.message ?? err}`);
+    }
     const track = stream.getAudioTracks()[0];
+    // 麦克风拔出/系统收回 → 自动停止并通知
+    track.onended = () => { if (this.mic) { this.stopMic(); this._emit('error', new Error('麦克风已断开')); } };
     const sampleRate = track.getSettings().sampleRate || 48000;
     const cfg = { codec: 'opus', sampleRate, numberOfChannels: 1, bitrate: 24000, opus: { frameDuration: 60000 } };
     const sup = await AudioEncoder.isConfigSupported(cfg);

@@ -11,7 +11,8 @@
     "db:migrate": "cd packages/database && pnpm prisma migrate dev",
     "db:migrate:deploy": "cd packages/database && pnpm prisma migrate deploy",
     "db:seed": "turbo run db:seed --filter=@soulforge/database",
-    "db:studio": "cd packages/database && pnpm prisma studio"
+    "db:studio": "cd packages/database && pnpm prisma studio",
+    "test:studio": "node studio/tests/test_live_smoke.mjs"
   },
   "devDependencies": {
     "@pixiv/three-vrm": "^3.5.4",

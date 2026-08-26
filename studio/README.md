@@ -40,6 +40,14 @@ uv run python studio/server.py --port 8899 && open http://127.0.0.1:8899/live
 - 模型缺表情通道（如 open_source_avatars 里多数只有口型+眨眼）时自动退化为只动头部
 - 共享库 `web/lib/vrm_body.js`（加载/注视/呼吸/眨眼/fidget/VRMA/表情阻尼）是后续
   studio.js 与 demo 渲染器收敛的目标
+- 吸收自 aikeya（MIT，`assets/animations/LICENSE-aikeya.txt`）：5 个 idle 动捕片段
+  轮换（不连续重复、1–2 循环后抖动切换、忙时推迟）+ `talking.vrma` 随说话 crossfade；
+  VRM0/1 手臂静息姿态符号翻转；`lib/lipsync.js` 四频段→五视素口型；非对称眨眼；
+  头部投影气泡；渲染循环内 resize；`utsuwa.vrm` 默认模型
+- 页面即完整陪伴应用壳：关系 HUD（`control:relationship`）、情绪与原因、事件场景卡
+  （`control:event` → 回传 `event_choice`）、记忆图面板（等 ai-core 接口）、设置抽屉
+- 冒烟测试：`pnpm test:studio`（自起 studio + `studio/tests/fake_gateway.py`，Playwright
+  无头 Chromium 断言模型/idle/口型/气泡/HUD/事件卡，截图到 `outputs/live_smoke.png`）
 
 ## 语音输入 + 打断（Chrome）
 
