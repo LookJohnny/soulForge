@@ -38,10 +38,19 @@ pub fn start_native_mic(app: AppHandle, window: tauri::WebviewWindow, state: tau
         return Ok("already".into());
     }
     let host = cpal::default_host();
+    let no_input = host
+        .input_devices()
+        .map(|mut it| it.next().is_none())
+        .unwrap_or(true);
+    if no_input {
+        return Err("本机没有任何音频输入设备（这台 Mac mini 没有内置麦克风）：接 USB 麦克风 / AirPods / iPhone 连续互通麦克风后，在 系统设置 → 声音 → 输入 里确认，再点 🎙".into());
+    }
     let device = host
         .default_input_device()
-        .ok_or_else(|| "没有可用的输入设备（系统设置 → 声音 → 输入）".to_string())?;
-    let config = device.default_input_config().map_err(|e| e.to_string())?;
+        .ok_or_else(|| "没有默认输入设备（系统设置 → 声音 → 输入）".to_string())?;
+    let config = device
+        .default_input_config()
+        .map_err(|e| format!("读取输入设备配置失败（{e}）——通常是没有可用麦克风"))?;
     let in_rate = config.sample_rate().0 as f32;
     let channels = config.channels() as usize;
     let label = window.label().to_string();
