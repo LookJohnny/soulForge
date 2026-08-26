@@ -54,41 +54,64 @@ pub fn start_native_mic(app: AppHandle, window: tauri::WebviewWindow, state: tau
     let mut mono: Vec<f32> = Vec::new();
 
     let err_app = app.clone();
-    let stream = device
-        .build_input_stream(
-            &config.into(),
-            move |data: &[f32], _| {
-                // downmix to mono
-                mono.clear();
-                for frame in data.chunks(channels) {
-                    let s: f32 = frame.iter().sum::<f32>() / channels as f32;
-                    mono.push(s);
-                }
-                // linear resample in_rate → 16 kHz
-                while (pos as usize) + 1 < mono.len() {
-                    let i = pos as usize;
-                    let t = pos - i as f32;
-                    let v = mono[i] + (mono[i + 1] - mono[i]) * t;
-                    acc.push((v.clamp(-1.0, 1.0) * 32767.0) as i16);
-                    pos += ratio;
-                }
-                pos -= mono.len() as f32;
-                if pos < 0.0 {
-                    pos = 0.0;
-                }
-                while acc.len() >= FRAME {
-                    let chunk: Vec<i16> = acc.drain(..FRAME).collect();
-                    let bytes: Vec<u8> = chunk.iter().flat_map(|s| s.to_le_bytes()).collect();
-                    let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
-                    let _ = app.emit_to(label.as_str(), "mic-pcm", b64);
-                }
-            },
-            move |e| {
-                let _ = err_app.emit("mic-error", e.to_string());
-            },
+    let stream_cfg: cpal::StreamConfig = config.clone().into();
+    // Build the callback for whichever sample format the device actually uses —
+    // asking CoreAudio for f32 on an i16 device is the classic "unknown error".
+    let mut push = move |mono_in: &[f32]| {
+        mono.clear();
+        for frame in mono_in.chunks(channels) {
+            let s: f32 = frame.iter().sum::<f32>() / channels as f32;
+            mono.push(s);
+        }
+        while (pos as usize) + 1 < mono.len() {
+            let i = pos as usize;
+            let t = pos - i as f32;
+            let v = mono[i] + (mono[i + 1] - mono[i]) * t;
+            acc.push((v.clamp(-1.0, 1.0) * 32767.0) as i16);
+            pos += ratio;
+        }
+        pos -= mono.len() as f32;
+        if pos < 0.0 {
+            pos = 0.0;
+        }
+        while acc.len() >= FRAME {
+            let chunk: Vec<i16> = acc.drain(..FRAME).collect();
+            let bytes: Vec<u8> = chunk.iter().flat_map(|s| s.to_le_bytes()).collect();
+            let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+            let _ = app.emit_to(label.as_str(), "mic-pcm", b64);
+        }
+    };
+    let err_cb = move |e: cpal::StreamError| {
+        let _ = err_app.emit("mic-error", e.to_string());
+    };
+    let stream = match config.sample_format() {
+        cpal::SampleFormat::F32 => device.build_input_stream(
+            &stream_cfg,
+            move |data: &[f32], _| push(data),
+            err_cb,
             None,
-        )
-        .map_err(|e| format!("无法打开麦克风：{e}"))?;
+        ),
+        cpal::SampleFormat::I16 => device.build_input_stream(
+            &stream_cfg,
+            move |data: &[i16], _| {
+                let f: Vec<f32> = data.iter().map(|s| *s as f32 / 32768.0).collect();
+                push(&f)
+            },
+            err_cb,
+            None,
+        ),
+        cpal::SampleFormat::U16 => device.build_input_stream(
+            &stream_cfg,
+            move |data: &[u16], _| {
+                let f: Vec<f32> = data.iter().map(|s| (*s as f32 - 32768.0) / 32768.0).collect();
+                push(&f)
+            },
+            err_cb,
+            None,
+        ),
+        other => return Err(format!("不支持的采样格式 {other:?}")),
+    }
+    .map_err(|e| format!("无法打开麦克风（{name} @ {in_rate:.0} Hz, {channels} ch）：{e}"))?;
     stream.play().map_err(|e| e.to_string())?;
     guard.stream = Some(stream);
     Ok(format!("{name} @ {in_rate:.0} Hz → 16 kHz PCM"))
