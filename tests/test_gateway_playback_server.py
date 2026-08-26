@@ -32,7 +32,9 @@ class _Orchestrator:
         self.unsolicited_calls = 0
         self.confirmed = asyncio.Event()
 
-    async def process_text_stream(self, session, text):
+    async def process_text_stream(
+        self, session, text, stream_audio=False, image_data=None
+    ):
         yield StreamChunk(
             text="我在。",
             audio_data=b"audio",
