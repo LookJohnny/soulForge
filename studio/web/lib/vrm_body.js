@@ -27,6 +27,7 @@ import { VRMLoaderPlugin, VRMUtils, VRMHumanBoneName } from '@pixiv/three-vrm';
 import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-vrm-animation';
 import { PadMood, EXPR_CHANNELS } from './pad_expression.js';
 import { LipSync, VISEMES } from './lipsync.js';
+import { loadAnyHumanoid, applyToonLook, removeToonLook } from './humanoid_adapter.js';
 
 export const damp = (cur, target, lambda, dt) => cur + (target - cur) * (1 - Math.exp(-lambda * dt));
 
@@ -104,27 +105,53 @@ export class VrmBody {
   }
 
   // ── 加载 ──────────────────────────────────────────────
-  async load(url) {
+  /**
+   * 加载模型：.vrm 走 three-vrm 原生；.fbx/.glb 等经 humanoid_adapter 合成 VRM。
+   * @param {string} url
+   * @param {{kind?:string, toon?:boolean}} opts
+   */
+  async load(url, { kind, toon } = {}) {
     this.dispose();
-    const gltf = await this.loader.loadAsync(url);
-    const vrm = gltf.userData.vrm;
-    if (!vrm) throw new Error('not a VRM: ' + url);
-    VRMUtils.removeUnnecessaryVertices(gltf.scene);
-    VRMUtils.combineSkeletons(gltf.scene);
+    const ext = (kind && kind !== 'robot' ? kind : url.split('?')[0].split('.').pop()).toLowerCase();
+    let vrm;
+    let native = true;
+    if (ext === 'vrm') {
+      const gltf = await this.loader.loadAsync(url);
+      vrm = gltf.userData.vrm;
+      if (!vrm) throw new Error('not a VRM: ' + url);
+      VRMUtils.removeUnnecessaryVertices(gltf.scene);
+      VRMUtils.combineSkeletons(gltf.scene);
+    } else {
+      const res = await loadAnyHumanoid(url, { kind: ext });
+      vrm = res.vrm; native = res.native;
+      this.nativeClips = res.animations ?? [];
+      this.rig = res.rig;
+      if (native) { VRMUtils.removeUnnecessaryVertices(vrm.scene); VRMUtils.combineSkeletons(vrm.scene); }
+    }
     VRMUtils.rotateVRM0(vrm);
     vrm.scene.traverse((o) => { o.frustumCulled = false; if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     this._normalize(vrm.scene, this.height);
     this.scene.add(vrm.scene);
     if (vrm.lookAt) vrm.lookAt.target = this.gazeTarget;
     this.vrm = vrm;
+    this.native = native;
     this.metaVersion = vrm.meta?.metaVersion === '1' ? '1' : '0';
     this._shin = null;
     this._restPose();
     this.mixer = new THREE.AnimationMixer(vrm.scene);
     this.animated = false;
+    this.toon = false;
+    if (toon ?? !native) this.setToon(true);
     if (this.idleUrls.length) await this._startIdle();
     if (this.talkingUrl) this._loadVrma(this.talkingUrl).catch(() => {});
     return vrm;
+  }
+
+  /** 卡通外观开关（非 VRM 模型默认开；VRM 自带 MToon）。 */
+  setToon(on) {
+    if (!this.vrm || this.toon === !!on) return;
+    this.toon = !!on;
+    if (on) applyToonLook(this.vrm.scene); else removeToonLook(this.vrm.scene);
   }
 
   _normalize(root, targetHeight) {

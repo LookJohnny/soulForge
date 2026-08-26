@@ -1,0 +1,8 @@
+Sample humanoid models used by studio/tests/test_models_smoke.mjs
+
+- CesiumMan.glb, RiggedFigure.glb — © Cesium, Creative Commons Attribution 4.0
+  (https://github.com/KhronosGroup/glTF-Sample-Assets). Test fixtures only.
+- mixamo/ — Mixamo-rigged FBX (e.g. "Samba Dancing.fbx" from the three.js
+  examples). Adobe Mixamo terms allow use inside projects but NOT
+  redistribution as standalone assets, so this directory is git-ignored;
+  fetch with scripts/fetch_samples.sh.

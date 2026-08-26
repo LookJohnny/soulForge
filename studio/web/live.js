@@ -113,9 +113,9 @@ async function loadAssets() {
   const sel = $('model');
   try {
     const list = await (await fetch('/api/models')).json();
-    const vrms = (list.models ?? list).filter((m) => (m.kind ?? 'vrm') === 'vrm');
+    const vrms = (list.models ?? list).filter((m) => ['vrm', 'glb', 'fbx', 'mmd'].includes(m.kind ?? 'vrm'));
     for (const m of vrms) {
-      const o = document.createElement('option'); o.value = m.url; o.textContent = m.name ?? m.url.split('/').pop(); sel.appendChild(o);
+      const o = document.createElement('option'); o.value = m.url; o.dataset.kind = m.kind; o.textContent = `${m.name ?? m.url.split('/').pop()} · ${(m.kind ?? 'vrm').toUpperCase()}${m.license ? ' · ' + m.license.slice(0, 24) : ''}`; sel.appendChild(o);
     }
     // 优先带完整表情的模型：aikeya utsuwa(VRM1) → VRoid 样例 → 其它
     const pref = params.get('model');
@@ -123,16 +123,20 @@ async function loadAssets() {
       ?? vrms.find((m) => /AvatarSample_B/i.test(m.url)) ?? vrms.find((m) => /utsuwa/i.test(m.url)) ?? vrms[0];
     if (first) { sel.value = first.url; await pick(first.url); }
   } catch (e) { log('模型列表获取失败: ' + e.message, 'sys'); }
-  sel.onchange = () => pick(sel.value);
+  sel.onchange = () => pick(sel.value, sel.selectedOptions[0]?.dataset.kind);
 }
-async function pick(url) {
+async function pick(url, kind) {
   try {
-    await body.load(url);
-    $('hud-name').textContent = decodeURIComponent(url.split('/').pop()).replace(/\.vrm$/i, '');
-    log('已换装 ' + decodeURIComponent(url.split('/').pop()), 'sys');
-  } catch (e) { log('模型加载失败: ' + e.message, 'sys'); }
+    await body.load(url, { kind: kind ?? $('model').selectedOptions[0]?.dataset.kind });
+    $('hud-name').textContent = decodeURIComponent(url.split('/').pop()).replace(/\.(vrm|glb|gltf|fbx|pmx)$/i, '');
+    const a = body.vrm?.userData?.adapter;
+    log('已换装 ' + decodeURIComponent(url.split('/').pop()) + (a ? `（${a.rig} 骨架 ${a.bones} 根，表情 ${a.expressions.length} 通道）` : ''), 'sys');
+    if (a && a.expressions.length === 0) toast('这个模型没有表情 morph：只有身体动作和注视，不会有口型/表情');
+    $('opt-toon').checked = !!body.toon;
+  } catch (e) { log('模型加载失败: ' + e.message, 'sys'); toast('模型加载失败: ' + e.message, 6000); }
 }
 $('opt-idle').onchange = () => { const u = $('model').value; if (u) { loadAssets(); } };
+$('opt-toon').onchange = () => body.setToon($('opt-toon').checked);
 
 // ── HUD ───────────────────────────────────────────────
 const AXES = [['affection', '好感', 1000], ['trust', '信任', 100], ['intimacy', '亲密', 100], ['comfort', '自在', 100], ['respect', '尊重', 100], ['energy', '精力', 100]];

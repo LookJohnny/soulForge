@@ -137,6 +137,20 @@ VRM 形象是 gateway 的一个**身体**，和小智 ESP32 平级：语音 / �
 - **桌面壳** `apps/desktop/`（Tauri 2）：主窗 + ⌘⇧U 透明置顶可拖拽的悬浮伴侣；WKWebView 无 WebCodecs → Rust `cpal` 原生麦克风
 - 冒烟：`pnpm test:studio`（假 gateway + 假 ai-core + 假 Runtime，Playwright 无头 Chromium）
 
+### 通用人形模型：FBX / GLB / Unity Humanoid（不只 VRM）
+
+`studio/web/lib/humanoid_adapter.js` 把任意人形骨架**合成为一个真正的 three-vrm `VRM`**（`VRMHumanoid` /
+`VRMExpressionManager` / `VRMLookAt` 手工构造），所以 Mixamo FBX、Sketchfab GLB、Unity Humanoid 导出、ARKit
+blendshape 模型都能直接进 `/live`，并且**复用全部 VRMA 动捕、PAD 表情、口型、注视、姿态叠加**：
+
+- 骨骼名表：Mixamo（含 FBXLoader 去冒号的 `mixamorigHips`）/ Unity Humanoid / 通用别名（Blender、UE、Cesium）/ MMD（PMX 日文名，待 A3 接入加载器）；名字表不够时按层级兜底
+- 自动修正：绑定姿态重置（FBX 常停在动画首帧）、同名重复骨选层级节点、朝向转到 +Z、A-pose → T-pose
+- 表情：ARKit / VRoid / MMD morph 名映射到 `aa ih ou ee oh blink happy sad angry surprised relaxed`；没有 morph 的模型自动只做身体动作
+- 卡通外观开关：`MeshToonMaterial` + 反向外壳描边（非 VRM 默认开）
+- `/api/models` 列出 `.vrm/.glb/.gltf/.fbx/.pmx` 与许可（同目录 `LICENSE*` / `asset_manifest.json`）
+- 验证：`node studio/tests/test_models_smoke.mjs`（Mixamo Samba Dancing、Khronos CesiumMan/RiggedFigure；样本用 `scripts/fetch_samples.sh` 下载）
+- 想要 MToon 卡渲 / 弹簧骨 / 完整表情的"上限路径"：`docs/models/blender_to_vrm.md`
+
 ### 五轴关系 + 事件 + 语义记忆 — 从 aikeya 移植的设计
 
 设计取自开源项目 [aikeya](https://github.com/aikeyaorg/aikeya)（MIT），在 Python 大脑里重写并修掉了它未实现/有错的部分：

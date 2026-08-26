@@ -343,18 +343,72 @@ async def api_characters(_request: web.Request) -> web.Response:
     return web.json_response(load_characters())
 
 
+_MODEL_KINDS = {
+    ".vrm": "vrm",
+    ".glb": "glb",
+    ".gltf": "glb",
+    ".fbx": "fbx",
+    ".pmx": "mmd",
+}
+
+
+def _model_license(path: Path) -> str | None:
+    """LICENSE*.txt or asset_manifest.json beside the model, if any."""
+    for cand in sorted(path.parent.glob("LICENSE*")):
+        try:
+            return cand.read_text("utf-8").strip().splitlines()[0][:120]
+        except OSError:
+            pass
+    manifest = path.parent / "asset_manifest.json"
+    if manifest.exists():
+        try:
+            data = json.loads(manifest.read_text("utf-8"))
+            entries = data.get("assets", data) if isinstance(data, dict) else data
+            if isinstance(entries, dict):
+                entry = entries.get(path.name) or entries.get(path.stem) or {}
+            else:
+                entry = next(
+                    (
+                        e
+                        for e in entries
+                        if e.get("file") == path.name or e.get("name") == path.stem
+                    ),
+                    {},
+                )
+            lic = (entry or {}).get("license") or (
+                data.get("license") if isinstance(data, dict) else None
+            )
+            if lic:
+                return str(lic)[:120]
+        except (OSError, ValueError):
+            pass
+    return None
+
+
 async def api_models(_request: web.Request) -> web.Response:
+    """Every humanoid model under assets/vtubers: VRM, glTF/GLB, FBX (Mixamo/Unity), PMX.
+
+    Non-VRM rigs are synthesized into a VRM at load time by
+    studio/web/lib/humanoid_adapter.js; the RobotExpressive GLB stays kind
+    "robot" (workbench-only procedural body).
+    """
     models = []
     for path in sorted((ROOT / "assets" / "vtubers").rglob("*")):
-        if path.suffix.lower() in (".vrm", ".glb"):
-            models.append(
-                {
-                    "name": path.stem,
-                    "url": "/assets/" + str(path.relative_to(ROOT / "assets")),
-                    "kind": "robot" if path.suffix.lower() == ".glb" else "vrm",
-                    "size_mb": round(path.stat().st_size / 1e6, 1),
-                }
-            )
+        suffix = path.suffix.lower()
+        if suffix not in _MODEL_KINDS or path.name.startswith("."):
+            continue
+        kind = _MODEL_KINDS[suffix]
+        if suffix == ".glb" and "robotexpressive" in path.stem.lower():
+            kind = "robot"
+        models.append(
+            {
+                "name": path.stem,
+                "url": "/assets/" + str(path.relative_to(ROOT / "assets")),
+                "kind": kind,
+                "size_mb": round(path.stat().st_size / 1e6, 1),
+                "license": _model_license(path),
+            }
+        )
     return web.json_response(models)
 
 
