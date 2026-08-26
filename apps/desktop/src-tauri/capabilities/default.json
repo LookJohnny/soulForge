@@ -21,6 +21,12 @@
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
     "core:event:allow-listen",
-    "core:event:allow-unlisten"
+    "core:event:allow-unlisten",
+    "allow-start-native-mic",
+    "allow-stop-native-mic",
+    "allow-start-drag",
+    "allow-show-overlay",
+    "allow-hide-overlay",
+    "allow-toggle-overlay"
   ]
 }

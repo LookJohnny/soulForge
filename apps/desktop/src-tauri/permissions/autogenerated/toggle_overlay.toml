@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-toggle-overlay"
+description = "Enables the toggle_overlay command without any pre-configured scope."
+commands.allow = ["toggle_overlay"]
+
+[[permission]]
+identifier = "deny-toggle-overlay"
+description = "Denies the toggle_overlay command without any pre-configured scope."
+commands.deny = ["toggle_overlay"]
