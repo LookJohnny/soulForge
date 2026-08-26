@@ -148,6 +148,7 @@ class ChatResponse(BaseModel):
     affinity: int | None = None  # 0-1000 (= affection axis)
     relationship: RelationshipStateSchema | None = None
     mood_causes: list[str] | None = None  # why the character feels this way (newest last)
+    event: dict | None = None  # visual-novel scene that fired this turn (see events engine)
     latency_ms: int
     stages: dict[str, int] | None = None  # per-stage latency breakdown (ms)
 

@@ -47,6 +47,8 @@ class StreamChunk:
     energy: int | None = None
     # Only populated on 'relationship' chunks (five-axis state + turn deltas)
     relationship: dict | None = None
+    # Only populated on 'event' chunks (visual-novel scene card)
+    event: dict | None = None
     latency_ms: int = 0
     stages: dict | None = None  # ai-core per-stage latency breakdown (ms)
     # Opaque receipt for the downstream playback sink.  The sink calls
@@ -679,6 +681,8 @@ class PipelineOrchestrator:
             return StreamChunk(
                 text="", audio_data=None, index=-1, kind="relationship", relationship=data
             )
+        if etype == "event":
+            return StreamChunk(text="", audio_data=None, index=-1, kind="event", event=data)
         if etype == "done":
             return StreamChunk(
                 text="",

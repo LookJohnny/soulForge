@@ -158,6 +158,7 @@ model EndUser {
   devices         Device[]
   memories        ConversationMemory[]
   relationships   RelationshipState[]
+  relationshipEvents RelationshipEvent[]
   profileMemories ProfileMemory[]
   episodicMemories EpisodicMemory[]
   semanticMemories SemanticMemory[]
@@ -214,6 +215,7 @@ model Character {
   logs           ConversationLog[]
   memories       ConversationMemory[]
   relationships  RelationshipState[]
+  relationshipEvents RelationshipEvent[]
   profileMemories ProfileMemory[]
   episodicMemories EpisodicMemory[]
   semanticMemories SemanticMemory[]
@@ -489,6 +491,25 @@ model RelationshipState {
 }
 
 // ─── Five-layer Companion Memory MVP ─────────────
+
+model RelationshipEvent {
+  id           String   @id @default(uuid()) @db.Uuid
+  endUserId    String   @map("end_user_id") @db.Uuid
+  characterId  String   @map("character_id") @db.Uuid
+  eventId      String   @map("event_id")
+  eventType    String   @map("event_type")
+  choiceIndex  Int?     @map("choice_index") @db.SmallInt
+  outcome      String?
+  stateChanges Json     @default("{}") @map("state_changes")
+  completedAt  DateTime @default(now()) @map("completed_at")
+
+  endUser   EndUser   @relation(fields: [endUserId], references: [id])
+  character Character @relation(fields: [characterId], references: [id])
+
+  @@index([endUserId, characterId, completedAt(sort: Desc)])
+  @@index([eventId])
+  @@map("relationship_events")
+}
 
 model RawEventLog {
   id               String           @id @default(uuid()) @db.Uuid

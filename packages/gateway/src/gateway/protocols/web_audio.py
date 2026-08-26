@@ -82,6 +82,22 @@ class WebAudioAdapter(ProtocolAdapter):
                 device_id="",
                 payload={"action": "abort"},
             )
+        elif msg_type == "event_choice":
+            return InboundMessage(
+                type=MessageType.CONTROL,
+                device_id="",
+                payload={
+                    "action": "event_choice",
+                    "event_id": msg.get("event_id", ""),
+                    "choice_index": int(msg.get("choice_index", 0) or 0),
+                },
+            )
+        elif msg_type == "set_app_mode":
+            return InboundMessage(
+                type=MessageType.CONTROL,
+                device_id="",
+                payload={"action": "set_app_mode", "app_mode": msg.get("app_mode", "dating_sim")},
+            )
         elif msg_type in {"event", "device_event", "reaction"}:
             return InboundMessage(
                 type=MessageType.CONTROL,

@@ -23,6 +23,7 @@ from ai_core.dependencies import (
     get_asr_client,
     get_cache,
     get_emotion_engine,
+    get_event_engine,
     get_llm_client,
     get_memory_service,
     get_personality_drift,
@@ -199,8 +200,19 @@ async def chat(req: ChatRequest, request: Request):
         archetype=_archetype,
     )
 
-    # 8. Build prompt with emotion, memory, relationship, trigger, time, and body context.
+    # 7b. Visual-novel events
     builder = await get_prompt_builder()
+    _char_for_events = await builder._get_character(req.character_id, brand_id)
+    triggered_event, event_context = await _check_events(
+        req,
+        rel_state=rel_state,
+        emotion_state=emotion_state,
+        pad_magnitude=0.0,
+        user_text=user_text,
+        character_name=(_char_for_events or {}).get("nickname") or "",
+    )
+
+    # 8. Build prompt with emotion, memory, relationship, trigger, time, and body context.
     try:
         prompt_result = await builder.build(
             character_id=req.character_id,
@@ -212,6 +224,7 @@ async def chat(req: ChatRequest, request: Request):
             memories=memories,
             relationship_stage=rel_state["stage"],
             relationship_state=rel_state if req.end_user_id else None,
+            event_context=event_context,
             proactive_trigger=proactive_line,
             time_context=time_context,
             touch_context=touch_prompt,
@@ -358,6 +371,7 @@ async def chat(req: ChatRequest, request: Request):
         affinity=rel_state.get("affinity", 0),
         relationship=rel_payload,
         mood_causes=await emotion_engine.get_pad_causes(req.session_id),
+        event=triggered_event.to_payload() if triggered_event else None,
         latency_ms=latency,
         stages=stages,
     )
@@ -593,6 +607,16 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
         archetype=_archetype,
     )
 
+    # 6b. Visual-novel events (milestones / romance arc / time-of-day)
+    triggered_event, event_context = await _check_events(
+        req,
+        rel_state=rel_state,
+        emotion_state=emotion_state,
+        pad_magnitude=prev_pad.magnitude() if prev_pad else 0.0,
+        user_text=user_text,
+        character_name=(_char_row or {}).get("nickname") or (_char_row or {}).get("name") or "",
+    )
+
     # 7. Build prompt (plain text mode for device/TTS pipelines)
     try:
         prompt_result = await builder.build(
@@ -605,6 +629,7 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
             memories=memories,
             relationship_stage=rel_state["stage"],
             relationship_state=rel_state if req.end_user_id else None,
+            event_context=event_context,
             proactive_trigger=proactive_line,
             time_context=time_context,
             touch_context=touch_prompt,
@@ -624,6 +649,7 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
         "touch_affinity_bonus": touch_affinity_bonus,
         "rel_state": rel_state,
         "prompt_result": prompt_result,
+        "triggered_event": triggered_event,
         "timings": dict(sw.stages),
     }
 
@@ -786,6 +812,12 @@ async def chat_stream(req: ChatRequest, request: Request):
             }
         )
 
+        # Scene card (if an event fired this turn) — after the reply audio
+        # queued, before relationship/done, so the choice UI appears with
+        # the line it belongs to.
+        if ctx.get("triggered_event") is not None:
+            yield _sse(ctx["triggered_event"].to_payload())
+
         # Relationship turn — emitted before `done` so the body can animate
         # the HUD while audio is still playing.
         rel_payload = None
@@ -849,6 +881,44 @@ async def chat_stream(req: ChatRequest, request: Request):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+async def _check_events(
+    req: ChatRequest,
+    *,
+    rel_state: dict,
+    emotion_state: str | None,
+    pad_magnitude: float,
+    user_text: str,
+    character_name: str,
+) -> tuple[object | None, str]:
+    """Trigger this turn's scene (if any) and build the prompt's event context.
+
+    Returns (triggered_event, event_context). Never raises.
+    """
+    if not req.end_user_id or req.idle_mode:
+        return None, ""
+    try:
+        engine = await get_event_engine()
+        parts = []
+        last = await engine.last_outcome_context(req.end_user_id, req.character_id)
+        if last:
+            parts.append(last)
+        trig = await engine.check(
+            req.end_user_id,
+            req.character_id,
+            rel_state=rel_state,
+            emotion=emotion_state,
+            emotion_intensity=min(100.0, pad_magnitude * 60),
+            message=user_text,
+            character_name=character_name,
+        )
+        if trig:
+            parts.append(trig.prompt_context())
+        return trig, "\n".join(parts)
+    except Exception:
+        logger.exception("events.check_error")
+        return None, ""
 
 
 _MOOD_ZH = {

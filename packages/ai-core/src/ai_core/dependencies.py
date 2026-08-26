@@ -113,6 +113,22 @@ async def get_relationship_engine() -> RelationshipEngine:
     return _relationship_engine
 
 
+_event_engine = None
+
+
+async def get_event_engine():
+    """Visual-novel event engine (milestones / romance arc / time-of-day)."""
+    global _event_engine
+    if _event_engine is None:
+        from ai_core.services.events import EventEngine
+
+        pool = await get_pool()
+        cache = get_cache()
+        rel = await get_relationship_engine()
+        _event_engine = EventEngine(pool, cache, rel)
+    return _event_engine
+
+
 async def get_personality_drift() -> PersonalityDriftService:
     global _personality_drift
     if _personality_drift is None:

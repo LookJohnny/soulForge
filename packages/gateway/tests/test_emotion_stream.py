@@ -134,3 +134,25 @@ async def test_server_send_emotion_forwards_causes():
     await server._send_emotion(ws, GenericWSAdapter(), chunk)
     sent = json.loads(ws.send_text.await_args.args[0])
     assert sent["payload"]["causes"] == ["想你了"] and sent["payload"]["energy"] == 60
+
+
+def test_parse_event_chunk_and_web_audio_choice_decode():
+    import asyncio
+
+    from gateway.protocols.web_audio import WebAudioAdapter
+
+    chunk = PipelineOrchestrator._parse_stream_event(
+        {"type": "event", "event_id": "confession_event", "scene": {"choices": [{"text": "a"}]}}
+    )
+    assert chunk.kind == "event" and chunk.event["event_id"] == "confession_event"
+    msg = asyncio.run(
+        WebAudioAdapter().decode(
+            json.dumps({"type": "event_choice", "event_id": "x", "choice_index": "1"})
+        )
+    )
+    assert msg.type == MessageType.CONTROL
+    assert msg.payload == {"action": "event_choice", "event_id": "x", "choice_index": 1}
+    mode = asyncio.run(
+        WebAudioAdapter().decode(json.dumps({"type": "set_app_mode", "app_mode": "companion"}))
+    )
+    assert mode.payload == {"action": "set_app_mode", "app_mode": "companion"}

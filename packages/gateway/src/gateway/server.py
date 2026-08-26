@@ -301,6 +301,20 @@ class WebSocketServer:
                     if audio:
                         await self._process_and_respond(ws, adapter, session, audio)
 
+            elif action == "event_choice":
+                await self._handle_event_choice(
+                    ws,
+                    adapter,
+                    session,
+                    msg.payload.get("event_id", ""),
+                    int(msg.payload.get("choice_index", 0)),
+                )
+
+            elif action == "set_app_mode":
+                await self._handle_set_app_mode(
+                    ws, adapter, session, msg.payload.get("app_mode", "dating_sim")
+                )
+
             elif action == "abort":
                 if getattr(session, "_silence_task", None):
                     session._silence_task.cancel()
@@ -579,6 +593,48 @@ class WebSocketServer:
         if chunk.relationship:
             await self._send_control(ws, adapter, {**chunk.relationship, "type": "relationship"})
 
+    async def _send_event(self, ws, adapter, chunk):
+        if chunk.event:
+            await self._send_control(ws, adapter, {**chunk.event, "type": "event"})
+
+    async def _handle_event_choice(self, ws, adapter, session, event_id: str, choice_index: int):
+        """Scene choice from the body → ai-core → speak the canned line + push relationship."""
+        if not (session.end_user_id and session.character_id and event_id):
+            return
+        try:
+            resp = await self.orchestrator.client.post(
+                f"/relationship/{session.end_user_id}/{session.character_id}/events/{event_id}/choice",
+                json={"choice_index": choice_index},
+            )
+            if resp.status_code != 200:
+                logger.warning("gateway.event_choice_rejected", status=resp.status_code)
+                return
+            data = resp.json()
+        except Exception:
+            logger.exception("gateway.event_choice_error")
+            return
+        if data.get("relationship"):
+            await self._send_control(ws, adapter, {**data["relationship"], "type": "relationship"})
+        line = data.get("response") or ""
+        nxt = data.get("next_scene") or {}
+        if nxt.get("dialogue"):
+            line = f"{line} {nxt['dialogue']}".strip()
+        if line:
+            await self._send_quick_reply(ws, adapter, session, line)
+
+    async def _handle_set_app_mode(self, ws, adapter, session, app_mode: str):
+        if not (session.end_user_id and session.character_id):
+            return
+        try:
+            resp = await self.orchestrator.client.patch(
+                f"/relationship/{session.end_user_id}/{session.character_id}",
+                json={"app_mode": app_mode},
+            )
+            if resp.status_code == 200:
+                await self._send_control(ws, adapter, {**resp.json(), "type": "relationship"})
+        except Exception:
+            logger.exception("gateway.set_app_mode_error")
+
     async def _push_relationship_snapshot(self, ws, adapter, session) -> None:
         """On connect: tell the body where the relationship stands right now."""
         if not (session.end_user_id and session.character_id):
@@ -748,6 +804,8 @@ class WebSocketServer:
                         await self._send_emotion(ws, adapter, chunk)
                     elif chunk.kind == "relationship":
                         await self._send_relationship(ws, adapter, chunk)
+                    elif chunk.kind == "event":
+                        await self._send_event(ws, adapter, chunk)
 
                     if interrupted:
                         break
@@ -828,6 +886,9 @@ class WebSocketServer:
                         continue
                     if chunk.kind == "relationship":
                         await self._send_relationship(ws, adapter, chunk)
+                        continue
+                    if chunk.kind == "event":
+                        await self._send_event(ws, adapter, chunk)
                         continue
 
                     await pb.send_sentence(chunk.text)
@@ -951,6 +1012,9 @@ class WebSocketServer:
                         continue
                     if chunk.kind == "relationship":
                         await self._send_relationship(ws, adapter, chunk)
+                        continue
+                    if chunk.kind == "event":
+                        await self._send_event(ws, adapter, chunk)
                         continue
 
                     if chunk.kind == "need_vision":
