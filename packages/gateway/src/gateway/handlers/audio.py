@@ -38,6 +38,7 @@ class AudioHandler:
         self._buffers: dict[str, bytearray] = {}  # PCM buffer (for VAD)
         self._raw_opus: dict[str, list[bytes]] = {}  # Raw Opus packets (for reliable ASR)
         self._decoders: dict[str, opuslib.Decoder] = {}
+        self._pcm_sessions: set[str] = set()  # sessions streaming raw PCM16 (no Opus)
         self._vad_states: dict[str, dict] = {}
         # Silero keeps recurrent state inside the model object, so concurrent
         # sessions MUST NOT share one instance — one model per session.
@@ -46,11 +47,20 @@ class AudioHandler:
         self._dashscope_api_key = dashscope_api_key
         self._asr_model = asr_model
 
-    def start_listening(self, session: Session):
-        """Start collecting audio for a session."""
+    def start_listening(self, session: Session, *, pcm: bool = False):
+        """Start collecting audio for a session.
+
+        ``pcm=True``: the body streams raw 16 kHz s16le instead of Opus packets
+        (browsers without WebCodecs — Tauri/WKWebView, Safari).
+        """
         self._buffers[session.session_id] = bytearray()
         self._raw_opus[session.session_id] = []
-        self._decoders[session.session_id] = opuslib.Decoder(16000, 1)
+        self._pcm_sessions.discard(session.session_id)
+        if pcm:
+            self._pcm_sessions.add(session.session_id)
+            self._decoders.pop(session.session_id, None)
+        else:
+            self._decoders[session.session_id] = opuslib.Decoder(16000, 1)
         # Start streaming ASR session
         if self._dashscope_api_key:
             asr = StreamingASR(api_key=self._dashscope_api_key, model=self._asr_model)
@@ -170,19 +180,25 @@ class AudioHandler:
         self._buffers.pop(session.session_id, None)
         self._decoders.pop(session.session_id, None)
         self._vad_states.pop(session.session_id, None)
+        is_pcm = session.session_id in self._pcm_sessions
+        self._pcm_sessions.discard(session.session_id)
 
         if not raw_packets or len(raw_packets) < 5:
             return None
 
-        # Batch decode all Opus packets with a fresh decoder
-        fresh_decoder = opuslib.Decoder(16000, 1)
         pcm_buf = bytearray()
-        for pkt in raw_packets:
-            try:
-                pcm = fresh_decoder.decode(pkt, 960, decode_fec=False)
-                pcm_buf.extend(pcm)
-            except Exception:
-                pass
+        if is_pcm:
+            for pkt in raw_packets:
+                pcm_buf.extend(pkt)
+        else:
+            # Batch decode all Opus packets with a fresh decoder
+            fresh_decoder = opuslib.Decoder(16000, 1)
+            for pkt in raw_packets:
+                try:
+                    pcm = fresh_decoder.decode(pkt, 960, decode_fec=False)
+                    pcm_buf.extend(pcm)
+                except Exception:
+                    pass
 
         if len(pcm_buf) < SILERO_CHUNK_BYTES * 5:
             return None

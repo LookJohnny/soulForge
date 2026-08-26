@@ -25,8 +25,9 @@ class WebAudioAdapter(ProtocolAdapter):
 
     Messages:
     - {"type": "text", "content": "..."} — text input
-    - {"type": "listen", "state": "start|stop"} — audio recording control
-    - Binary frames — raw PCM audio data
+    - {"type": "listen", "state": "start|stop", "format": "opus|pcm16"} — mic control;
+      pcm16 lets WebKit/Tauri bodies (no WebCodecs) stream raw 16 kHz s16le
+    - Binary frames — Opus packets or raw PCM per the negotiated format
     """
 
     name = "web_audio"
@@ -74,7 +75,12 @@ class WebAudioAdapter(ProtocolAdapter):
             return InboundMessage(
                 type=MessageType.CONTROL,
                 device_id="",
-                payload={"action": "listen", "state": msg.get("state", "")},
+                payload={
+                    "action": "listen",
+                    "state": msg.get("state", ""),
+                    # "opus" (WebCodecs, 16 kHz 60 ms packets) | "pcm16" (raw 16 kHz s16le)
+                    "format": msg.get("format", "opus"),
+                },
             )
         elif msg_type == "abort":
             return InboundMessage(

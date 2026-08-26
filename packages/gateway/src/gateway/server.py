@@ -300,7 +300,9 @@ class WebSocketServer:
             if action == "listen":
                 state = msg.payload.get("state", "")
                 if state == "start":
-                    self.audio_handler.start_listening(session)
+                    mic_format = str(msg.payload.get("format", "opus")).lower()
+                    session._mic_pcm = mic_format == "pcm16"
+                    self.audio_handler.start_listening(session, pcm=session._mic_pcm)
                     session._last_audio_time = time.monotonic()
                     logger.info("gateway.listen_start")
                 elif state == "stop":
@@ -384,15 +386,22 @@ class WebSocketServer:
         import struct
 
         try:
-            decoder = getattr(session, "_interrupt_decoder", None)
-            if not decoder:
-                import opuslib
+            if getattr(session, "_mic_pcm", False):
+                pcm = opus_data  # body streams raw PCM16 (no WebCodecs)
+                if not hasattr(session, "_interrupt_count"):
+                    session._interrupt_count = 0
+            else:
+                decoder = getattr(session, "_interrupt_decoder", None)
+                if not decoder:
+                    import opuslib
 
-                session._interrupt_decoder = opuslib.Decoder(16000, 1)
-                decoder = session._interrupt_decoder
-                session._interrupt_count = 0
+                    session._interrupt_decoder = opuslib.Decoder(16000, 1)
+                    decoder = session._interrupt_decoder
+                    session._interrupt_count = 0
 
-            pcm = decoder.decode(opus_data, 960, decode_fec=False)
+                pcm = decoder.decode(opus_data, 960, decode_fec=False)
+            if len(pcm) < 4:
+                return
             samples = struct.unpack(f"<{len(pcm) // 2}h", pcm)
             rms = (sum(s * s for s in samples) / len(samples)) ** 0.5
 

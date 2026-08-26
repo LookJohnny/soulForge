@@ -200,9 +200,7 @@ export class GatewayClient extends EventTarget {
   // ── 上行麦克风（WebCodecs Opus）──────────────────────
   async startMic() {
     if (this.mic) return;
-    if (!('AudioEncoder' in window) || !('MediaStreamTrackProcessor' in window)) {
-      throw new Error('浏览器不支持 WebCodecs 麦克风编码（需 Chrome/Edge）');
-    }
+    const webcodecs = 'AudioEncoder' in window && 'MediaStreamTrackProcessor' in window;
     let stream;
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('no mediaDevices'), { name: 'NotSupportedError' });
@@ -229,6 +227,7 @@ export class GatewayClient extends EventTarget {
     const track = stream.getAudioTracks()[0];
     // 麦克风拔出/系统收回 → 自动停止并通知
     track.onended = () => { if (this.mic) { this.stopMic(); this._emit('error', new Error('麦克风已断开')); } };
+    if (!webcodecs) { await this._startMicPcm(stream, track); return; }
     const sampleRate = track.getSettings().sampleRate || 48000;
     const cfg = { codec: 'opus', sampleRate, numberOfChannels: 1, bitrate: 24000, opus: { frameDuration: 60000 } };
     const sup = await AudioEncoder.isConfigSupported(cfg);
@@ -248,8 +247,8 @@ export class GatewayClient extends EventTarget {
     const processor = new MediaStreamTrackProcessor({ track });
     const reader = processor.readable.getReader();
     this.mic = { stream, track, encoder, reader, sampleRate };
-    this.ws?.send(JSON.stringify({ type: 'listen', state: 'start' }));
-    this._emit('mic', { on: true });
+    this.ws?.send(JSON.stringify({ type: 'listen', state: 'start', format: 'opus' }));
+    this._emit('mic', { on: true, format: 'opus' });
 
     (async () => {
       while (this.mic) {
@@ -268,10 +267,46 @@ export class GatewayClient extends EventTarget {
     })();
   }
 
+  /** 无 WebCodecs（Tauri/WKWebView、Safari）：ScriptProcessor 采集 → 16 kHz PCM16 → gateway。 */
+  async _startMicPcm(stream, track) {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    await ctx.resume().catch(() => {});
+    const src = ctx.createMediaStreamSource(stream);
+    const proc = ctx.createScriptProcessor(2048, 1, 1);
+    const inRate = ctx.sampleRate, outRate = 16000, ratio = inRate / outRate;
+    let carry = new Float32Array(0), acc = [];
+    const FRAME = 960; // 60 ms @ 16 kHz, same cadence as the Opus path
+    proc.onaudioprocess = (e) => {
+      if (!this.mic || this.ws?.readyState !== 1) return;
+      const input = e.inputBuffer.getChannelData(0);
+      const merged = new Float32Array(carry.length + input.length); merged.set(carry); merged.set(input, carry.length);
+      const n = Math.floor(merged.length / ratio);
+      for (let i = 0; i < n; i++) { const p = i * ratio, i0 = Math.floor(p), i1 = Math.min(merged.length - 1, i0 + 1); acc.push(merged[i0] + (merged[i1] - merged[i0]) * (p - i0)); }
+      carry = merged.slice(Math.floor(n * ratio));
+      while (acc.length >= FRAME) {
+        const chunk = acc.splice(0, FRAME);
+        const pcm = new Int16Array(FRAME);
+        for (let i = 0; i < FRAME; i++) { const v = Math.max(-1, Math.min(1, chunk[i])); pcm[i] = v < 0 ? v * 0x8000 : v * 0x7fff; }
+        this.ws.send(pcm.buffer);
+      }
+    };
+    src.connect(proc); proc.connect(ctx.destination); // 部分浏览器不接 destination 不触发
+    this.mic = { stream, track, ctx, proc, src, pcm: true, sampleRate: inRate };
+    this.ws?.send(JSON.stringify({ type: 'listen', state: 'start', format: 'pcm16' }));
+    this._emit('mic', { on: true, format: 'pcm16' });
+  }
+
   stopMic() {
     const m = this.mic;
     if (!m) return;
     this.mic = null;
+    if (m.pcm) {
+      try { m.proc.disconnect(); m.src.disconnect(); m.ctx.close(); } catch { /* noop */ }
+      m.track.stop();
+      this.ws?.send(JSON.stringify({ type: 'listen', state: 'stop' }));
+      this._emit('mic', { on: false });
+      return;
+    }
     try { m.reader.cancel(); } catch { /* noop */ }
     try { m.encoder.close(); } catch { /* noop */ }
     m.track.stop();

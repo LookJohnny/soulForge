@@ -156,3 +156,36 @@ def test_parse_event_chunk_and_web_audio_choice_decode():
         WebAudioAdapter().decode(json.dumps({"type": "set_app_mode", "app_mode": "companion"}))
     )
     assert mode.payload == {"action": "set_app_mode", "app_mode": "companion"}
+
+
+def test_web_audio_listen_carries_mic_format():
+    import asyncio
+
+    from gateway.protocols.web_audio import WebAudioAdapter
+
+    m = asyncio.run(
+        WebAudioAdapter().decode(
+            json.dumps({"type": "listen", "state": "start", "format": "pcm16"})
+        )
+    )
+    assert m.payload == {"action": "listen", "state": "start", "format": "pcm16"}
+    m = asyncio.run(WebAudioAdapter().decode(json.dumps({"type": "listen", "state": "start"})))
+    assert m.payload["format"] == "opus"
+
+
+def test_audio_handler_pcm16_sessions_skip_opus_decode():
+    from types import SimpleNamespace
+
+    from gateway.handlers.audio import AudioHandler
+
+    h = AudioHandler.__new__(AudioHandler)
+    h._buffers, h._raw_opus, h._decoders, h._vad_states = {}, {}, {}, {}
+    h._pcm_sessions, h._asr_sessions, h._vad_models = set(), {}, {}
+    sess = SimpleNamespace(session_id="s1")
+    # bypass Silero/ASR setup: emulate start_listening's bookkeeping for a PCM body
+    h._buffers[sess.session_id] = bytearray()
+    h._raw_opus[sess.session_id] = [b"\x01\x00" * 960] * 6
+    h._pcm_sessions.add(sess.session_id)
+    out = h.stop_listening(sess)
+    assert out == (b"\x01\x00" * 960) * 6  # concatenated verbatim, no Opus decode
+    assert sess.session_id not in h._pcm_sessions
