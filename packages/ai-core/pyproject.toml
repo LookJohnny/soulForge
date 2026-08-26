@@ -22,6 +22,13 @@ dependencies = [
     "tenacity>=9.0",
 ]
 
+[project.optional-dependencies]
+# Local embeddings for companion memory (pgvector). ~95 MB model download on
+# first use: BAAI/bge-small-zh-v1.5. Install: uv sync --all-packages --extra semantic
+semantic = [
+    "sentence-transformers>=3.3",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

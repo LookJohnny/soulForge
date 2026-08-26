@@ -51,6 +51,14 @@ class Settings(BaseSettings):
     asr_model: str = "paraformer-realtime-v2"
     asr_timeout: int = 10  # seconds
 
+    # ─── Semantic memory (pgvector + local embeddings) ─────
+    memory_embedding_enabled: bool = True
+    memory_embedding_backend: str = "sentence_transformers"  # sentence_transformers | fake
+    memory_embedding_model: str = "BAAI/bge-small-zh-v1.5"
+    memory_embedding_dim: int = 512
+    hf_home: str = ""  # HF cache dir (set HF_ENDPOINT for a CN mirror)
+    memory_graph_threshold: float = 0.6
+
     # RAG
     rag_top_k: int = 3
     rag_score_threshold: float = 0.7

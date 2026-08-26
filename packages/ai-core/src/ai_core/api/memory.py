@@ -131,6 +131,27 @@ class CompanionReactionRequest(BaseModel):
     limit: int = Field(default=10, ge=1, le=30)
 
 
+@router.get("/graph")
+async def memory_graph(
+    end_user_id: str = Query(...),
+    character_id: str = Query(...),
+    threshold: float = Query(0.6, ge=0.0, le=1.0),
+    limit: int = Query(200, ge=1, le=500),
+):
+    """Memory graph: nodes = memories, edges = semantic similarity ≥ threshold."""
+    svc = await get_memory_service()
+    return await svc.memory_graph(end_user_id, character_id, threshold=threshold, limit=limit)
+
+
+@router.post("/embed-backfill")
+async def embed_backfill(
+    end_user_id: str | None = Query(None), limit: int = Query(500, ge=1, le=5000)
+):
+    """Embed memory rows that have no vector yet (after enabling the model / migration 007)."""
+    svc = await get_memory_service()
+    return await svc.embed_backfill(end_user_id=end_user_id, limit=limit)
+
+
 @router.post("")
 async def create_memory(req: CreateMemoryRequest):
     svc = await get_memory_service()

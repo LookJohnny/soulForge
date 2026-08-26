@@ -11,7 +11,7 @@ const GW_PORT = process.env.FAKE_GW_PORT ?? '8081';
 const OUT = process.env.SMOKE_OUT ?? 'outputs/live_smoke.png';
 
 const procs = [];
-const start = (args) => { const p = spawn('uv', ['run', 'python', ...args], { stdio: 'ignore' }); procs.push(p); return p; };
+const start = (args) => { const p = spawn('uv', ['run', 'python', ...args], { stdio: 'ignore', env: { ...process.env, AI_CORE_URL: `http://127.0.0.1:${GW_PORT}` } }); procs.push(p); return p; };
 start(['studio/server.py', '--port', STUDIO_PORT]);
 start(['studio/tests/fake_gateway.py', GW_PORT]);
 const cleanup = () => { for (const p of procs) { try { p.kill(); } catch { /* gone */ } } };
@@ -69,6 +69,23 @@ checks.headPos = await page.evaluate(() => window.__live.body.getHeadScreenPos(w
 await page.waitForFunction(() => window.__live.gw.speaking === false, null, { timeout: 10000 });
 checks.idleBackAfterTalk = await page.evaluate(() => !!window.__live.body.idleAction?.isRunning());
 
+// session frame → export enabled, memory graph via studio proxy → fake ai-core
+checks.sessionIds = await page.evaluate(() => window.__live.session);
+checks.exportEnabled = await page.evaluate(() => !document.getElementById('btn-export').disabled);
+await page.click('#btn-memory');
+await page.waitForFunction(() => window.__live.graph.nodes.length > 0, null, { timeout: 8000 }).catch(() => fail('graphNodes', 0));
+checks.graphNodes = await page.evaluate(() => window.__live.graph.nodes.length);
+checks.graphEdges = await page.evaluate(() => window.__live.graph.edges.length);
+checks.nearEvents = await page.evaluate(() => document.getElementById('near-events').textContent);
+// companion toggle round-trips through the gateway (lives in the settings drawer)
+await page.click('#btn-settings');
+await page.check('#opt-companion');
+await page.waitForFunction(() => document.getElementById('hud-stage').textContent.includes('陪伴'), null, { timeout: 5000 }).catch(() => fail('companionToggle', false));
+checks.companionToggle = await page.evaluate(() => document.getElementById('hud-stage').textContent);
+await page.uncheck('#opt-companion');
+await page.click('#btn-settings');
+await page.click('#btn-memory');
+
 // event scene card + choice round trip
 await page.waitForFunction(() => !document.getElementById('event-overlay').classList.contains('hidden'), null, { timeout: 5000 }).catch(() => fail('eventShown', false));
 checks.eventShown = await page.evaluate(() => !document.getElementById('event-overlay').classList.contains('hidden'));
@@ -85,6 +102,7 @@ cleanup();
 
 const ok = errors.length === 0 && checks.modelLoaded && checks.idleAnimated && checks.hudAxes === 6
   && checks.maxViseme > 0.02 && checks.bubble === 'echo: 你好 事件' && checks.eventChoices === 2
-  && ['big_happy', 'warm_smile'].includes(checks.moodKey);
+  && ['big_happy', 'warm_smile'].includes(checks.moodKey)
+  && checks.graphNodes === 4 && checks.exportEnabled && String(checks.companionToggle).includes('陪伴');
 console.log(JSON.stringify({ ok, checks, errors }, null, 1));
 process.exit(ok ? 0 : 1);

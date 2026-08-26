@@ -94,13 +94,27 @@ def get_emotion_engine() -> EmotionEngine:
     return _emotion_engine
 
 
+_embedding_service = None
+
+
+def get_embedding_service():
+    """Local embedding service for semantic memory (lazy model load)."""
+    global _embedding_service
+    if _embedding_service is None:
+        from ai_core.config import settings
+        from ai_core.services.embeddings import build_embedding_service
+
+        _embedding_service = build_embedding_service(settings)
+    return _embedding_service
+
+
 async def get_memory_service() -> MemoryService:
     global _memory_service
     if _memory_service is None:
         pool = await get_pool()
         llm = await get_llm_client()
         cache = get_cache()
-        _memory_service = MemoryService(pool, llm, cache)
+        _memory_service = MemoryService(pool, llm, cache, embedder=get_embedding_service())
     return _memory_service
 
 

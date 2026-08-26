@@ -91,3 +91,71 @@ def test_rank_memory_candidates_penalizes_sensitive_memory_before_policy_filter(
 
     assert ranked[0]["id"] == "safe"
     assert ranked[1]["retrieval_score_parts"]["sensitivity_penalty"] > 0
+
+
+def _mem(id_, content, layer="EPISODIC", **over):
+    from datetime import UTC, datetime
+
+    base = {
+        "id": id_,
+        "memory_layer": layer,
+        "memory_table": f"{layer.lower()}_memories",
+        "content": content,
+        "importance_score": 5,
+        "confidence_score": 0.8,
+        "retrieval_weight": 0.6,
+        "timestamp": datetime(2026, 8, 26, 10, tzinfo=UTC).isoformat(),
+        "sensitivity_level": "LOW",
+    }
+    base.update(over)
+    return base
+
+
+def test_vector_similarity_overrides_lexical_relevance():
+    from datetime import UTC, datetime
+
+    now = datetime(2026, 8, 26, 12, tzinfo=UTC)
+    # lexically unrelated wording but semantically close (vector_sim high)
+    semantic = _mem("sem", "傍晚在沙滩看太阳落下去", vector_sim=0.91)
+    lexical = _mem("lex", "海边日落海边日落", vector_sim=0.2)
+    ranked = rank_memory_candidates([lexical, semantic], query="海边日落", limit=2, now=now)
+    assert ranked[0]["id"] == "sem"
+    assert ranked[0]["retrieval_score_parts"]["relevance_source"] == "vector"
+    # rows without vector_sim still get lexical relevance
+    mixed = rank_memory_candidates([_mem("a", "海边日落"), semantic], query="海边日落", now=now)
+    assert {m["retrieval_score_parts"]["relevance_source"] for m in mixed} == {"vector", "lexical"}
+
+
+def test_recall_cue_boosts_episodic_layer():
+    from datetime import UTC, datetime
+
+    now = datetime(2026, 8, 26, 12, tzinfo=UTC)
+    ep = _mem("ep", "去过游乐园", layer="EPISODIC")
+    prof = _mem("pf", "去过游乐园", layer="PROFILE", memory_table="profile_memories")
+    plain = rank_memory_candidates([prof, ep], query="游乐园", now=now)
+    recall = rank_memory_candidates([prof, ep], query="还记得游乐园吗", now=now)
+    assert plain[0]["retrieval_score_parts"]["recall_boost"] == 0
+    assert recall[0]["id"] == "ep" and recall[0]["retrieval_score_parts"]["recall_boost"] == 0.15
+
+
+def test_build_memory_graph_vector_and_lexical_fallback():
+    from ai_core.services.embeddings import FakeEmbedder
+    from ai_core.services.memory import build_memory_graph
+
+    emb = FakeEmbedder(64)
+    texts = ["喜欢喝抹茶拿铁", "抹茶拿铁真好喝", "明天有一场重要考试"]
+    vecs = emb.encode(texts)
+    rows = [
+        {"id": f"m{i}", "layer": "PROFILE", "content": t, "importance": 5, "embedding": v}
+        for i, (t, v) in enumerate(zip(texts, vecs, strict=False))
+    ]
+    g = build_memory_graph(rows, threshold=0.3)
+    assert len(g["nodes"]) == 3
+    pairs = {(e["a"], e["b"]) for e in g["edges"]}
+    assert ("m0", "m1") in pairs  # matcha ↔ matcha
+    assert ("m0", "m2") not in pairs  # matcha ↔ exam
+    # no embeddings → lexical fallback still connects the matcha pair
+    for r in rows:
+        r["embedding"] = None
+    g2 = build_memory_graph(rows, threshold=0.6)
+    assert any({e["a"], e["b"]} == {"m0", "m1"} for e in g2["edges"])

@@ -13,16 +13,20 @@ import json
 import math
 import re
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import asyncpg
 import structlog
 
 from ai_core.services.cache import CacheService
+from ai_core.services.embeddings import parse_vector, vector_literal
 from ai_core.services.llm_client import LLMClient
 from ai_core.services.memory_policy import MemoryPolicyEngine
 
 logger = structlog.get_logger()
+
+if TYPE_CHECKING:
+    from ai_core.services.embeddings import EmbeddingService
 
 MEMORY_TYPES = ("TOPIC", "PREFERENCE", "EVENT")
 MEMORY_LAYERS = ("PROFILE", "EPISODIC", "SEMANTIC", "RELATIONAL")
@@ -124,6 +128,17 @@ _LEGACY_MEMORY_FORMAT = {
 
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False)
+
+
+def _json_field(raw) -> dict:
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
 
 
 def _stringify_row(row: asyncpg.Record) -> dict:
@@ -228,6 +243,66 @@ def _relationship_bonus(memory: dict, context: dict | None = None) -> float:
     return 0.0
 
 
+# "Remember when…" cues: boost episodic memories so recall queries surface events.
+_RECALL_CUES = ("还记得", "记得吗", "记不记得", "上次", "那次", "之前说", "以前", "remember")
+
+
+def _recall_boost(query: str, memory: dict) -> float:
+    if not query or memory.get("memory_layer") != "EPISODIC":
+        return 0.0
+    return 0.15 if any(cue in query for cue in _RECALL_CUES) else 0.0
+
+
+def build_memory_graph(rows: list[dict], threshold: float = 0.6) -> dict:
+    """Pairwise cosine over embedded rows (numpy when available).
+
+    Rows without an embedding fall back to lexical overlap so the graph still
+    renders on databases that have not run migration 007.
+    """
+    nodes = [
+        {
+            "id": r["id"],
+            "layer": r.get("layer"),
+            "content": r.get("content", ""),
+            "importance": int(r.get("importance", 3)),
+            "usage_count": int(r.get("usage_count", 0)),
+            "created_at": r.get("created_at"),
+            "last_used_at": r.get("last_used_at"),
+        }
+        for r in rows
+    ]
+    edges: list[dict] = []
+    vecs = [r.get("embedding") for r in rows]
+    embedded = [i for i, v in enumerate(vecs) if v]
+    if len(embedded) >= 2:
+        try:
+            import numpy as np
+
+            mat = np.asarray([vecs[i] for i in embedded], dtype=float)
+            mat /= np.linalg.norm(mat, axis=1, keepdims=True) + 1e-9
+            sims = mat @ mat.T
+            for a in range(len(embedded)):
+                for b in range(a + 1, len(embedded)):
+                    w = float(sims[a, b])
+                    if w >= threshold:
+                        edges.append(
+                            {
+                                "a": rows[embedded[a]]["id"],
+                                "b": rows[embedded[b]]["id"],
+                                "w": round(w, 4),
+                            }
+                        )
+        except Exception:  # numpy missing or malformed vectors → lexical below
+            embedded = []
+    if len(embedded) < 2:
+        for a in range(len(rows)):
+            for b in range(a + 1, len(rows)):
+                w = _lexical_relevance(rows[a].get("content", ""), rows[b].get("content", ""))
+                if w >= max(0.3, threshold - 0.3):
+                    edges.append({"a": rows[a]["id"], "b": rows[b]["id"], "w": round(w, 4)})
+    return {"nodes": nodes, "edges": edges}
+
+
 def rank_memory_candidates(
     candidates: list[dict],
     query: str = "",
@@ -250,7 +325,12 @@ def rank_memory_candidates(
     importances = [
         max(1.0, min(10.0, float(item.get("importance_score") or 3))) / 10 for item in candidates
     ]
-    relevances = [_lexical_relevance(query, item.get("content", "")) for item in candidates]
+    relevances = [
+        float(item["vector_sim"])
+        if item.get("vector_sim") is not None
+        else _lexical_relevance(query, item.get("content", ""))
+        for item in candidates
+    ]
 
     recency_scores = _normalize(recencies)
     importance_scores = _normalize(importances)
@@ -265,6 +345,7 @@ def rank_memory_candidates(
             + importance_scores[index]
             + relevance_scores[index]
             + _relationship_bonus(memory, context)
+            + _recall_boost(query, memory)
             + min(0.1, retrieval_weight * 0.05)
             + min(0.1, confidence * 0.05)
             - _sensitivity_penalty(memory)
@@ -276,7 +357,9 @@ def rank_memory_candidates(
             "importance": round(importance_scores[index], 4),
             "relevance": round(relevance_scores[index], 4),
             "relationship_bonus": round(_relationship_bonus(memory, context), 4),
+            "recall_boost": round(_recall_boost(query, memory), 4),
             "sensitivity_penalty": round(_sensitivity_penalty(memory), 4),
+            "relevance_source": "vector" if memory.get("vector_sim") is not None else "lexical",
         }
         ranked.append(ranked_item)
 
@@ -370,14 +453,247 @@ def build_reflection_proposals(
 class MemoryService:
     """Extract, store, retrieve, and govern companion memories."""
 
-    def __init__(self, pool: asyncpg.Pool, llm: LLMClient, cache: CacheService):
+    def __init__(
+        self,
+        pool: asyncpg.Pool,
+        llm: LLMClient,
+        cache: CacheService,
+        embedder: "EmbeddingService | None" = None,
+    ):
         self.pool = pool
         self.llm = llm
         self.cache = cache
         self.policy = MemoryPolicyEngine()
+        self.embedder = embedder
         self._new_schema_available: bool | None = None
         self._reflection_schema_available: bool | None = None
         self._raw_event_schema_available: bool | None = None
+        self._vector_schema_available: bool | None = None
+
+    # ── semantic (pgvector) support ──────────────
+
+    async def _has_vector_schema(self) -> bool:
+        """True when migration 007 added `embedding vector(...)` columns."""
+        if self._vector_schema_available is not None:
+            return self._vector_schema_available
+        try:
+            async with self.pool.acquire() as conn:
+                exists = await conn.fetchval(
+                    """SELECT 1 FROM information_schema.columns
+                       WHERE table_name = 'episodic_memories' AND column_name = 'embedding'"""
+                )
+            self._vector_schema_available = bool(exists)
+        except Exception as e:
+            logger.warning("memory.vector_schema_check_failed", error=str(e))
+            self._vector_schema_available = False
+        return self._vector_schema_available
+
+    async def _vector_ready(self) -> bool:
+        return bool(self.embedder and self.embedder.available) and await self._has_vector_schema()
+
+    async def _store_embedding(
+        self, conn: asyncpg.Connection, table: str, memory_id: str, content: str
+    ) -> None:
+        """Best-effort: attach an embedding to a freshly written row."""
+        if not await self._vector_ready():
+            return
+        try:
+            vec = await self.embedder.embed_one(content)
+            if vec is None:
+                return
+            await conn.execute(
+                f"UPDATE {table} SET embedding = $1::vector, embedding_model = $2 WHERE id = $3",
+                vector_literal(vec),
+                self.embedder.model_name,
+                memory_id,
+            )
+        except Exception:
+            logger.exception("memory.embedding_store_failed", table=table)
+
+    async def _fetch_vector_candidates(
+        self, end_user_id: str, character_id: str, query: str, limit: int
+    ) -> dict[str, float]:
+        """id → cosine similarity for the nearest rows across the four layers."""
+        if not query or not await self._vector_ready():
+            return {}
+        qvec = await self.embedder.embed_one(query)
+        if qvec is None:
+            return {}
+        sims: dict[str, float] = {}
+        lit = vector_literal(qvec)
+        async with self.pool.acquire() as conn:
+            for table in _LAYER_TABLES.values():
+                try:
+                    rows = await conn.fetch(
+                        f"""SELECT id, 1 - (embedding <=> $3::vector) AS sim
+                            FROM {table}
+                            WHERE user_id = $1
+                              AND (character_id = $2 OR character_id IS NULL)
+                              AND deleted_at IS NULL
+                              AND embedding IS NOT NULL
+                            ORDER BY embedding <=> $3::vector
+                            LIMIT $4""",
+                        end_user_id,
+                        character_id,
+                        lit,
+                        max(2, limit),
+                    )
+                except Exception:
+                    logger.exception("memory.vector_query_failed", table=table)
+                    continue
+                for r in rows:
+                    sims[str(r["id"])] = float(r["sim"])
+        return sims
+
+    async def embed_backfill(self, end_user_id: str | None = None, limit: int = 500) -> dict:
+        """Embed rows that have no vector yet (after enabling the model or migrating)."""
+        if not await self._vector_ready():
+            return {"embedded": 0, "reason": "vector memory unavailable"}
+        done = 0
+        async with self.pool.acquire() as conn:
+            for table in _LAYER_TABLES.values():
+                where = "embedding IS NULL AND deleted_at IS NULL"
+                args: list = [limit]
+                if end_user_id:
+                    where += " AND user_id = $2"
+                    args.append(end_user_id)
+                rows = await conn.fetch(
+                    f"SELECT id, content FROM {table} WHERE {where} LIMIT $1",
+                    *args,
+                )
+                if not rows:
+                    continue
+                vecs = await self.embedder.embed([r["content"] for r in rows])
+                for r, v in zip(rows, vecs, strict=False):
+                    if v is None:
+                        continue
+                    await conn.execute(
+                        f"UPDATE {table} SET embedding = $1::vector, embedding_model = $2 "
+                        "WHERE id = $3",
+                        vector_literal(v),
+                        self.embedder.model_name,
+                        r["id"],
+                    )
+                    done += 1
+        return {"embedded": done, "model": self.embedder.model_name}
+
+    async def export_memories(self, end_user_id: str, character_id: str) -> list[dict]:
+        """Portable rows for a companion save file (no ids, no embeddings)."""
+        if not end_user_id or not await self._has_new_schema():
+            return []
+        out: list[dict] = []
+        async with self.pool.acquire() as conn:
+            for layer, table in _LAYER_TABLES.items():
+                time_col = "created_at" if table == "episodic_memories" else "updated_at"
+                recs = await conn.fetch(
+                    f"""SELECT content, confidence_score, sensitivity_level::TEXT,
+                               permission_level::TEXT, importance_score, raw_source,
+                               {time_col} AS ts
+                        FROM {table}
+                        WHERE user_id = $1 AND (character_id = $2 OR character_id IS NULL)
+                          AND deleted_at IS NULL
+                        ORDER BY {time_col}""",
+                    end_user_id,
+                    character_id,
+                )
+                for r in recs:
+                    out.append(
+                        {
+                            "memory_type": layer,
+                            "content": r["content"],
+                            "confidence_score": float(r["confidence_score"] or 0.8),
+                            "sensitivity_level": r["sensitivity_level"],
+                            "permission_level": r["permission_level"],
+                            "importance_score": int(r["importance_score"] or 3),
+                            "raw_source": _json_field(r["raw_source"]),
+                            "created_at": r["ts"].isoformat() if r["ts"] else None,
+                        }
+                    )
+        return out
+
+    async def import_memories(
+        self, end_user_id: str, character_id: str, rows: list[dict], *, replace: bool = False
+    ) -> dict:
+        """Restore rows from a save file (embeddings regenerate on insert)."""
+        if not end_user_id or not await self._has_new_schema():
+            return {"imported": 0, "reason": "memory schema unavailable"}
+        if replace:
+            async with self.pool.acquire() as conn:
+                for table in _LAYER_TABLES.values():
+                    await conn.execute(
+                        f"""UPDATE {table} SET deleted_at = now()
+                            WHERE user_id = $1 AND (character_id = $2 OR character_id IS NULL)
+                              AND deleted_at IS NULL""",
+                        end_user_id,
+                        character_id,
+                    )
+        imported = 0
+        for row in rows:
+            content = str(row.get("content") or "").strip()
+            layer = str(row.get("memory_type") or "EPISODIC").upper()
+            if not content or layer not in _LAYER_TABLES:
+                continue
+            try:
+                await self.create_memory(
+                    {
+                        "user_id": end_user_id,
+                        "character_id": character_id,
+                        "memory_type": layer,
+                        "content": content,
+                        "confidence_score": float(row.get("confidence_score", 0.8)),
+                        "sensitivity_level": row.get("sensitivity_level"),
+                        "permission_level": row.get("permission_level", "AUTO"),
+                        "importance_score": int(row.get("importance_score") or 0) or None,
+                        "raw_source": row.get("raw_source") or {"imported": True},
+                    }
+                )
+                imported += 1
+            except Exception:
+                logger.exception("memory.import_row_failed")
+        return {"imported": imported}
+
+    async def memory_graph(
+        self, end_user_id: str, character_id: str, threshold: float = 0.6, limit: int = 200
+    ) -> dict:
+        """Nodes = memories, edges = cosine similarity ≥ threshold (aikeya memory graph)."""
+        if not end_user_id or not await self._has_new_schema():
+            return {"nodes": [], "edges": [], "source": "unavailable"}
+        vector_ok = await self._has_vector_schema()
+        rows: list[dict] = []
+        async with self.pool.acquire() as conn:
+            for layer, table in _LAYER_TABLES.items():
+                time_col = "created_at" if table == "episodic_memories" else "updated_at"
+                emb_col = "embedding::text AS embedding" if vector_ok else "NULL::TEXT AS embedding"
+                recs = await conn.fetch(
+                    f"""SELECT id, content, importance_score, usage_count, last_used_at,
+                               {time_col} AS ts, {emb_col}
+                        FROM {table}
+                        WHERE user_id = $1 AND (character_id = $2 OR character_id IS NULL)
+                          AND deleted_at IS NULL AND permission_level <> 'DENIED'
+                        ORDER BY importance_score DESC, {time_col} DESC
+                        LIMIT $3""",
+                    end_user_id,
+                    character_id,
+                    limit,
+                )
+                for r in recs:
+                    rows.append(
+                        {
+                            "id": str(r["id"]),
+                            "layer": layer,
+                            "content": r["content"],
+                            "importance": int(r["importance_score"] or 3),
+                            "usage_count": int(r["usage_count"] or 0),
+                            "last_used_at": r["last_used_at"].isoformat()
+                            if r["last_used_at"]
+                            else None,
+                            "created_at": r["ts"].isoformat() if r["ts"] else None,
+                            "embedding": parse_vector(r["embedding"]),
+                        }
+                    )
+        graph = build_memory_graph(rows[:limit], threshold=threshold)
+        graph["source"] = "vector" if vector_ok else "lexical"
+        return graph
 
     async def _has_new_schema(self) -> bool:
         if self._new_schema_available is not None:
@@ -580,12 +896,61 @@ class MemoryService:
             )
             candidates.extend(_stringify_row(row) for row in rule_rows)
 
+        # Semantic neighbours: attach cosine similarity to rows we already have
+        # and pull in nearest rows the weight-ordered fetch missed.
+        sims = await self._fetch_vector_candidates(end_user_id, character_id, query, fetch_limit)
+        if sims:
+            seen = {str(c.get("id")) for c in candidates}
+            for c in candidates:
+                if str(c.get("id")) in sims:
+                    c["vector_sim"] = sims[str(c["id"])]
+            missing = [mid for mid in sims if mid not in seen]
+            if missing:
+                candidates.extend(await self._fetch_rows_by_id(end_user_id, missing, sims))
+
         return rank_memory_candidates(
             candidates,
             query=query,
             context=context,
             limit=max(limit * 2, limit),
         )
+
+    async def _fetch_rows_by_id(
+        self, end_user_id: str, ids: list[str], sims: dict[str, float]
+    ) -> list[dict]:
+        out: list[dict] = []
+        async with self.pool.acquire() as conn:
+            for layer, table in _LAYER_TABLES.items():
+                time_col = "created_at" if table == "episodic_memories" else "updated_at"
+                extra_cols = (
+                    "relation_axis"
+                    if table == "relational_memories"
+                    else "NULL::TEXT AS relation_axis"
+                )
+                rows = await conn.fetch(
+                    f"""SELECT id, $1::UUID AS user_id,
+                              $3::TEXT AS memory_table, $4::TEXT AS memory_layer,
+                              content, confidence_score, emotional_valence,
+                              sensitivity_level::TEXT, permission_level::TEXT,
+                              retrieval_weight, importance_score, decay_rate,
+                              last_used_at, usage_count, timestamp, created_at,
+                              {time_col} AS updated_at,
+                              conflict_status::TEXT, can_surface_directly, implicit_only,
+                              requires_confirmation, frozen_at, deleted_at,
+                              character_id, {extra_cols}
+                       FROM {table}
+                       WHERE user_id = $1 AND id = ANY($2::uuid[])
+                         AND deleted_at IS NULL AND permission_level <> 'DENIED'""",
+                    end_user_id,
+                    ids,
+                    table,
+                    layer,
+                )
+                for row in rows:
+                    item = _stringify_row(row)
+                    item["vector_sim"] = sims.get(str(item.get("id")))
+                    out.append(item)
+        return out
 
     def _to_prompt_memory(self, memory: dict, use_mode: str) -> dict:
         layer = memory.get("memory_layer", "EPISODIC")
@@ -917,7 +1282,9 @@ class MemoryService:
             sensitivity,
             importance,
         )
-        return str(row["id"])
+        memory_id = str(row["id"])
+        await self._store_embedding(conn, "profile_memories", memory_id, content)
+        return memory_id
 
     async def _insert_episodic_memory(
         self,
@@ -951,7 +1318,9 @@ class MemoryService:
             sensitivity,
             importance,
         )
-        return str(row["id"])
+        memory_id = str(row["id"])
+        await self._store_embedding(conn, "episodic_memories", memory_id, content)
+        return memory_id
 
     async def _insert_relational_memory(
         self,
@@ -981,7 +1350,9 @@ class MemoryService:
             sensitivity,
             importance,
         )
-        return str(row["id"])
+        memory_id = str(row["id"])
+        await self._store_embedding(conn, "relational_memories", memory_id, content)
+        return memory_id
 
     async def _insert_pending_confirmation(
         self,
@@ -1206,6 +1577,7 @@ class MemoryService:
                 )
                 memory_id = str(row["id"])
                 table = "semantic_memories"
+                await self._store_embedding(conn, table, memory_id, content)
             else:
                 memory_id = await self._insert_episodic_memory(
                     conn,

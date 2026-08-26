@@ -1,7 +1,7 @@
 services:
   # ─── PostgreSQL ──────────────────────────────
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: soulforge-postgres
     restart: unless-stopped
     ports:

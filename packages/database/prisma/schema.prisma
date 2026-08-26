@@ -1,10 +1,12 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 // ─── Enums ─────────────────────────────────────────
@@ -568,6 +570,9 @@ model ProfileMemory {
   user      EndUser    @relation(fields: [userId], references: [id])
   character Character? @relation(fields: [characterId], references: [id])
 
+  embedding      Unsupported("vector(512)")?
+  embeddingModel String? @map("embedding_model")
+
   @@unique([userId, characterId, key])
   @@index([userId, characterId])
   @@index([deletedAt])
@@ -610,6 +615,9 @@ model EpisodicMemory {
   character Character? @relation(fields: [characterId], references: [id])
   device    Device?    @relation(fields: [deviceId], references: [id])
 
+  embedding      Unsupported("vector(512)")?
+  embeddingModel String? @map("embedding_model")
+
   @@index([userId, characterId])
   @@index([createdAt])
   @@index([deletedAt])
@@ -648,6 +656,9 @@ model SemanticMemory {
   user      EndUser    @relation(fields: [userId], references: [id])
   character Character? @relation(fields: [characterId], references: [id])
 
+  embedding      Unsupported("vector(512)")?
+  embeddingModel String? @map("embedding_model")
+
   @@index([userId, characterId])
   @@index([deletedAt])
   @@map("semantic_memories")
@@ -684,6 +695,9 @@ model RelationalMemory {
 
   user      EndUser    @relation(fields: [userId], references: [id])
   character Character? @relation(fields: [characterId], references: [id])
+
+  embedding      Unsupported("vector(512)")?
+  embeddingModel String? @map("embedding_model")
 
   @@index([userId, characterId])
   @@index([relationAxis])

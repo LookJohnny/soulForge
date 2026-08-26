@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { VrmBody } from '/studio/lib/vrm_body.js';
 import { GatewayClient } from '/studio/lib/gateway_client.js';
+import { MemoryGraph } from '/studio/lib/memory_graph.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -171,6 +172,52 @@ function showEvent(ev) {
   if (!(sc.choices ?? []).length) setTimeout(() => box.classList.add('hidden'), 6000);
 }
 
+// ── ai-core 数据（经 studio 代理）────────────────────
+const session = { end_user_id: null, character_id: null };
+const core = {
+  async get(path) { const r = await fetch('/api/core/' + path); if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? r.statusText); return r.json(); },
+  async send(method, path, body) { const r = await fetch('/api/core/' + path, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }); if (!r.ok) throw new Error(r.statusText); return r.json(); },
+};
+const graph = new MemoryGraph($('memory-canvas'));
+async function refreshMemoryGraph() {
+  if (!session.end_user_id) { $('memory-hint').textContent = '连接后显示（需 ai-core）'; return; }
+  try {
+    const g = await core.get(`memory/graph?end_user_id=${session.end_user_id}&character_id=${session.character_id}`);
+    graph.setData(g);
+    $('memory-hint').classList.toggle('hidden', g.nodes.length > 0);
+    $('memory-stats').textContent = `${g.nodes.length} 条记忆 · ${g.edges.length} 条关联 · ${g.source ?? ''}`;
+  } catch (e) { $('memory-hint').textContent = '记忆图不可用: ' + e.message; $('memory-hint').classList.remove('hidden'); }
+}
+async function refreshNearEvents() {
+  if (!session.end_user_id) return;
+  try {
+    const { near } = await core.get(`relationship/${session.end_user_id}/${session.character_id}/events/near`);
+    $('near-events').textContent = near.length ? '快要发生：' + near.slice(0, 3).map((n) => `${n.name} ${n.progress}%`).join(' · ') : '';
+  } catch { /* optional */ }
+}
+$('btn-memory-refresh').onclick = refreshMemoryGraph;
+$('opt-companion').onchange = () => gw?.send({ type: 'set_app_mode', app_mode: $('opt-companion').checked ? 'companion' : 'dating_sim' });
+$('btn-export').onclick = async () => {
+  try {
+    const data = await core.get(`relationship/${session.end_user_id}/${session.character_id}/export`);
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `soulforge-save-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+    toast('存档已导出');
+  } catch (e) { toast('导出失败: ' + e.message); }
+};
+$('btn-import').onclick = () => $('file-import').click();
+$('file-import').onchange = async () => {
+  const f = $('file-import').files[0]; if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    const mode = confirm('覆盖当前进度？（取消 = 合并）') ? 'replace' : 'merge';
+    const r = await core.send('POST', `relationship/${session.end_user_id}/${session.character_id}/import`, { ...data, mode });
+    if (r.relationship) renderRelationship(r.relationship);
+    toast(`已导入（${mode}）`); refreshMemoryGraph();
+  } catch (e) { toast('导入失败: ' + e.message); }
+  $('file-import').value = '';
+};
+
 // ── Gateway ───────────────────────────────────────────
 let gw = null;
 async function connect() {
@@ -181,9 +228,16 @@ async function connect() {
   gw.addEventListener('close', () => { $('status').textContent = '连接断开'; $('hud-stage').textContent = '未连接'; $('mic').classList.remove('on'); body.setAudioAnalyser(null); });
   gw.addEventListener('error', (e) => { const m = e.detail?.message ?? String(e.detail); log('⚠ ' + m, 'sys'); toast('⚠ ' + m); });
   gw.addEventListener('sentence', (e) => { log(e.detail.text); showBubble(e.detail.text); });
-  gw.addEventListener('speaking', (e) => { body.setSpeaking(e.detail.speaking); if (!e.detail.speaking) bubbleUntil = performance.now() + 2500; });
+  gw.addEventListener('speaking', (e) => { body.setSpeaking(e.detail.speaking); if (!e.detail.speaking) { bubbleUntil = performance.now() + 2500; setTimeout(() => { refreshMemoryGraph(); refreshNearEvents(); }, 4000); } });
   gw.addEventListener('emotion', (e) => { body.setPad(e.detail.pad); renderMood(e.detail); padUI(); });
-  gw.addEventListener('control:relationship', (e) => renderRelationship(e.detail));
+  gw.addEventListener('control:session', (e) => {
+    session.end_user_id = e.detail.end_user_id; session.character_id = e.detail.character_id;
+    if (e.detail.character_name) $('hud-name').textContent = e.detail.character_name;
+    const ok = !!(session.end_user_id && session.character_id);
+    $('btn-export').disabled = !ok; $('btn-import').disabled = !ok;
+    if (ok) { refreshMemoryGraph(); refreshNearEvents(); }
+  });
+  gw.addEventListener('control:relationship', (e) => { renderRelationship(e.detail); $('opt-companion').checked = e.detail.app_mode === 'companion'; });
   gw.addEventListener('control:event', (e) => showEvent(e.detail));
   gw.addEventListener('mic', (e) => $('mic').classList.toggle('on', e.detail.on));
   try { await gw.ensureAudio(); await gw.connect(); }
@@ -227,4 +281,4 @@ loadAssets().then(() => { if (params.get('autoconnect') !== '0') connect(); });
 animate();
 
 // 供 Playwright 冒烟测试与控制台调试
-window.__live = { body, camera, get gw() { return gw; }, connect, logs, renderRelationship, renderMood, showEvent };
+window.__live = { body, camera, get gw() { return gw; }, connect, logs, renderRelationship, renderMood, showEvent, session, graph, refreshMemoryGraph };

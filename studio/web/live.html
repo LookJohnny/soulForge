@@ -40,8 +40,9 @@
   <!-- 记忆图面板（Phase 5 填充） -->
   <aside id="memory-panel" class="panel hidden">
     <header><b>记忆图</b><button class="close" data-close="memory-panel">×</button></header>
-    <canvas id="memory-canvas"></canvas>
-    <p class="muted" id="memory-hint">连接 ai-core 后显示</p>
+    <canvas id="memory-canvas" width="292" height="260"></canvas>
+    <p class="muted" id="memory-hint">连接后显示（需 ai-core）</p>
+    <div class="row"><button id="btn-memory-refresh">刷新</button><span class="muted" id="memory-stats"></span></div>
   </aside>
 
   <!-- 设置抽屉 -->
@@ -51,7 +52,9 @@
     <label>模型<select id="model"></select></label>
     <label>动作<select id="anim"><option value="">（一次性动作）</option></select></label>
     <label class="row"><input id="opt-idle" type="checkbox" checked /> 使用 idle 动捕片段</label>
-    <div class="row"><button id="connect">重新连接</button><button id="btn-export" disabled>导出存档</button></div>
+    <label class="row"><input id="opt-companion" type="checkbox" /> 陪伴模式（锁定关系轴，不走感情线）</label>
+    <div class="row"><button id="connect">重新连接</button><button id="btn-export" disabled>导出存档</button><label class="row" style="margin:0"><input id="file-import" type="file" accept="application/json" hidden /><button type="button" id="btn-import" disabled>导入</button></label></div>
+    <p class="muted" id="near-events"></p>
     <p class="muted" id="status">未连接</p>
   </aside>
 

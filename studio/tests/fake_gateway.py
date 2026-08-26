@@ -82,7 +82,31 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
                     "protocol": "web_audio",
                 }
             )
+            await ws.send_json(
+                {
+                    "type": "control",
+                    "payload": {
+                        "type": "session",
+                        "session_id": "fake",
+                        "end_user_id": "u-1",
+                        "character_id": "c-1",
+                        "character_name": "小星",
+                    },
+                }
+            )
             await ws.send_json({"type": "control", "payload": RELATIONSHIP})
+        elif t == "set_app_mode":
+            mode = m.get("app_mode", "dating_sim")
+            await ws.send_json(
+                {
+                    "type": "control",
+                    "payload": {
+                        **RELATIONSHIP,
+                        "app_mode": mode,
+                        "stage": "COMPANION" if mode == "companion" else "FRIEND",
+                    },
+                }
+            )
         elif t == "text":
             content = m.get("content", "")
             await ws.send_json(
@@ -131,9 +155,79 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
     return ws
 
 
+# ── fake ai-core (what studio's /api/core proxy talks to) ──
+GRAPH = {
+    "nodes": [
+        {
+            "id": "m1",
+            "layer": "PROFILE",
+            "content": "喜欢喝抹茶拿铁",
+            "importance": 6,
+            "created_at": "2026-08-20T10:00:00+00:00",
+        },
+        {
+            "id": "m2",
+            "layer": "EPISODIC",
+            "content": "上周去了海边看日落",
+            "importance": 8,
+            "created_at": "2026-08-24T10:00:00+00:00",
+        },
+        {
+            "id": "m3",
+            "layer": "EPISODIC",
+            "content": "考试前很紧张",
+            "importance": 5,
+            "created_at": "2026-06-01T10:00:00+00:00",
+        },
+        {
+            "id": "m4",
+            "layer": "RELATIONAL",
+            "content": "难过时希望被安静陪着",
+            "importance": 9,
+            "created_at": "2026-08-25T10:00:00+00:00",
+        },
+    ],
+    "edges": [{"a": "m2", "b": "m4", "w": 0.72}, {"a": "m1", "b": "m2", "w": 0.61}],
+    "source": "vector",
+}
+
+
+async def http_graph(_request: web.Request) -> web.Response:
+    return web.json_response(GRAPH)
+
+
+async def http_near(_request: web.Request) -> web.Response:
+    return web.json_response(
+        {
+            "near": [
+                {
+                    "event_id": "shared_vulnerability",
+                    "name": "彼此的软肋",
+                    "progress": 66,
+                    "missing": ["已经历「first_deep_conversation」"],
+                }
+            ]
+        }
+    )
+
+
+async def http_export(request: web.Request) -> web.Response:
+    return web.json_response(
+        {
+            "version": 1,
+            "relationship": RELATIONSHIP["axes"],
+            "events": [],
+            "memories": GRAPH["nodes"],
+        }
+    )
+
+
 def main() -> None:
     app = web.Application()
     app.router.add_get("/ws", ws_handler)
+    app.router.add_get("/memory/graph", http_graph)
+    app.router.add_get("/relationship/{u}/{c}/events/near", http_near)
+    app.router.add_get("/relationship/{u}/{c}/export", http_export)
     web.run_app(app, host="127.0.0.1", port=PORT, print=None)
 
 

@@ -46,6 +46,15 @@ uv run python studio/server.py --port 8899 && open http://127.0.0.1:8899/live
   头部投影气泡；渲染循环内 resize；`utsuwa.vrm` 默认模型
 - 页面即完整陪伴应用壳：关系 HUD（`control:relationship`）、情绪与原因、事件场景卡
   （`control:event` → 回传 `event_choice`）、记忆图面板（等 ai-core 接口）、设置抽屉
+- **关系 / 情绪 / 事件 / 记忆图**（ai-core 侧 Phase 2–5）：gateway 每轮推
+  `relationship`（5 轴 + 阶段 + delta）、`emotion`（PAD + 原因）、`event`（场景卡，选择经
+  `event_choice` 回传，gateway 用快速回复路径把台词念出来）；连接时推 `session`
+  （end_user_id / character_id），页面据此经 studio 代理 `/api/core/<path>` 拉
+  `memory/graph`、`relationship/.../events/near`、`export` / `import`。代理目标由
+  `AI_CORE_URL`（默认 `http://127.0.0.1:8100`）与 `SERVICE_TOKEN` 决定
+- 语义记忆需要 `pgvector/pgvector:pg16` 镜像 + 迁移 007 + `uv sync --all-packages --extra semantic`
+  （首次使用下载 BAAI/bge-small-zh-v1.5，约 95 MB；`HF_ENDPOINT` 可指向国内镜像）；
+  缺任一项时自动退回字符重叠检索，记忆图退回词法边
 - 冒烟测试：`pnpm test:studio`（自起 studio + `studio/tests/fake_gateway.py`，Playwright
   无头 Chromium 断言模型/idle/口型/气泡/HUD/事件卡，截图到 `outputs/live_smoke.png`）
 

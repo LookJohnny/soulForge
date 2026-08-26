@@ -62,6 +62,8 @@ def load_dotenv_key(name: str) -> str:
     return ""
 
 
+AI_CORE_URL = (load_dotenv_key("AI_CORE_URL") or "http://127.0.0.1:8100").rstrip("/")
+AI_CORE_TOKEN = load_dotenv_key("SERVICE_TOKEN")
 FISH_KEY = load_dotenv_key("FISH_AUDIO_API_KEY")
 FISH_MODEL = load_dotenv_key("FISH_AUDIO_MODEL") or "s1"
 
@@ -585,6 +587,42 @@ async def index(_request: web.Request) -> web.FileResponse:
     return web.FileResponse(STUDIO_WEB / "index.html")
 
 
+async def api_core_proxy(request: web.Request) -> web.Response:
+    """Forward /api/core/<path> to ai-core (memory graph, relationship, export …).
+
+    The browser never talks to ai-core directly (auth + CORS); studio relays with
+    the service token. Same-host aiohttp client is fine (the TLS issue noted for
+    fish/bing only bites remote hosts on Py3.14).
+    """
+    import aiohttp
+
+    path = request.match_info["path"]
+    url = f"{AI_CORE_URL}/{path}"
+    headers = {"X-Service-Token": AI_CORE_TOKEN} if AI_CORE_TOKEN else {}
+    body = await request.read() if request.can_read_body else None
+    try:
+        async with aiohttp.ClientSession() as sess:
+            async with sess.request(
+                request.method,
+                url,
+                params=request.query,
+                data=body,
+                headers={
+                    **headers,
+                    "Content-Type": request.content_type or "application/json",
+                },
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
+                payload = await resp.read()
+                return web.Response(
+                    body=payload,
+                    status=resp.status,
+                    content_type=resp.content_type or "application/json",
+                )
+    except Exception as e:  # ai-core down → JSON error the page can render
+        return web.json_response({"error": f"ai-core unreachable: {e}"}, status=502)
+
+
 async def live(_request: web.Request) -> web.FileResponse:
     """VRM 作为 gateway 身体的实时页面（语音/记忆/PAD 全走 gateway 管道）。"""
     return web.FileResponse(STUDIO_WEB / "live.html")
@@ -594,6 +632,7 @@ def build_app() -> web.Application:
     app = web.Application(client_max_size=2 * 1024 * 1024)
     app.router.add_get("/", index)
     app.router.add_get("/live", live)
+    app.router.add_route("*", "/api/core/{path:.*}", api_core_proxy)
     app.router.add_get("/api/status", api_status)
     app.router.add_get("/api/characters", api_characters)
     app.router.add_get("/api/models", api_models)

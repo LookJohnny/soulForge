@@ -191,6 +191,17 @@ class WebSocketServer:
             # Start the life loop — idle hums/yawns/snores + thinking fillers
             session._life = LifeLoop(self, ws, adapter, session)
             session._life.start()
+            await self._send_control(
+                ws,
+                adapter,
+                {
+                    "type": "session",
+                    "session_id": session.session_id,
+                    "end_user_id": session.end_user_id,
+                    "character_id": session.character_id,
+                    "character_name": getattr(session, "character_name", None),
+                },
+            )
             await self._push_relationship_snapshot(ws, adapter, session)
 
             # Keep one configured character voice online even when a visual or
