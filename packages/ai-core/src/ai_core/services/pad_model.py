@@ -16,6 +16,7 @@ Improvements over v1:
 from __future__ import annotations
 
 import math
+import time
 from dataclasses import dataclass
 
 import structlog
@@ -321,6 +322,13 @@ def pad_to_prompt_description(state: PADState) -> str:
 # ──────────────────────────────────────────────
 
 _PAD_TTL = 1800
+# Mood causality ring ("why am I feeling this") — last N reasons, same TTL as PAD.
+_CAUSES_TTL = 1800
+_MAX_CAUSES = 5
+# Wall-clock decay: PAD stored with a timestamp; on read, hours elapsed pull the
+# state toward the personality baseline (turn-driven decay alone never runs
+# while the user is away).
+_WALL_DECAY_PER_HOUR = 0.15
 
 # Cache key for personality baseline
 _BASELINE_TTL = 3600
@@ -332,18 +340,50 @@ class PADEngine:
     def __init__(self, cache: CacheService):
         self.cache = cache
 
-    async def get_pad(self, session_id: str) -> PADState:
+    async def get_pad(self, session_id: str, now: float | None = None) -> PADState:
         if not session_id:
             return PADState.neutral()
         data = await self.cache.get_json(f"pad:{session_id}")
-        if data:
-            return PADState.from_dict(data)
-        return PADState.neutral()
+        if not data:
+            return PADState.neutral()
+        state = PADState.from_dict(data)
+        ts = data.get("ts")
+        if ts is None:
+            return state
+        now = time.time() if now is None else now
+        hours = max(0.0, (now - float(ts)) / 3600)
+        if hours < 1.0:
+            return state
+        baseline = await self.get_baseline(session_id) or PADState.neutral()
+        decayed = state.lerp(baseline, min(1.0, _WALL_DECAY_PER_HOUR * hours))
+        await self.set_pad(session_id, decayed, now=now)
+        return decayed
 
-    async def set_pad(self, session_id: str, state: PADState) -> None:
+    async def set_pad(self, session_id: str, state: PADState, now: float | None = None) -> None:
         if not session_id:
             return
-        await self.cache.set_json(f"pad:{session_id}", state.to_dict(), ttl=_PAD_TTL)
+        payload = {**state.to_dict(), "ts": time.time() if now is None else now}
+        await self.cache.set_json(f"pad:{session_id}", payload, ttl=_PAD_TTL)
+
+    # ── causality ─────────────────────────────
+
+    async def get_causes(self, session_id: str) -> list[str]:
+        if not session_id:
+            return []
+        data = await self.cache.get_json(f"pad_causes:{session_id}")
+        return list(data) if isinstance(data, list) else []
+
+    async def push_cause(self, session_id: str, cause: str | None) -> list[str]:
+        """Remember why the mood is what it is (last N, newest last)."""
+        cause = (cause or "").strip()
+        if not session_id or not cause:
+            return await self.get_causes(session_id)
+        causes = await self.get_causes(session_id)
+        if causes and causes[-1] == cause:
+            return causes
+        causes = (causes + [cause[:80]])[-_MAX_CAUSES:]
+        await self.cache.set_json(f"pad_causes:{session_id}", causes, ttl=_CAUSES_TTL)
+        return causes
 
     async def get_baseline(self, session_id: str) -> PADState | None:
         """Get cached personality baseline for this session."""
@@ -365,6 +405,7 @@ class PADEngine:
         user_mood: str | None = None,
         personality: dict | None = None,
         relationship_stage: str | None = None,
+        cause: str | None = None,
     ) -> tuple[PADState, str]:
         """Update PAD state with full context.
 
@@ -400,6 +441,8 @@ class PADEngine:
         )
 
         await self.set_pad(session_id, new_state)
+        if cause:
+            await self.push_cause(session_id, cause)
         discrete = pad_to_emotion(new_state)
 
         logger.debug(

@@ -108,3 +108,29 @@ async def test_relationship_chunk_forwarded_as_control():
     assert sent["type"] == MessageType.CONTROL.value
     assert sent["payload"]["type"] == "relationship"
     assert sent["payload"]["stage"] == "DATING"
+
+
+def test_parse_emotion_event_with_causes_and_energy():
+    chunk = PipelineOrchestrator._parse_stream_event(
+        {
+            "type": "emotion",
+            "emotion": "happy",
+            "pad": {"p": 0.5, "a": 0.3, "d": 0.6},
+            "causes": ["你记得我的生日"],
+            "energy": 77,
+        }
+    )
+    assert chunk.causes == ["你记得我的生日"] and chunk.energy == 77
+
+
+async def test_server_send_emotion_forwards_causes():
+    from gateway.server import WebSocketServer
+
+    server = WebSocketServer.__new__(WebSocketServer)
+    ws = AsyncMock()
+    chunk = PipelineOrchestrator._parse_stream_event(
+        {"type": "emotion", "emotion": "happy", "causes": ["想你了"], "energy": 60}
+    )
+    await server._send_emotion(ws, GenericWSAdapter(), chunk)
+    sent = json.loads(ws.send_text.await_args.args[0])
+    assert sent["payload"]["causes"] == ["想你了"] and sent["payload"]["energy"] == 60

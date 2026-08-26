@@ -147,6 +147,7 @@ class ChatResponse(BaseModel):
     relationship_stage: str | None = None  # STRANGER → SOULMATE (or COMPANION)
     affinity: int | None = None  # 0-1000 (= affection axis)
     relationship: RelationshipStateSchema | None = None
+    mood_causes: list[str] | None = None  # why the character feels this way (newest last)
     latency_ms: int
     stages: dict[str, int] | None = None  # per-stage latency breakdown (ms)
 

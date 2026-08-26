@@ -1,25 +1,23 @@
 """Tests for the PAD Emotion Model."""
 
-import pytest
 import math
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from ai_core.services.emotion import EMOTIONS, EmotionEngine
 from ai_core.services.pad_model import (
-    PADState,
-    PADEngine,
     EMOTION_PAD_ANCHORS,
     TOUCH_PAD_IMPULSE,
     USER_MOOD_PAD,
-    pad_to_emotion,
+    PADEngine,
+    PADState,
     emotion_to_pad,
-    pad_to_tts_offsets,
+    pad_to_emotion,
     pad_to_prompt_description,
+    pad_to_tts_offsets,
     transition_pad,
-    BASE_TRANSITION_SPEED,
-    BASE_DECAY_RATE,
 )
-from ai_core.services.emotion import EmotionEngine, EMOTIONS
-
 
 # ──────────────────────────────────────────────
 # PADState basics
@@ -473,3 +471,65 @@ class TestPADDataIntegrity:
         for gesture, impulse in TOUCH_PAD_IMPULSE.items():
             mag = math.sqrt(impulse.p**2 + impulse.a**2 + impulse.d**2)
             assert mag < 1.5, f"{gesture} impulse too large: {mag}"
+
+
+class TestCausesAndWallClockDecay:
+    def setup_method(self):
+        from unittest.mock import AsyncMock, MagicMock
+
+        self.store = {}
+        self.cache = MagicMock()
+
+        async def mock_get_json(key):
+            import json
+
+            raw = self.store.get(key)
+            return json.loads(raw) if raw else None
+
+        async def mock_set_json(key, value, ttl=3600):
+            import json
+
+            self.store[key] = json.dumps(value)
+
+        self.cache.get_json = AsyncMock(side_effect=mock_get_json)
+        self.cache.set_json = AsyncMock(side_effect=mock_set_json)
+        self.engine = PADEngine(self.cache)
+
+    @pytest.mark.asyncio
+    async def test_push_cause_ring_of_five_dedupes_consecutive(self):
+        for c in ["a", "a", "b", "c", "d", "e", "f"]:
+            await self.engine.push_cause("s", c)
+        assert await self.engine.get_causes("s") == ["b", "c", "d", "e", "f"]
+        assert await self.engine.push_cause("s", "") == ["b", "c", "d", "e", "f"]
+        assert await self.engine.get_causes("") == []
+
+    @pytest.mark.asyncio
+    async def test_update_records_cause(self):
+        await self.engine.update("s", text_emotion="happy", cause="你记得我的生日")
+        assert await self.engine.get_causes("s") == ["你记得我的生日"]
+
+    @pytest.mark.asyncio
+    async def test_no_wall_decay_within_an_hour(self):
+        await self.engine.set_pad("s", PADState(0.8, 0.6, 0.4), now=1000.0)
+        st = await self.engine.get_pad("s", now=1000.0 + 1800)
+        assert abs(st.p - 0.8) < 1e-6
+
+    @pytest.mark.asyncio
+    async def test_wall_decay_pulls_toward_baseline(self):
+        await self.engine.set_baseline("s", PADState(0.1, -0.1, 0.0))
+        await self.engine.set_pad("s", PADState(0.8, 0.6, 0.4), now=1000.0)
+        st = await self.engine.get_pad("s", now=1000.0 + 2 * 3600)  # 2h → 30% toward baseline
+        assert abs(st.p - (0.8 + (0.1 - 0.8) * 0.3)) < 1e-6
+        # 10h → fully at baseline, and the stamp was refreshed so it doesn't compound
+        st = await self.engine.get_pad("s", now=1000.0 + 12 * 3600)
+        assert abs(st.p - 0.1) < 1e-6
+        again = await self.engine.get_pad("s", now=1000.0 + 12 * 3600 + 60)
+        assert abs(again.p - 0.1) < 1e-6
+
+    @pytest.mark.asyncio
+    async def test_legacy_pad_without_timestamp_is_untouched(self):
+        import json
+
+        self.store["pad:s"] = json.dumps({"p": 0.5, "a": 0.5, "d": 0.5})
+        st = await self.engine.get_pad("s", now=1e9)
+        assert abs(st.p - 0.5) < 1e-6

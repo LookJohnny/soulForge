@@ -570,6 +570,8 @@ class WebSocketServer:
                 "emotion": chunk.emotion,
                 "pad": chunk.pad,
                 "hardware": chunk.hardware,
+                "causes": chunk.causes or [],
+                "energy": chunk.energy,
             },
         )
 

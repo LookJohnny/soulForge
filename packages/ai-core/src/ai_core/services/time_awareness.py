@@ -54,17 +54,48 @@ def get_time_context(now: datetime | None = None, archetype: str = "ANIMAL") -> 
     return ""
 
 
+_HOUR_PROMPTS = [
+    (4, 8, "你们几个小时前刚聊过"),
+    (8, 16, "你们今天早些时候聊过，隔了大半天"),
+]
+
+
 def get_absence_context(
     last_interaction_date: str | None,
     today: date | None = None,
     archetype: str = "ANIMAL",
+    last_interaction_at: str | datetime | None = None,
+    now: datetime | None = None,
 ) -> str:
-    """Get absence duration context based on last interaction date."""
-    if not last_interaction_date:
+    """Get absence duration context based on last interaction date.
+
+    ``last_interaction_at`` (timestamp) adds hour granularity for same-day
+    gaps; a 10 h gap and a 20 h gap used to be indistinguishable.
+    """
+    if not last_interaction_date and not last_interaction_at:
         return "这是你们第一次聊天，要友好地自我介绍"
 
     if today is None:
         today = date.today()
+
+    if last_interaction_at:
+        last_dt = (
+            last_interaction_at
+            if isinstance(last_interaction_at, datetime)
+            else _parse_dt(last_interaction_at)
+        )
+        if last_dt is not None:
+            now_dt = now or datetime.now(last_dt.tzinfo)
+            hours = (now_dt - last_dt).total_seconds() / 3600
+            if hours < 24 and last_dt.date() == now_dt.date():
+                for lo, hi, prompt in _HOUR_PROMPTS:
+                    if lo <= hours < hi:
+                        return prompt
+                if hours >= 16:
+                    return "你们今天很早的时候聊过一次"
+                return ""
+            if not last_interaction_date:
+                last_interaction_date = last_dt.date().isoformat()
 
     try:
         last = date.fromisoformat(last_interaction_date)
@@ -80,9 +111,19 @@ def get_absence_context(
     return ""
 
 
+def _parse_dt(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(str(raw))
+    except ValueError:
+        return None
+
+
 def build_time_prompt(
     last_interaction_date: str | None = None,
     archetype: str = "ANIMAL",
+    last_interaction_at: str | None = None,
 ) -> str:
     """Build the complete time awareness prompt section."""
     parts = []
@@ -91,7 +132,9 @@ def build_time_prompt(
     if time_ctx:
         parts.append(time_ctx)
 
-    absence_ctx = get_absence_context(last_interaction_date, archetype=archetype)
+    absence_ctx = get_absence_context(
+        last_interaction_date, archetype=archetype, last_interaction_at=last_interaction_at
+    )
     if absence_ctx:
         parts.append(absence_ctx)
 

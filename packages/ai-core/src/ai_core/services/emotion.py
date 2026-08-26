@@ -503,6 +503,7 @@ class EmotionEngine:
         user_mood: str | None = None,
         personality: dict | None = None,
         relationship_stage: str | None = None,
+        cause: str | None = None,
     ) -> tuple[PADState, str]:
         """Update PAD state using values explicitly supplied by the LLM
         (structured output mode). These are a more reliable signal than
@@ -542,6 +543,8 @@ class EmotionEngine:
             relationship_stage=relationship_stage,
         )
         await self.pad.set_pad(session_id, new_state)
+        if cause:
+            await self.pad.push_cause(session_id, cause)
         discrete = pad_to_emotion(new_state)
         await self.set_emotion(session_id, discrete)
         return new_state, discrete
@@ -554,6 +557,7 @@ class EmotionEngine:
         user_mood: str | None = None,
         personality: dict | None = None,
         relationship_stage: str | None = None,
+        cause: str | None = None,
     ) -> tuple[PADState, str]:
         """Update emotion via PAD model with personality-aware multi-modal fusion.
 
@@ -575,6 +579,7 @@ class EmotionEngine:
             user_mood=user_mood,
             personality=personality,
             relationship_stage=relationship_stage,
+            cause=cause,
         )
         # Keep discrete emotion cache in sync for backward compatibility
         await self.set_emotion(session_id, discrete)
@@ -583,6 +588,13 @@ class EmotionEngine:
     async def get_pad_state(self, session_id: str) -> PADState:
         """Get current PAD state for a session."""
         return await self.pad.get_pad(session_id)
+
+    async def get_pad_causes(self, session_id: str) -> list[str]:
+        """Why the character feels the way it does (last few reasons, newest last)."""
+        return await self.pad.get_causes(session_id)
+
+    async def push_pad_cause(self, session_id: str, cause: str | None) -> list[str]:
+        return await self.pad.push_cause(session_id, cause)
 
     def apply_tts_offsets_pad(
         self, pad_state: PADState, ssml_pitch: float, ssml_rate: float

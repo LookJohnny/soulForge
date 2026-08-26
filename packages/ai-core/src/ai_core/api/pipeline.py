@@ -177,7 +177,11 @@ async def chat(req: ChatRequest, request: Request):
     # Archetype for embodiment / time wording — need character row
     _char_row = await (await get_prompt_builder())._get_character(req.character_id, brand_id)
     _archetype = (_char_row or {}).get("archetype", "ANIMAL")
-    time_context = build_time_prompt(rel_state.get("last_interaction_date"), archetype=_archetype)
+    time_context = build_time_prompt(
+        rel_state.get("last_interaction_date"),
+        archetype=_archetype,
+        last_interaction_at=rel_state.get("last_interaction_at"),
+    )
 
     # 7b. Embodied sensations + mid-session inner thought
     from ai_core.services.embodiment import build_mid_session_thought, build_sensations
@@ -237,6 +241,12 @@ async def chat(req: ChatRequest, request: Request):
 
     # 10. Emotion update — trust the LLM's explicit PAD when structured parse
     # succeeded. Fall back to keyword detection only for unparsed responses.
+    mood_cause = _derive_mood_cause(
+        user_mood=user_mood,
+        touch_gesture=touch_gesture,
+        rel_state=rel_state,
+        llm_cause=(parsed.state_changes or {}).get("mood_cause") if parsed.parsed_ok else None,
+    )
     if parsed.parsed_ok:
         pad_state, new_emotion = await emotion_engine.update_with_explicit_pad(
             session_id=req.session_id,
@@ -245,6 +255,7 @@ async def chat(req: ChatRequest, request: Request):
             user_mood=user_mood,
             personality=prompt_result.get("personality"),
             relationship_stage=rel_state.get("stage"),
+            cause=mood_cause,
         )
     else:
         text_emotion = inline_emotion or emotion_engine.detect_emotion(
@@ -257,6 +268,7 @@ async def chat(req: ChatRequest, request: Request):
             user_mood=user_mood,
             personality=prompt_result.get("personality"),
             relationship_stage=rel_state.get("stage"),
+            cause=mood_cause,
         )
 
     # 11. TTS with PAD-computed parameters (more nuanced than discrete lookup)
@@ -345,6 +357,7 @@ async def chat(req: ChatRequest, request: Request):
         relationship_stage=rel_state["stage"],
         affinity=rel_state.get("affinity", 0),
         relationship=rel_payload,
+        mood_causes=await emotion_engine.get_pad_causes(req.session_id),
         latency_ms=latency,
         stages=stages,
     )
@@ -562,7 +575,11 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
     from ai_core.services.time_awareness import build_time_prompt
 
     _archetype = (_char_row or {}).get("archetype", "ANIMAL")
-    time_context = build_time_prompt(rel_state.get("last_interaction_date"), archetype=_archetype)
+    time_context = build_time_prompt(
+        rel_state.get("last_interaction_date"),
+        archetype=_archetype,
+        last_interaction_at=rel_state.get("last_interaction_at"),
+    )
     sensations = build_sensations(
         pad=prev_pad,
         touch_gesture=touch_gesture,
@@ -744,7 +761,11 @@ async def chat_stream(req: ChatRequest, request: Request):
             user_mood=ctx["user_mood"],
             personality=prompt_result.get("personality"),
             relationship_stage=rel_state.get("stage"),
+            cause=_derive_mood_cause(
+                user_mood=ctx["user_mood"], touch_gesture=ctx["touch_gesture"], rel_state=rel_state
+            ),
         )
+        mood_causes = await emotion_engine.get_pad_causes(req.session_id)
 
         # Emotion event — emitted before `done` so devices with expression
         # hardware (LED / servo face) can react while audio is still playing.
@@ -760,6 +781,8 @@ async def chat_stream(req: ChatRequest, request: Request):
                 "emotion": new_emotion,
                 "pad": pad_state.to_dict(),
                 "hardware": hw.to_dict(),
+                "causes": mood_causes,
+                "energy": rel_state.get("energy", 100),
             }
         )
 
@@ -826,6 +849,40 @@ async def chat_stream(req: ChatRequest, request: Request):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+_MOOD_ZH = {
+    "happy": "开心",
+    "sad": "难过",
+    "angry": "生气",
+    "worried": "担心",
+    "excited": "兴奋",
+    "tired": "累",
+    "lonely": "孤单",
+}
+
+
+def _derive_mood_cause(
+    *,
+    user_mood: str | None,
+    touch_gesture: str | None,
+    rel_state: dict | None,
+    llm_cause: str | None = None,
+) -> str | None:
+    """One short reason for this turn's mood, for the causality ring.
+
+    Priority: the LLM's own stated reason → a long absence → touch → the
+    user's visible mood.  Returns None when nothing notable happened.
+    """
+    if llm_cause:
+        return llm_cause
+    if rel_state and rel_state.get("_decay_mood_cause"):
+        return rel_state["_decay_mood_cause"]
+    if touch_gesture:
+        return f"刚被{touch_gesture}了"
+    if user_mood and user_mood != "neutral":
+        return f"你看起来{_MOOD_ZH.get(user_mood, user_mood)}"
+    return None
 
 
 async def _apply_relationship_turn(
