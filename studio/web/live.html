@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>SoulForge Live · VRM 身体</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "/node_modules/three/build/three.module.js",
+      "three/examples/jsm/": "/node_modules/three/examples/jsm/",
+      "@pixiv/three-vrm": "/node_modules/@pixiv/three-vrm/lib/three-vrm.module.js",
+      "@pixiv/three-vrm-animation": "/node_modules/@pixiv/three-vrm-animation/lib/three-vrm-animation.module.js"
+    }
+  }
+  </script>
+  <style>
+    :root { color-scheme: dark; --bg: #0d0f14; --fg: #e8e6e1; --dim: #8a8f9a; --acc: #e8b34b; --ok: #6fcf97; --bad: #eb5757; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; height: 100vh; display: grid; grid-template-columns: 1fr 340px; }
+    #stage { position: relative; min-width: 0; }
+    canvas { display: block; width: 100%; height: 100%; }
+    #panel { border-left: 1px solid #22252d; display: flex; flex-direction: column; padding: 14px; gap: 10px; overflow: hidden; }
+    h1 { font-size: 15px; margin: 0; letter-spacing: .08em; color: var(--acc); }
+    .row { display: flex; gap: 6px; align-items: center; }
+    input, select, button { font: inherit; color: var(--fg); background: #161923; border: 1px solid #2a2e39; border-radius: 6px; padding: 6px 8px; }
+    input[type=text] { flex: 1; min-width: 0; }
+    button { cursor: pointer; }
+    button.on { border-color: var(--ok); color: var(--ok); }
+    #log { flex: 1; overflow-y: auto; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+    .msg { padding: 6px 8px; border-radius: 8px; background: #161923; }
+    .msg.user { background: #1d2333; align-self: flex-end; }
+    .msg.sys { color: var(--dim); font-size: 12px; background: none; padding: 0 4px; }
+    #status { font-size: 12px; color: var(--dim); }
+    #status b { color: var(--fg); }
+    #pad { font-family: ui-monospace, monospace; font-size: 12px; color: var(--dim); }
+    #pad .bar { display: inline-block; width: 90px; height: 6px; background: #22252d; border-radius: 3px; vertical-align: middle; position: relative; margin: 0 6px; }
+    #pad .bar i { position: absolute; top: 0; bottom: 0; background: var(--acc); border-radius: 3px; }
+    #recipe { color: var(--acc); }
+  </style>
+</head>
+<body>
+  <div id="stage"><canvas id="c"></canvas></div>
+  <aside id="panel">
+    <h1>SOULFORGE LIVE</h1>
+    <div class="row">
+      <input id="gw" type="text" value="" placeholder="ws://localhost:8080/ws" />
+      <button id="connect">连接</button>
+    </div>
+    <div class="row">
+      <select id="model"></select>
+      <button id="mic" title="麦克风常开（服务端 VAD 断句）">🎙</button>
+      <button id="stop" title="打断">■</button>
+    </div>
+    <div id="status">未连接</div>
+    <div id="pad"></div>
+    <div id="log"></div>
+    <form id="form" class="row">
+      <input id="text" type="text" placeholder="说点什么…" autocomplete="off" />
+      <button type="submit">发送</button>
+    </form>
+  </aside>
+  <script type="module" src="/studio/live.js"></script>
+</body>
+</html>

@@ -20,6 +20,27 @@ uv run python studio/server.py --port 8899 --runtime-url ws://127.0.0.1:8765
 经中枢唯一大脑决策后，**同时广播给所有接入的身体**——机器人 demo、Unity 客户端、
 晚餐场景若也连着 8765，会和 Studio 里的她同步行动。
 
+## Live 模式：VRM 作为 gateway 的身体（`/live`）
+
+`http://127.0.0.1:8899/live` 不用 Studio 自带大脑，而是以 **web_audio 设备**身份接入
+gateway（默认 `ws://<host>:8080/ws`），与小智 ESP32 平级：ASR / 五层记忆 / PAD /
+打断 / TTS 全走 gateway 真实管道，本页只做渲染。
+
+```bash
+uv run python -m ai_core.main            # 8100
+uv run python -m gateway.main            # 8080
+uv run python studio/server.py --port 8899 && open http://127.0.0.1:8899/live
+```
+
+- 下行：24kHz 裸 Opus 帧 → WebCodecs `AudioDecoder` → 口型（RMS→`aa`）
+- 情绪：gateway 每轮推 `{"type":"emotion","pad":{p,a,d}}` → `lib/pad_expression.js`
+  （`face_engine.select_recipe` 的逐点等价移植，`test_pad_expression_parity.py` 钉死）
+  → 配方 key → VRM 表情权重 + 头部姿态，逐帧指数阻尼；情绪惯性/淡去与舵机脸同一时间常数
+- 上行：🎙 用 WebCodecs `AudioEncoder` 编 Opus（服务端 VAD 断句）；需 Chrome/Edge
+- 模型缺表情通道（如 open_source_avatars 里多数只有口型+眨眼）时自动退化为只动头部
+- 共享库 `web/lib/vrm_body.js`（加载/注视/呼吸/眨眼/fidget/VRMA/表情阻尼）是后续
+  studio.js 与 demo 渲染器收敛的目标
+
 ## 语音输入 + 打断（Chrome）
 
 点聊天框左侧 🎙 开启常听模式（Web Speech API，中文，需联网）。

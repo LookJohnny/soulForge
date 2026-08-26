@@ -585,9 +585,15 @@ async def index(_request: web.Request) -> web.FileResponse:
     return web.FileResponse(STUDIO_WEB / "index.html")
 
 
+async def live(_request: web.Request) -> web.FileResponse:
+    """VRM 作为 gateway 身体的实时页面（语音/记忆/PAD 全走 gateway 管道）。"""
+    return web.FileResponse(STUDIO_WEB / "live.html")
+
+
 def build_app() -> web.Application:
     app = web.Application(client_max_size=2 * 1024 * 1024)
     app.router.add_get("/", index)
+    app.router.add_get("/live", live)
     app.router.add_get("/api/status", api_status)
     app.router.add_get("/api/characters", api_characters)
     app.router.add_get("/api/models", api_models)
