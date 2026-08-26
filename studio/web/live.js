@@ -276,10 +276,16 @@ let gw = null;
 let reconnectTimer = null;
 let reconnectTries = 0;
 let lastErrorToast = 0;
+const serverDefaults = { gateway_ws_url: '', runtime_ws_url: '' };
+async function loadServerDefaults() {
+  try { Object.assign(serverDefaults, await (await fetch('/api/status')).json()); } catch { /* optional */ }
+  if (!$('gw').value) $('gw').placeholder = serverDefaults.gateway_ws_url || 'ws://localhost:8080/ws';
+  if (!$('runtime').value && serverDefaults.runtime_ws_url) $('runtime').value = serverDefaults.runtime_ws_url;
+}
 async function connect() {
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   gw?.close();
-  const url = $('gw').value.trim() || params.get('gateway') || `ws://${location.hostname}:8080/ws`;
+  const url = $('gw').value.trim() || params.get('gateway') || serverDefaults.gateway_ws_url || `ws://${location.hostname}:8080/ws`;
   gw = new GatewayClient({ url, sessionName: 'vrm-live' });
   gw.addEventListener('open', (e) => { reconnectTries = 0; $('status').textContent = `已连接 ${e.detail.device_id}`; $('hud-stage').textContent = '已连接'; log('gateway 已连接', 'sys'); body.setAudioAnalyser(gw.analyser); });
   gw.addEventListener('close', () => {
@@ -350,7 +356,10 @@ function animate() {
   renderer.render(scene, camera);
 }
 padUI();
-loadAssets().then(() => { if (params.get('autoconnect') !== '0') connect(); if (params.get('runtime')) connectBody(); });
+loadServerDefaults().then(loadAssets).then(() => {
+  if (params.get('autoconnect') !== '0') connect();
+  if (params.get('runtime') || $('runtime').value) connectBody();
+});
 animate();
 
 // 供 Playwright 冒烟测试与控制台调试

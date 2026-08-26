@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 
 from ai_core.services.relationship import days_known, normalize_stage, stage_index
 
@@ -36,7 +36,7 @@ class EventContext:
     emotion: str | None = None  # current discrete PAD emotion
     emotion_intensity: float = 0.0  # PAD magnitude 0..~1.7 mapped to 0..100 by caller
     message: str = ""
-    now: datetime = field(default_factory=datetime.now)
+    now: datetime = field(default_factory=lambda: datetime.now(UTC).astimezone())
     hours_since_last: float | None = None
     rng: random.Random | None = None
 

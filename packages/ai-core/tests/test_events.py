@@ -342,3 +342,17 @@ async def test_choose_validation():
         await eng.choose("u", "c", "nope", 0)
     with pytest.raises(IndexError):
         await eng.choose("u", "c", "confession_event", 9)
+
+
+@pytest.mark.asyncio
+async def test_near_with_aware_history_and_default_now():
+    # Regression: /events/near mixed a naive default `now` with tz-aware rows → TypeError
+    state = _state(affection=100, trust=70, intimacy=45, stage="FRIEND")
+    eng, _, _ = _engine(state)
+    eng.history = AsyncMock(
+        return_value=[{"event_id": "random_thought", "completed_at": NOW.isoformat()}]
+    )
+    near = await eng.near("u", "c", state)
+    assert any(n["event_id"] == "shared_vulnerability" for n in near)
+    ctx = EventContext(state=state)  # default now must be tz-aware
+    assert ctx.now.tzinfo is not None

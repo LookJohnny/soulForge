@@ -77,6 +77,8 @@ def is_on_cooldown(event: EventDef, history: list[dict], now: datetime) -> bool:
     if not event.cooldown_days or not mine:
         return False
     last = max(_parse(h.get("completed_at")) or datetime.min.replace(tzinfo=UTC) for h in mine)
+    if now.tzinfo is None:  # never mix naive/aware — treat naive as local time
+        now = now.astimezone()
     return (now - last).total_seconds() < event.cooldown_days * 86400
 
 
@@ -376,9 +378,15 @@ class EventEngine:
         self, end_user_id: str, character_id: str, rel_state: dict, emotion: str | None = None
     ) -> list[dict]:
         history = await self.history(end_user_id, character_id)
+        last_at = _parse(rel_state.get("last_interaction_at"))
+        now = datetime.now(UTC)
         ctx = EventContext(
             state=rel_state,
-            completed=list(rel_state.get("completed_events") or []),
+            completed=sorted(
+                set(rel_state.get("completed_events") or []) | {h["event_id"] for h in history}
+            ),
             emotion=emotion,
+            now=now.astimezone(),
+            hours_since_last=(now - last_at).total_seconds() / 3600 if last_at else None,
         )
         return near_trigger_events(ctx, history)

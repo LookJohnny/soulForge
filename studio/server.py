@@ -63,6 +63,14 @@ def load_dotenv_key(name: str) -> str:
 
 
 AI_CORE_URL = (load_dotenv_key("AI_CORE_URL") or "http://127.0.0.1:8100").rstrip("/")
+# Gateway WS the /live page connects to when the URL carries no ?gateway= (the
+# desktop shell relies on this; 8080 is often taken by something else locally).
+GATEWAY_WS_URL = load_dotenv_key("GATEWAY_WS_URL") or (
+    f"ws://127.0.0.1:{load_dotenv_key('GATEWAY_PORT') or '8080'}/ws"
+)
+RUNTIME_WS_URL = load_dotenv_key(
+    "RUNTIME_WS_URL"
+)  # e.g. ws://127.0.0.1:8765/body (optional)
 AI_CORE_TOKEN = load_dotenv_key("SERVICE_TOKEN")
 FISH_KEY = load_dotenv_key("FISH_AUDIO_API_KEY")
 FISH_MODEL = load_dotenv_key("FISH_AUDIO_MODEL") or "s1"
@@ -313,6 +321,22 @@ async def api_status(_request: web.Request) -> web.Response:
             "linked_runtime": RUNTIME_URL or None,
         }
     )
+
+
+_api_status_inner = api_status
+
+
+async def api_status(request: web.Request) -> web.Response:  # noqa: F811
+    resp = await _api_status_inner(request)
+    data = json.loads(resp.body)
+    data.update(
+        {
+            "gateway_ws_url": GATEWAY_WS_URL,
+            "runtime_ws_url": RUNTIME_WS_URL,
+            "ai_core_url": AI_CORE_URL,
+        }
+    )
+    return web.json_response(data)
 
 
 async def api_characters(_request: web.Request) -> web.Response:
