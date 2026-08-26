@@ -222,9 +222,91 @@ async def http_export(request: web.Request) -> web.Response:
     )
 
 
+async def body_handler(request: web.Request) -> web.WebSocketResponse:
+    """Minimal Protocol 0.2 runtime: welcome, plan_state, then a burst of actions."""
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+    hello = json.loads((await ws.receive()).data)
+    assert hello.get("type") == "hello" and hello.get("backend") == "web"
+    steps = hello.get("manifest", {}).get("supported_steps", [])
+    await ws.send_json(
+        {
+            "type": "welcome",
+            "protocol": "0.2",
+            "body_id": hello["body_id"],
+            "accepted_agents": hello.get("agent_ids") or ["luna"],
+            "supported_steps": steps,
+        }
+    )
+    await ws.send_json(
+        {
+            "type": "plan_state",
+            "agent_id": "luna",
+            "clock": "20:47",
+            "hour_goal": "陪你聊天",
+            "activities": [],
+            "day_blocks": [],
+            "last_decision": {},
+        }
+    )
+    observations = []
+    plan = [
+        ("look_at_user", 0.5),
+        ("wave", 0.8),
+        ("stir_pan", 0.6),
+        ("listening_nod", 0.4),
+    ]
+
+    async def send_action(i, name, dur):
+        await ws.send_json(
+            {
+                "type": "action",
+                "agent_id": "luna",
+                "name": name,
+                "command_id": f"cmd-{i}",
+                "duration_s": dur,
+                "sequence": i,
+                "params": {},
+                "adapter_command": {},
+                "interruptible": True,
+                "safety_class": "expressive",
+                "ack_policy": "on_complete",
+            }
+        )
+
+    # ack_policy on_complete: the next step goes out when the body reports done
+    idx = 0
+    await send_action(idx, *plan[idx])
+    async for msg in ws:
+        if msg.type != web.WSMsgType.TEXT:
+            continue
+        data = json.loads(msg.data)
+        if data.get("type") != "observation":
+            continue
+        observations.append(data)
+        await ws.send_json(
+            {
+                "type": "tick",
+                "sim_minute": 1247,
+                "clock": "20:47",
+                "observed": len(observations),
+                "statuses": [o["status"] for o in observations],
+            }
+        )
+        if (
+            data.get("status") in ("done", "failed", "interrupted")
+            and data.get("command_id") == f"cmd-{idx}"
+        ):
+            idx += 1
+            if idx < len(plan):
+                await send_action(idx, *plan[idx])
+    return ws
+
+
 def main() -> None:
     app = web.Application()
     app.router.add_get("/ws", ws_handler)
+    app.router.add_get("/body", body_handler)
     app.router.add_get("/memory/graph", http_graph)
     app.router.add_get("/relationship/{u}/{c}/events/near", http_near)
     app.router.add_get("/relationship/{u}/{c}/export", http_export)

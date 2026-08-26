@@ -53,3 +53,8 @@ button.on { border-color: var(--ok); color: var(--ok); }
 .scene p { margin: 0 0 10px; }
 .scene .choices { display: flex; flex-direction: column; gap: 6px; }
 .scene .choices button { text-align: left; }
+
+/* 宿主模式：透明悬浮窗 / 无 HUD */
+html.transparent, html.transparent body { background: transparent; }
+html.no-hud #hud, html.no-hud #tools, html.no-hud #memory-panel, html.no-hud #settings-panel { display: none !important; }
+html.no-hud #chatbar { bottom: 10px; width: calc(100vw - 16px); }

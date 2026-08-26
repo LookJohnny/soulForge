@@ -257,6 +257,12 @@ export class VrmBody {
   setSpeakingLevel(level) { this.speakingLevel = Math.max(0, Math.min(1, level)); }
   setAudioAnalyser(analyser) { this.lipsync.setAnalyser(analyser); }
 
+  /** 一次倾听式点头（叠加在生命层上）。 */
+  nod() { this.nodAt = this.clock.elapsedTime; }
+
+  /** 程序化保持姿态 seconds 秒：sit / kneel / lean_back / busy_hands（叠加层）。 */
+  holdPose(name, seconds = 2) { this.pose = { name, until: this.clock.elapsedTime + Math.max(0.3, seconds) }; }
+
   /** 头部在画布上的百分比坐标 {x,y}（0–100），供 DOM 气泡跟随。 */
   getHeadScreenPos(camera) {
     const head = this.vrm?.humanoid?.getNormalizedBoneNode(B.Head);
@@ -324,11 +330,47 @@ export class VrmBody {
       }
     }
     const talk = this.speakingLevel;
+    // 倾听点头：0.09·e^{-1.6s}·max(0, sin 9s)（沿用 demo/dinner.js 的曲线）
+    if (this.nodAt != null) {
+      const since = t - this.nodAt;
+      if (since > 1.2) this.nodAt = null;
+      else fx += 0.09 * Math.exp(-since * 1.6) * Math.max(0, Math.sin(since * 9));
+    }
     this.head.x = damp(this.head.x, headT.x + fx + talk * 0.05 * Math.sin(t * 7), 6, dt);
     this.head.y = damp(this.head.y, headT.y + fy, 5, dt);
     this.head.z = damp(this.head.z, headT.z + fz, 5, dt);
     this.addBone(B.Neck, this.head.x * 0.3, this.head.y * 0.35, this.head.z * 0.3);
     this.addBone(B.Head, this.head.x, this.head.y, this.head.z);
+    this._poseLayer(t, dt);
+  }
+
+  /** 保持姿态叠加：不覆盖动画层，只在其上加一点身体语言。 */
+  _poseLayer(t, dt) {
+    if (!this.pose) { this.poseAmt = damp(this.poseAmt ?? 0, 0, 4, dt); if (this.poseAmt < 0.01) return; }
+    else if (t >= this.pose.until) this.pose = null;
+    this.poseAmt = damp(this.poseAmt ?? 0, this.pose ? 1 : 0, 4, dt);
+    const a = this.poseAmt, name = this.pose?.name ?? this.lastPose; if (this.pose) this.lastPose = name;
+    const sz = Math.sign(VRM_POSE_CONFIG[this.metaVersion].leftUpperArm.z);
+    switch (name) {
+      case 'busy_hands': // 手在身前忙碌
+        this.addBone(B.LeftUpperArm, -0.5 * a, 0.2 * a, -sz * 0.5 * a);
+        this.addBone(B.RightUpperArm, -0.5 * a, -0.2 * a, sz * 0.5 * a);
+        this.addBone(B.LeftLowerArm, -1.2 * a + 0.1 * a * Math.sin(t * 5), 0, 0);
+        this.addBone(B.RightLowerArm, -1.2 * a + 0.1 * a * Math.cos(t * 5), 0, 0);
+        this.addBone(B.Chest, 0.12 * a, 0, 0); break;
+      case 'lean_back':
+        this.addBone(B.Spine, -0.18 * a, 0, 0); this.addBone(B.Chest, -0.08 * a, 0, 0); break;
+      case 'sit':
+        this.addBone(B.LeftUpperLeg, -1.4 * a, 0, 0); this.addBone(B.RightUpperLeg, -1.4 * a, 0, 0);
+        this.addBone(B.LeftLowerLeg, 1.4 * a, 0, 0); this.addBone(B.RightLowerLeg, 1.4 * a, 0, 0);
+        if (this.vrm) this.vrm.scene.position.y = (this.vrm.scene.userData.floorY ?? 0) - 0.42 * a; break;
+      case 'kneel':
+        this.addBone(B.LeftUpperLeg, -0.3 * a, 0, 0); this.addBone(B.RightUpperLeg, -1.5 * a, 0, 0);
+        this.addBone(B.LeftLowerLeg, 1.8 * a, 0, 0); this.addBone(B.RightLowerLeg, 1.6 * a, 0, 0);
+        this.addBone(B.Spine, 0.2 * a, 0, 0);
+        if (this.vrm) this.vrm.scene.position.y = (this.vrm.scene.userData.floorY ?? 0) - 0.5 * a; break;
+      default: break;
+    }
   }
 
   /** 无 idle 片段时的纯程序化身体（呼吸/重心/手臂）。 */

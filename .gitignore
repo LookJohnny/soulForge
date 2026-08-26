@@ -68,3 +68,7 @@ unity/**/UserSettings/
 unity/**/*.csproj
 unity/**/*.sln
 unity/**/*.user
+
+# Tauri desktop shell
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/

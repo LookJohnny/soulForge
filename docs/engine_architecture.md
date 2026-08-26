@@ -97,7 +97,7 @@ SoulForge 是跨载体 Character Runtime：同一个角色（人格/记忆/关�
 | 真机 HAL（CAN/串口/PWM） | **仅接口定义**，无驱动实现，未验证 |
 | Unity Protocol/Perception 客户端 | C# 批处理编译通过；Reporter 有 `.meta` 且默认关闭；仍需目标项目场景挂载联调 |
 | Web 感知上报 | **demo-ready**：显式 opt-in、失败全资源清理、只发 VAD/RMS；浏览器 ASR 未接 |
-| Web 角色实时渲染订阅 | 未实现（现为离线时间线消费） |
+| Web 角色实时渲染订阅 | 已实现：`studio/web/lib/body_client.js` 以 `backend:"web"` 接 `/body`，步表 `engine/embodiment/web_adapter.py` ↔ `lib/action_map.js` 由 `tests/test_web_embodiment.py` 钉死；离线时间线渲染（demo/vtuber_life_web）保留为样片管线 |
 | AICoreMemoryStore | **prototype**（需运行 ai-core 服务；未联测） |
 | MuJoCo | Backend 可挂接，未做专项验证 |
 | Audio capture（Opus/VAD/流式ASR，gateway 既有栈） | **ready**（xiaozhi 线上跑过）；与 Character Runtime 的单一决策桥 **demo-ready**（离线测试） |

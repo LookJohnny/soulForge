@@ -33,7 +33,7 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + 
 const checks = {};
 const fail = (k, v) => { checks[k] = v; };
 
-await page.goto(`http://127.0.0.1:${STUDIO_PORT}/live?gateway=ws://127.0.0.1:${GW_PORT}/ws`);
+await page.goto(`http://127.0.0.1:${STUDIO_PORT}/live?gateway=ws://127.0.0.1:${GW_PORT}/ws&runtime=ws://127.0.0.1:${GW_PORT}/body&agents=luna`);
 await page.waitForFunction(() => window.__live?.logs.some((l) => l.text.startsWith('已换装')), null, { timeout: 90000 });
 checks.modelLoaded = await page.evaluate(() => !!window.__live.body.vrm);
 checks.modelName = await page.evaluate(() => document.getElementById('hud-name').textContent);
@@ -69,6 +69,14 @@ checks.headPos = await page.evaluate(() => window.__live.body.getHeadScreenPos(w
 await page.waitForFunction(() => window.__live.gw.speaking === false, null, { timeout: 10000 });
 checks.idleBackAfterTalk = await page.evaluate(() => !!window.__live.body.idleAction?.isRunning());
 
+// Protocol 0.2 web body: welcome + actions performed + observations acked
+await page.waitForFunction(() => window.__live.bodyClient?.welcome, null, { timeout: 15000 }).catch(() => fail('bodyWelcome', false));
+checks.bodyWelcome = await page.evaluate(() => !!window.__live.bodyClient?.welcome);
+checks.bodySteps = await page.evaluate(() => window.__live.bodyClient?.welcome?.supported_steps?.length ?? 0);
+await page.evaluate(() => new Promise((r) => { const bc = window.__live.bodyClient; if (!bc) return r(); let last = null; bc.addEventListener('tick', (e) => { last = e.detail; if (last.statuses.filter((s) => s === 'done').length >= 4) r(); }); setTimeout(r, 8000); }));
+checks.bodyActionsLogged = await page.evaluate(() => window.__live.logs.filter((l) => l.text.startsWith('▶')).length);
+checks.bodyStatuses = await page.evaluate(() => new Promise((r) => { const bc = window.__live.bodyClient; const h = (e) => { bc.removeEventListener('tick', h); r(e.detail.statuses); }; bc.addEventListener('tick', h); bc.observe({ command_id: 'probe', agent_id: 'luna' }, 'done'); setTimeout(() => r(null), 3000); }));
+
 // session frame → export enabled, memory graph via studio proxy → fake ai-core
 checks.sessionIds = await page.evaluate(() => window.__live.session);
 checks.exportEnabled = await page.evaluate(() => !document.getElementById('btn-export').disabled);
@@ -103,6 +111,7 @@ cleanup();
 const ok = errors.length === 0 && checks.modelLoaded && checks.idleAnimated && checks.hudAxes === 6
   && checks.maxViseme > 0.02 && checks.bubble === 'echo: 你好 事件' && checks.eventChoices === 2
   && ['big_happy', 'warm_smile'].includes(checks.moodKey)
-  && checks.graphNodes === 4 && checks.exportEnabled && String(checks.companionToggle).includes('陪伴');
+  && checks.graphNodes === 4 && checks.exportEnabled && String(checks.companionToggle).includes('陪伴')
+  && checks.bodyWelcome && checks.bodyActionsLogged >= 4 && (checks.bodyStatuses ?? []).filter((s) => s === 'done').length >= 4;
 console.log(JSON.stringify({ ok, checks, errors }, null, 1));
 process.exit(ok ? 0 : 1);

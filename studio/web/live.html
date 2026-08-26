@@ -48,7 +48,10 @@
   <!-- 设置抽屉 -->
   <aside id="settings-panel" class="panel hidden">
     <header><b>设置</b><button class="close" data-close="settings-panel">×</button></header>
-    <label>Gateway<input id="gw" type="text" placeholder="ws://localhost:8080/ws" /></label>
+    <label>Gateway（语音/记忆/关系）<input id="gw" type="text" placeholder="ws://localhost:8080/ws" /></label>
+    <label>Runtime Server /body（可选：引擎动作驱动）<input id="runtime" type="text" placeholder="ws://localhost:8765/body" /></label>
+    <label>身体承载的角色 id（逗号分隔，空=全部）<input id="runtime-agents" type="text" placeholder="luna" /></label>
+    <div class="row"><button id="connect-body">连接身体</button><span class="muted" id="body-status">未连接（可选）</span></div>
     <label>模型<select id="model"></select></label>
     <label>动作<select id="anim"><option value="">（一次性动作）</option></select></label>
     <label class="row"><input id="opt-idle" type="checkbox" checked /> 使用 idle 动捕片段</label>

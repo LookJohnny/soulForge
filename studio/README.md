@@ -55,6 +55,14 @@ uv run python studio/server.py --port 8899 && open http://127.0.0.1:8899/live
 - 语义记忆需要 `pgvector/pgvector:pg16` 镜像 + 迁移 007 + `uv sync --all-packages --extra semantic`
   （首次使用下载 BAAI/bge-small-zh-v1.5，约 95 MB；`HF_ENDPOINT` 可指向国内镜像）；
   缺任一项时自动退回字符重叠检索，记忆图退回词法边
+- **引擎动作驱动（Protocol 0.2 web 身体）**：设置里填 Runtime Server `/body` 地址（或
+  `?runtime=ws://127.0.0.1:8765/body&agents=luna`），页面以 `backend:"web"` 注册，
+  ActionCommand 经 `lib/action_map.js`（与 `engine/embodiment/web_adapter.py` 同表）
+  变成 clip/gaze/pose/idle 原语作用到 VrmBody，逐条回 accepted→done/interrupted；
+  对话默认由 gateway 语音链路负责（`features.speech=false`）
+- 工作台 `/`（studio.js）也已改用同一份 `lib/vrm_body.js`；机器人 GLB 由页内 `RobotBody`
+  小壳承担；`node studio/tests/test_studio_smoke.mjs` 冒烟
+- 桌面壳见 `apps/desktop/`（Tauri 2：主窗 + 透明置顶悬浮窗，`?transparent=1&hud=0`）
 - 冒烟测试：`pnpm test:studio`（自起 studio + `studio/tests/fake_gateway.py`，Playwright
   无头 Chromium 断言模型/idle/口型/气泡/HUD/事件卡，截图到 `outputs/live_smoke.png`）
 

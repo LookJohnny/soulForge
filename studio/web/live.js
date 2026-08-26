@@ -7,10 +7,22 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { VrmBody } from '/studio/lib/vrm_body.js';
 import { GatewayClient } from '/studio/lib/gateway_client.js';
 import { MemoryGraph } from '/studio/lib/memory_graph.js';
+import { BodyClient } from '/studio/lib/body_client.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-const host = window.__SOULFORGE_HOST__ ?? { transparent: false }; // Tauri 悬浮窗预留钩子
+// 宿主契约：Tauri 悬浮窗经 URL 参数或注入的 window.__SOULFORGE_HOST__ 声明透明/无 HUD
+const host = {
+  transparent: params.get('transparent') === '1',
+  hud: params.get('hud') !== '0',
+  ...(window.__SOULFORGE_HOST__ ?? {}),
+};
+if (!host.hud) document.documentElement.classList.add('no-hud');
+if (host.transparent) document.documentElement.classList.add('transparent');
+// 无边框悬浮窗：按住画布拖动窗口（Tauri 提供 start_drag）
+if (window.__TAURI__?.core?.invoke && host.transparent) {
+  document.getElementById('c').addEventListener('pointerdown', (e) => { if (e.button === 0 && !e.shiftKey) window.__TAURI__.core.invoke('start_drag').catch(() => {}); });
+}
 
 // ── 日志 / toast ──────────────────────────────────────
 const logs = [];
@@ -87,6 +99,7 @@ async function loadAssets() {
   // idle/talking 动捕片段（assets/animations，来自 aikeya，MIT）
   try {
     const anims = await (await fetch('/api/animations')).json();
+    animationsList.splice(0, animationsList.length, ...anims);
     const byName = (re) => anims.filter((a) => re.test(a.url)).map((a) => a.url);
     body.idleUrls = $('opt-idle').checked ? byName(/\/idle(_\d+)?\.vrma$/) : [];
     body.talkingUrl = byName(/\/talking\.vrma$/)[0] ?? null;
@@ -218,6 +231,25 @@ $('file-import').onchange = async () => {
   $('file-import').value = '';
 };
 
+// ── Runtime Server /body（Protocol 0.2 web 身体）──────
+let bodyClient = null;
+const animationsList = [];
+async function connectBody() {
+  bodyClient?.close();
+  const url = $('runtime').value.trim() || params.get('runtime');
+  if (!url) { $('body-status').textContent = '未连接（可选）'; return; }
+  const agentIds = ($('runtime-agents').value || params.get('agents') || '').split(',').map((x) => x.trim()).filter(Boolean);
+  bodyClient = new BodyClient({ url, bodyId: 'web-vrm-live', agentIds }).attach(body, { animations: animationsList });
+  bodyClient.addEventListener('welcome', (e) => { $('body-status').textContent = `身体已注册 ${e.detail.body_id} · ${e.detail.supported_steps.length} 步`; log('runtime 已接入（web 身体）', 'sys'); });
+  bodyClient.addEventListener('action', (e) => { log(`▶ ${e.detail.cmd.name} → ${e.detail.prim.kind}${e.detail.prim.clip ? ':' + e.detail.prim.clip : ''}`, 'sys'); });
+  bodyClient.addEventListener('close', () => { $('body-status').textContent = '身体连接断开'; });
+  bodyClient.addEventListener('error', () => { $('body-status').textContent = '身体连接失败'; });
+  try { await bodyClient.connect(); } catch { /* status shown */ }
+}
+$('connect-body').onclick = connectBody;
+$('runtime').value = params.get('runtime') ?? '';
+$('runtime-agents').value = params.get('agents') ?? '';
+
 // ── Gateway ───────────────────────────────────────────
 let gw = null;
 async function connect() {
@@ -277,8 +309,8 @@ function animate() {
   renderer.render(scene, camera);
 }
 padUI();
-loadAssets().then(() => { if (params.get('autoconnect') !== '0') connect(); });
+loadAssets().then(() => { if (params.get('autoconnect') !== '0') connect(); if (params.get('runtime')) connectBody(); });
 animate();
 
 // 供 Playwright 冒烟测试与控制台调试
-window.__live = { body, camera, get gw() { return gw; }, connect, logs, renderRelationship, renderMood, showEvent, session, graph, refreshMemoryGraph };
+window.__live = { body, camera, get gw() { return gw; }, get bodyClient() { return bodyClient; }, connect, connectBody, logs, renderRelationship, renderMood, showEvent, session, graph, refreshMemoryGraph };
