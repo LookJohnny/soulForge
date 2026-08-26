@@ -59,6 +59,10 @@ export const STEP_TO_WEB = {
   approach_user: { kind: 'gaze', target: 'user' },
   safe_stop: { kind: 'idle' },
   hold_safe_breakpoint: { kind: 'idle' },
+  pause_template: { kind: 'idle' },
+  resume_template: { kind: 'idle' },
+  stop_current_activity: { kind: 'idle' },
+  abort_all_templates: { kind: 'idle' },
 };
 
 export const PERFORMANCE_TO_CLIP = {

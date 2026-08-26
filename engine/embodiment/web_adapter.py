@@ -93,9 +93,13 @@ STEP_TO_WEB: dict[str, dict[str, Any]] = {
     "walk_to_sofa": {"kind": "gaze", "target": "away"},
     "walk_to_zone": {"kind": "gaze", "target": "away"},
     "approach_user": {"kind": "gaze", "target": "user"},
-    # safety (expressive body: nothing physical to stop)
+    # safety / template control (expressive body: nothing physical to stop)
     "safe_stop": {"kind": "idle"},
     "hold_safe_breakpoint": {"kind": "idle"},
+    "pause_template": {"kind": "idle"},
+    "resume_template": {"kind": "idle"},
+    "stop_current_activity": {"kind": "idle"},
+    "abort_all_templates": {"kind": "idle"},
 }
 
 # Performances a decision may request via params.performance (studio legacy)

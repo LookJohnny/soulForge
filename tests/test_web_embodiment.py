@@ -109,3 +109,115 @@ def test_js_table_matches_python():
     js = json.loads(proc.stdout)
     assert js["steps"] == STEP_TO_WEB
     assert js["perf"] == PERFORMANCE_TO_CLIP
+
+
+@pytest.mark.asyncio
+async def test_real_runtime_server_accepts_web_body_and_dispatches():
+    """The JS client mirrors this hello exactly — prove the real server likes it."""
+    import asyncio
+
+    import websockets
+
+    from engine.planner import MockBehaviorLLM, Persona
+    from engine.server import (
+        BodyHello,
+        Observation,
+        SoulForgeRuntimeServer,
+        decode,
+        encode,
+    )
+    from engine.server.protocol import Welcome
+
+    server = SoulForgeRuntimeServer(
+        [Persona("luna", "Luna", "creative_care", relationships={"user": 0.8})],
+        start_minute=19 * 60,
+        time_scale=1.0,
+        tick_hz=8.0,
+        llm=MockBehaviorLLM(),
+    )
+    serve_task = asyncio.create_task(server.serve(port=0))
+    await asyncio.wait_for(server.ready.wait(), timeout=5)
+    port = server.bound_port
+    try:
+        socket = None
+        for _ in range(20):
+            try:
+                socket = await websockets.connect(f"ws://127.0.0.1:{port}/body")
+                break
+            except OSError:
+                await asyncio.sleep(0.2)
+        assert socket is not None
+        manifest = web_manifest("web-vrm-test")
+        await socket.send(
+            encode(
+                BodyHello(
+                    body_id="web-vrm-test",
+                    backend="web",
+                    agent_ids=["luna"],
+                    manifest=manifest,
+                )
+            )
+        )
+        welcome = decode(await asyncio.wait_for(socket.recv(), timeout=5))
+        assert isinstance(welcome, Welcome) and welcome.accepted_agents == ["luna"]
+        # everything the runtime will ever send this body, we know how to render
+        assert set(welcome.supported_steps) <= set(STEP_TO_WEB)
+
+        # nudge the brain and collect what it sends a web body
+        await socket.send(
+            json.dumps(
+                {
+                    "type": "event",
+                    "kind": "user_utterance",
+                    "source": "user",
+                    "text": "你好呀",
+                    "target_agent": "luna",
+                    "payload": {},
+                }
+            )
+        )
+        loop = asyncio.get_event_loop()
+        deadline = loop.time() + 2.5
+        actions = []
+        while loop.time() < deadline:
+            try:
+                frame = decode(
+                    await asyncio.wait_for(
+                        socket.recv(), timeout=max(0.05, deadline - loop.time())
+                    )
+                )
+            except (asyncio.TimeoutError, websockets.ConnectionClosed):
+                break
+            if isinstance(frame, ActionCommand):
+                actions.append(frame)
+                await socket.send(
+                    encode(
+                        Observation(
+                            command_id=frame.command_id,
+                            agent_id="luna",
+                            status="accepted",
+                            body_id="web-vrm-test",
+                        )
+                    )
+                )
+                await socket.send(
+                    encode(
+                        Observation(
+                            command_id=frame.command_id,
+                            agent_id="luna",
+                            status="done",
+                            body_id="web-vrm-test",
+                        )
+                    )
+                )
+        assert actions, "web body received no actions from the runtime"
+        for a in actions:
+            prim = translate(a)
+            assert prim["kind"] in {"clip", "gaze", "pose", "idle", "speak"}, a.name
+            assert (
+                a.dialogue is None
+            )  # features.speech=false → gateway speaks, not the body
+        await socket.close()
+    finally:
+        server.stop()
+        await asyncio.wait_for(serve_task, timeout=5)
