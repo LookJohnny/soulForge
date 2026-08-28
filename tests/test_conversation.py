@@ -168,3 +168,20 @@ def test_auto_start_off_by_default_and_user_events_untouched():
     rt.run(15 * 60, 5)
     assert not rt.conversations.history()
     assert any(t.kind == "dialogue" and t.detail["gaze"] == "user" for t in rt.trace)
+
+
+def test_release_hands_floor_over_as_soon_as_line_is_spoken():
+    rt = make_runtime(
+        social_policy=SocialPolicy(turn_gap_min=30.0)
+    )  # long fallback, like the server
+    conv = rt.start_conversation("luna", "kai")
+    rt.tick(15 * 60)  # luna opens; kai's reply is parked 30 min out
+    assert conv.pending is not None and conv.pending.t_min == 15 * 60 + 30
+    rt.tick(15 * 60 + 1)
+    assert conv.turns == 1  # nobody answered yet
+    assert rt.conversations.release("luna", 15 * 60 + 1.5)  # body says: line finished
+    rt.tick(15 * 60 + 2)
+    assert conv.turns == 2 and conv.lines[1].agent_id == "kai"
+    assert not rt.conversations.release(
+        "luna", 15 * 60 + 2
+    )  # nothing pending for luna now

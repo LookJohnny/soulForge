@@ -239,8 +239,19 @@ function padUI() {
 // ── 气泡 ──────────────────────────────────────────────
 let bubbleUntil = 0;
 let typingTimer = 0;
-const agentBubbles = new Map(); // 非 primary 角色各自的气泡 {el, until}
-function showBubble(text, agentId = null) {
+const agentBubbles = new Map(); // 非 primary 角色各自的气泡 {el, until, timer}
+/** 气泡逐字出现：默认 ~9 字/秒；给了 durationMs（TTS 时长）就按它铺满。 */
+function typewrite(el, text, durationMs) {
+  clearInterval(el._tw);
+  const total = text.length; const ms = durationMs && durationMs > 300 ? durationMs : total * 110;
+  const t0 = performance.now(); el.textContent = '';
+  el._tw = setInterval(() => {
+    const n = Math.min(total, Math.ceil(((performance.now() - t0) / ms) * total));
+    el.textContent = text.slice(0, n);
+    if (n >= total) clearInterval(el._tw);
+  }, 40);
+}
+function showBubble(text, agentId = null, durationMs = 0) {
   if (agentId && agentId !== primaryAgent && stage.has(agentId)) {
     let bb = agentBubbles.get(agentId);
     if (!bb) {
@@ -248,12 +259,12 @@ function showBubble(text, agentId = null) {
       el.style.borderLeftColor = personaById.get(agentId)?.color ?? ''; document.body.appendChild(el);
       bb = { el, until: 0 }; agentBubbles.set(agentId, bb);
     }
-    bb.el.textContent = text; bb.el.classList.remove('hidden'); bb.until = performance.now() + 6000 + text.length * 120;
+    bb.el.classList.remove('hidden'); typewrite(bb.el, text, durationMs); bb.until = performance.now() + Math.max(durationMs, 0) + 2500 + text.length * 40;
     return;
   }
-  $('bubble-text').textContent = text;
   $('bubble').classList.remove('hidden'); $('typing').classList.add('hidden');
-  bubbleUntil = performance.now() + 6000 + text.length * 120;
+  typewrite($('bubble-text'), text, durationMs);
+  bubbleUntil = performance.now() + Math.max(durationMs, 0) + 2500 + text.length * 40;
 }
 function placeBubbles() {
   const set = (el, pos, dx, dy) => {
@@ -396,7 +407,7 @@ async function connectBody() {
   bodyClient = new BodyClient({ url, bodyId: 'web-vrm-live', agentIds, speech: true }).attach(bodyFor, { animations: animationsList, speak, places: PLACES, slotOffset });
   bodyClient.addEventListener('action', (e) => {
     const { cmd, prim } = e.detail;
-    if (cmd.dialogue && (standalone || isAgentTalk(cmd))) { const n = personaById.get(cmd.agent_id)?.name ?? cmd.agent_id; log(`${n}: ${cmd.dialogue}`); showBubble(cmd.dialogue, cmd.agent_id); }
+    if (cmd.dialogue && (standalone || isAgentTalk(cmd))) { const n = personaById.get(cmd.agent_id)?.name ?? cmd.agent_id; log(`${n}: ${cmd.dialogue}`); }
     if (isAgentTalk(cmd)) faceEachOther(cmd.agent_id, cmd.gaze_target, prim.duration_s);
     log(`▶ ${cmd.agent_id} ${cmd.name} → ${prim.kind}${prim.clip ? ':' + prim.clip : ''}`, 'sys');
   });
@@ -430,30 +441,36 @@ function startConversation(a, b, topic = '') {
   ws.onerror = () => toast('连不上 Runtime Server /control');
 }
 let standaloneAudio = null;
-const speakQueue = new Map(); // agent → promise chain，同一角色的台词按顺序念
+// 全台一次只有一个人说话：所有角色的台词排进同一条队列（gateway 在说话时也等），
+// 气泡在开口那一刻才出现，并按音频时长逐字铺开——这就是"礼貌的先后"。
+let speakChain = Promise.resolve();
+const waitGatewayQuiet = async () => { let n = 0; while (gw?.speaking && n++ < 300) await new Promise((r) => setTimeout(r, 100)); };
 async function speakStandalone(text, agentId = primaryAgent) {
   if (!text) return;
-  const b = bodyFor(agentId) ?? body;
-  const edge = personaById.get(agentId)?.voice?.edge ?? {};
-  const voice = { provider: 'edge', id: edge.voice ?? 'zh-CN-XiaoxiaoNeural', rate: edge.rate ? Math.round((edge.rate - 100) * 0.5) : 0, pitch: 0 };
   const run = async () => {
+    await waitGatewayQuiet();
+    const b = bodyFor(agentId) ?? body;
+    const edge = personaById.get(agentId)?.voice?.edge ?? {};
+    // characters.json edge: rate 100=正常语速(→ ±%), pitch 1.0=原调(→ Hz)。放慢一点、男声压低一点，别像播音腔
+    const voice = { provider: 'edge', id: edge.voice ?? 'zh-CN-XiaoxiaoNeural', rate: edge.rate ? Math.round((edge.rate - 100) * 0.25) : 0, pitch: edge.pitch ? Math.round((edge.pitch - 1) * 200) : 0 };
+    let url = null;
     try {
       const res = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, voice }) });
-      if (!res.ok) return;
-      const url = URL.createObjectURL(await res.blob());
-      await new Promise((resolve) => {
-        const audio = new Audio(url); standaloneAudio = audio;
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const src = ctx.createMediaElementSource(audio); const an = ctx.createAnalyser(); an.fftSize = 256; src.connect(an); an.connect(ctx.destination);
-        b.setAudioAnalyser(an); b.setSpeaking(true);
-        const done = () => { b.setSpeaking(false); b.setAudioAnalyser(gw && b === body ? gw.analyser : null); URL.revokeObjectURL(url); standaloneAudio = null; resolve(); };
-        audio.onended = audio.onerror = done; audio.play().catch(done);
-      });
+      if (res.ok) url = URL.createObjectURL(await res.blob());
     } catch { /* TTS optional */ }
+    if (!url) { showBubble(text, agentId); b.setSpeaking(true); await new Promise((r) => setTimeout(r, 600 + text.length * 110)); b.setSpeaking(false); return; }
+    await new Promise((resolve) => {
+      const audio = new Audio(url); standaloneAudio = audio;
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = ctx.createMediaElementSource(audio); const an = ctx.createAnalyser(); an.fftSize = 256; src.connect(an); an.connect(ctx.destination);
+      const done = () => { b.setSpeaking(false); b.setAudioAnalyser(gw && b === body ? gw.analyser : null); URL.revokeObjectURL(url); standaloneAudio = null; resolve(); };
+      audio.onloadedmetadata = () => showBubble(text, agentId, isFinite(audio.duration) ? audio.duration * 1000 : 0);
+      audio.onplay = () => { b.setAudioAnalyser(an); b.setSpeaking(true); };
+      audio.onended = audio.onerror = done; audio.play().catch(done);
+    });
   };
-  const chained = (speakQueue.get(agentId) ?? Promise.resolve()).then(run);
-  speakQueue.set(agentId, chained);
-  return chained;
+  speakChain = speakChain.then(run, run);
+  return speakChain;
 }
 $('connect-body').onclick = connectBody;
 $('runtime').value = params.get('runtime') ?? '';

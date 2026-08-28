@@ -99,7 +99,7 @@ class SoulForgeRuntimeServer:
             WorldState(sim_minute=start_minute),
             llm=self.llm,
             adapter=self._on_planner_dispatch,
-            social_policy=SocialPolicy(auto_start=True) if social else None,
+            social_policy=SocialPolicy(auto_start=social, turn_gap_min=30.0),
         )
         self.sim_minute = start_minute
         self.bodies: dict[str, BodyConnection] = {}
@@ -315,6 +315,10 @@ class SoulForgeRuntimeServer:
         # cross-agent receipt must never consume the legitimate command.
         if obs.status in {"done", "failed", "interrupted", "rejected"}:
             body.sent_commands.pop(obs.command_id, None)
+            if (
+                command.dialogue
+            ):  # the line has been spoken (or won't be): partner may answer
+                self.runtime.conversations.release(agent_id, self.sim_minute)
         if obs.status == "failed" and command and command.template_id:
             template = TEMPLATE_REGISTRY.get(command.template_id)
             if template:

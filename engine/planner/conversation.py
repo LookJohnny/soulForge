@@ -76,6 +76,7 @@ class Conversation:
     max_turns: int = 6
     lines: list[ConversationLine] = field(default_factory=list)
     next_speaker: str | None = None
+    pending: Event | None = None  # the reply event waiting for the last line to finish
     ended: bool = False
     end_reason: str = ""
     ended_at: float | None = None
@@ -101,7 +102,11 @@ class SocialPolicy:
     cooldown_min: float = 180.0  # per-agent quiet time after a conversation (they're roommates, not chatbots)
     min_relationship: float = 0.5
     max_turns: int = 6
-    turn_gap_min: float = 0.5  # sim minutes between one line and the reply
+    turn_gap_min: float = (
+        0.5  # fallback: sim minutes before the reply if no body confirms speech
+    )
+    # a host that hears bodies (runtime server) calls release() when the line was
+    # actually spoken; the fallback keeps offline runs and tests moving
 
 
 class ConversationManager:
@@ -246,16 +251,31 @@ class ConversationManager:
             self.end(conv, minute, "turn_cap")
         else:
             conv.next_speaker = partner
-            self.runtime.push_event(
-                Event(
-                    t_min=minute + self.policy.turn_gap_min,
-                    kind=EventKind.AGENT_UTTERANCE,
-                    source=agent_id,
-                    text=text,
-                    payload=self._payload(conv, partner, role="reply"),
-                    target_agent=partner,
-                )
+            conv.pending = Event(
+                t_min=minute + self.policy.turn_gap_min,
+                kind=EventKind.AGENT_UTTERANCE,
+                source=agent_id,
+                text=text,
+                payload=self._payload(conv, partner, role="reply"),
+                target_agent=partner,
             )
+            self.runtime.push_event(conv.pending)
+
+    def release(self, agent_id: str, minute: float) -> bool:
+        """`agent_id` finished speaking: let the partner answer now instead of at the fallback time."""
+        conv = self.active_for(agent_id)
+        if conv is None or conv.pending is None or conv.pending.source != agent_id:
+            return False
+        event, conv.pending = conv.pending, None
+        if event.t_min <= minute:
+            return False  # already due / handled
+        try:
+            self.runtime.event_queue.remove(event)
+        except ValueError:
+            return False
+        event.t_min = minute
+        self.runtime.push_event(event)
+        return True
 
     def end(self, conv: Conversation, minute: float, reason: str) -> None:
         if conv.ended:
