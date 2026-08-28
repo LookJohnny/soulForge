@@ -206,6 +206,7 @@ class CompanionRuntime:
         adapter: Adapter | None = None,
         trace_limit: int = 20000,
         memory_store=None,
+        social_policy=None,
     ):
         if not personas:
             raise ValueError("CompanionRuntime needs at least one persona")
@@ -235,6 +236,27 @@ class CompanionRuntime:
             for agent_id, persona in self.personas.items()
         }
         self.hour_plans: dict[str, HourPlan] = {}
+        from engine.planner.conversation import ConversationManager
+
+        self.conversations = ConversationManager(self, social_policy)
+
+    # -- conversations --------------------------------------------------------
+    def start_conversation(
+        self,
+        initiator: str,
+        partner: str,
+        minute: float | None = None,
+        topic: str = "",
+        max_turns: int | None = None,
+    ):
+        """Put two characters in a conversation; the opener speaks on the next event pass."""
+        return self.conversations.start(
+            initiator,
+            partner,
+            self.world.sim_minute if minute is None else minute,
+            topic,
+            max_turns,
+        )
 
     # -- events -----------------------------------------------------------
     def push_event(self, event: Event) -> None:
@@ -252,6 +274,7 @@ class CompanionRuntime:
         """
         self.world.sim_minute = minute
         self._ensure_hour_plans(minute)
+        self.conversations.maybe_auto_start(minute)
 
         due = (
             [e for e in list(self.event_queue) if e.t_min <= minute]
@@ -338,6 +361,14 @@ class CompanionRuntime:
             return
         targets = [event.target_agent] if event.target_agent else list(self.personas)
         for agent_id in targets:
+            if not self.conversations.accepts(event, agent_id):
+                self._log(
+                    minute,
+                    agent_id,
+                    "event_dropped",
+                    {"reason": "not this agent's turn"},
+                )
+                continue
             persona = self.personas[agent_id]
             hour_plan = self.hour_plans[agent_id]
             activity = hour_plan.activity_at(minute)
@@ -444,6 +475,7 @@ class CompanionRuntime:
                 decision, event, persona, self.day_plans[agent_id], hour_plan, minute
             )
             self._apply_delta(agent_id, delta, minute)
+            self.conversations.after_decision(agent_id, event, decision, minute)
             self._log(
                 minute,
                 agent_id,

@@ -449,6 +449,31 @@ class SoulForgeRuntimeServer:
                     continue
                 if data.get("type") == "event":
                     self._ingest_event(decode(raw))
+                elif data.get("type") == "start_conversation":
+                    agents = data.get("agents") or []
+                    try:
+                        conv = self.runtime.start_conversation(
+                            agents[0],
+                            agents[1],
+                            self.sim_minute,
+                            data.get("topic", ""),
+                            data.get("max_turns"),
+                        )
+                        await self._safe_send(
+                            socket,
+                            json.dumps(
+                                {
+                                    "type": "conversation",
+                                    "id": conv.id,
+                                    "agents": list(conv.participants),
+                                    "topic": conv.topic,
+                                }
+                            ),
+                        )
+                    except (IndexError, ValueError) as exc:
+                        await self._safe_send(
+                            socket, json.dumps({"type": "error", "error": str(exc)})
+                        )
                 elif data.get("type") == "query":
                     if data.get("what") == "trace":
                         await self._safe_send(socket, self.runtime.dump_trace_json())

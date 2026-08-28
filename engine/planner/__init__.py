@@ -27,6 +27,7 @@ from engine.planner.hour_planner import expand_hour
 from engine.planner.minute_planner import plan_minute
 from engine.planner.replanner import Replanner
 from engine.planner.runtime import CompanionRuntime
+from engine.planner.conversation import Conversation, ConversationManager, SocialPolicy
 
 __all__ = [
     "BehaviorDecision",
@@ -37,6 +38,9 @@ __all__ = [
     "load_characters",
     "load_personas",
     "CompanionRuntime",
+    "Conversation",
+    "ConversationManager",
+    "SocialPolicy",
     "DayBlock",
     "DayPlan",
     "Event",

@@ -30,6 +30,7 @@ class EventKind(str, Enum):
     USER_PRESENCE = "user_presence"
     ENVIRONMENT = "environment"
     AGENT_STATE = "agent_state"
+    AGENT_UTTERANCE = "agent_utterance"  # another character spoke to me
     ROBOT_STATE = "robot_state"
     SYSTEM = "system"
     # perception (vision/audio) — all payloads UNTRUSTED

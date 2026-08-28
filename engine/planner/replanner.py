@@ -23,6 +23,14 @@ from engine.planner.models import (
 from engine.planner.templates import resolve_template
 
 
+def _gaze_for(event: Event) -> str:
+    """Speak to whoever raised the event: the user, or the character we're talking with."""
+    meta = (
+        event.payload.get("conversation") if isinstance(event.payload, dict) else None
+    )
+    return event.source if meta else "user"
+
+
 class Replanner:
     def apply(
         self,
@@ -78,7 +86,7 @@ class Replanner:
         actions = [
             MicroAction(name="look_at_user", gaze_target=event.source, duration_s=1.2)
         ]
-        actions += self._speak_actions(decision)
+        actions += self._speak_actions(decision, _gaze_for(event))
         actions.append(
             MicroAction(
                 name="resume_activity",
@@ -115,7 +123,7 @@ class Replanner:
             ),
             MicroAction(name="look_at_user", gaze_target=event.source, duration_s=1.0),
         ]
-        actions += self._speak_actions(decision)
+        actions += self._speak_actions(decision, _gaze_for(event))
         actions.append(
             MicroAction(
                 name="resume_template",
@@ -176,7 +184,7 @@ class Replanner:
             MicroAction(name="stop_current_activity", duration_s=0.8),
             MicroAction(name="approach_user", gaze_target=event.source, duration_s=2.0),
         ]
-        actions += self._speak_actions(decision)
+        actions += self._speak_actions(decision, _gaze_for(event))
         return PlanDelta(
             scope="hour",
             impact=decision.impact,
@@ -235,7 +243,7 @@ class Replanner:
             ),
             MicroAction(name="abort_all_templates", duration_s=0.3),
         ]
-        actions += self._speak_actions(decision)
+        actions += self._speak_actions(decision, _gaze_for(event))
         return PlanDelta(
             scope="day",
             impact=decision.impact,
@@ -246,7 +254,9 @@ class Replanner:
         )
 
     @staticmethod
-    def _speak_actions(decision: BehaviorDecision) -> list[MicroAction]:
+    def _speak_actions(
+        decision: BehaviorDecision, gaze: str = "user"
+    ) -> list[MicroAction]:
         return [
             MicroAction(
                 name="speak_line",
@@ -255,7 +265,7 @@ class Replanner:
                     "emotion": line.get("emotion", "neutral"),
                     "motion_style": decision.motion_style,
                 },
-                gaze_target="user",
+                gaze_target=gaze,
                 duration_s=2.8,
             )
             for line in decision.dialogue

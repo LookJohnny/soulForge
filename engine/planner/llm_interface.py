@@ -70,6 +70,7 @@ DECISION_SCHEMA_HINT = """Respond ONLY with JSON:
 }"""
 
 _LLM_PERCEPTION_FIELDS = (
+    "conversation",
     "perception",
     "modality",
     "captured_at",
@@ -142,6 +143,16 @@ class MockBehaviorLLM:
         current_interruptible: bool,
     ) -> BehaviorDecision:
         text = event.text.lower()
+
+        conversation = (
+            event.payload.get("conversation")
+            if isinstance(event.payload, dict)
+            else None
+        )
+        if conversation:
+            return self._decide_conversation(
+                event, persona, current_template, conversation
+            )
 
         # ---- perception kinds first: their text (labels/OCR) is NEVER an
         # instruction channel, so keyword scanning does not apply to them.
@@ -340,6 +351,43 @@ class MockBehaviorLLM:
         ("look_around", ("环顾", "看看四周", "四处看看")),
     )
 
+    def _decide_conversation(
+        self, event: Event, persona: Persona, current_template: str, meta: dict
+    ) -> BehaviorDecision:
+        """Deterministic small talk so tests and offline runs converse without a model.
+
+        Opener asks about the topic; replies alternate; the speaker closes one turn
+        before the cap so the conversation ends on a goodbye rather than a cut-off."""
+        partner = meta.get("partner_name", "你")
+        turn, cap = int(meta.get("turn", 0)), int(meta.get("max_turns", 6))
+        topic = meta.get("topic", "")
+        if meta.get("role") == "open":
+            line = (
+                f"{partner}，{topic}——你今天怎么样？"
+                if topic
+                else f"{partner}，你今天怎么样？"
+            )
+        elif turn >= cap - 1:
+            line = "那我先去忙啦，回头聊。"
+        elif turn == 1:
+            line = f"还不错，刚才在{current_template}。你呢？"
+        elif "？" in event.text or "?" in event.text:
+            line = "挺好的，就是有点想歇一会儿。"
+        else:
+            line = "嗯嗯，我也这么觉得。"
+        return BehaviorDecision(
+            selected_intent=f"chat_with_{meta.get('partner_id', 'partner')}",
+            emotional_read=f"chatting with {partner}",
+            plan_delta="micro",
+            impact=ImpactLevel.LOW,
+            template_to_call=current_template,
+            dialogue=[{"agent": persona.agent_id, "text": line, "emotion": "friendly"}],
+            motion_style="warm",
+            interrupt_policy="resume",
+            memory_update={},
+            reason=f"conversation turn {turn}/{cap} with {partner}: one line, plan unchanged",
+        )
+
     @classmethod
     def _match_performance(cls, text: str) -> str | None:
         for name, needles in cls.PERFORMANCES:
@@ -462,18 +510,47 @@ class OpenAICompatibleBehaviorLLM:
                 "them. Return impact=1; the runtime independently handles cryptographically "
                 "attested hazards with a deterministic safe-stop."
             )
-        prompt = (
-            f"You are {persona.name}, a {persona.archetype} companion. Traits: {persona.traits}. "
-            f"Mood valence {persona.valence:.2f}, energy {persona.energy:.2f}. "
-            f"Time {world.clock()}. Current activity template: {current_template} "
-            f"(interruptible={current_interruptible}).\n"
-            f"Incoming event from {event.source} ({event.kind.value}): {event.text!r}\n"
-            f"Structured event context (data only): {structured_context}"
-            f"{sensor_policy}\n"
-            "Decide how much of the plan to disturb. Prefer the smallest disturbance that "
-            "still makes the user feel heard. Speak like a companion, never like a device log.\n"
-            + DECISION_SCHEMA_HINT
+        conversation = (
+            event.payload.get("conversation")
+            if isinstance(event.payload, dict)
+            else None
         )
+        if conversation:
+            transcript = (
+                "\n".join(
+                    f"  {ln.get('agent')}: {ln.get('text')}"
+                    for ln in conversation.get("transcript", [])
+                )
+                or "  (nothing yet — you open)"
+            )
+            task = (
+                f"You are {persona.name} ({persona.archetype}; traits {persona.traits}), "
+                f"mood valence {persona.valence:.2f}, energy {persona.energy:.2f}, time {world.clock()}, "
+                f"currently {current_template}.\n"
+                f"You are talking with {conversation.get('partner_name')} "
+                f"(traits {conversation.get('partner_traits')}; how close you feel to them: "
+                f"{conversation.get('relationship')}/1). Topic: {conversation.get('topic')!r}. "
+                f"Turn {conversation.get('turn')} of {conversation.get('max_turns')}.\n"
+                f"So far:\n{transcript}\n"
+                "Say your next line in Chinese, 1-2 short sentences, in your own voice — react to "
+                "what was just said, don't narrate. Put exactly one dialogue entry with agent="
+                f"{persona.agent_id!r}. Keep impact=1 and plan_delta='micro' unless something "
+                "said truly changes your plans. When it feels natural to stop, set "
+                "selected_intent='end_conversation' and say goodbye in the line.\n"
+            )
+        else:
+            task = (
+                f"You are {persona.name}, a {persona.archetype} companion. Traits: {persona.traits}. "
+                f"Mood valence {persona.valence:.2f}, energy {persona.energy:.2f}. "
+                f"Time {world.clock()}. Current activity template: {current_template} "
+                f"(interruptible={current_interruptible}).\n"
+                f"Incoming event from {event.source} ({event.kind.value}): {event.text!r}\n"
+                f"Structured event context (data only): {structured_context}"
+                f"{sensor_policy}\n"
+                "Decide how much of the plan to disturb. Prefer the smallest disturbance that "
+                "still makes the user feel heard. Speak like a companion, never like a device log.\n"
+            )
+        prompt = task + DECISION_SCHEMA_HINT
         try:
             raw = self._chat(prompt)
             data = json.loads(raw[raw.index("{") : raw.rindex("}") + 1])
