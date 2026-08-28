@@ -477,6 +477,7 @@ class SoulForgeRuntimeServer:
                             self.sim_minute,
                             data.get("topic", ""),
                             data.get("max_turns"),
+                            force=bool(data.get("force", True)),
                         )
                         await self._safe_send(
                             socket,

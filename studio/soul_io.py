@@ -64,15 +64,7 @@ def export_persona(
         entry["soul_id"] = str(uuid.uuid4())
         _save(raw)
     studio = {k: v for k, v in entry.items() if k not in _PERSONA_ONLY}
-    character = {
-        "name": entry["name"],
-        "archetype": entry.get("archetype", ""),
-        "personality": {
-            "traits": entry.get("traits", []),
-            "energy": entry.get("energy", 0.5),
-        },
-        "catchphrases": [entry["comfort_line"]] if entry.get("comfort_line") else [],
-    }
+    character = ai_core_character(entry)
     embodiment = dict(entry.get("embodiment") or {})
     model_bytes, model_ext = None, "vrm"
     path = _model_path(embodiment.get("model")) if include_model else None
@@ -92,6 +84,144 @@ def export_persona(
         passphrase=passphrase,
     )
     return data, f"{entry['name']}.soul"
+
+
+# ai-core's prompt builder reads five 0-100 trait scores; derive them from trait words
+_TRAIT_HINTS = {
+    "extrovert": (
+        ("playful", "lively", "热情", "外向", "活泼", "artistic"),
+        ("calm", "reserved", "沉稳", "内向", "精确", "precise"),
+    ),
+    "humor": (
+        ("playful", "witty", "打趣", "幽默", "artistic"),
+        ("serious", "严肃", "precise"),
+    ),
+    "warmth": (
+        ("warm", "温柔", "caring", "reliable", "helpful"),
+        ("cold", "冷淡", "aloof"),
+    ),
+    "curiosity": (
+        ("curious", "artistic", "好奇", "creative", "helpful"),
+        ("routine", "刻板"),
+    ),
+}
+
+
+def _numeric_personality(entry: dict[str, Any]) -> dict[str, int]:
+    words = [w.lower() for w in entry.get("traits", [])] + [
+        entry.get("speech_style", "").lower()
+    ]
+    text = " ".join(words)
+    out: dict[str, int] = {}
+    for key, (hi, lo) in _TRAIT_HINTS.items():
+        score = (
+            55
+            + 20 * sum(1 for h in hi if h in text)
+            - 20 * sum(1 for w in lo if w in text)
+        )
+        out[key] = max(10, min(95, score))
+    out["energy"] = int(round(float(entry.get("energy", 0.6)) * 100))
+    return out
+
+
+def ai_core_character(entry: dict[str, Any]) -> dict[str, Any]:
+    """The dialogue persona ai-core needs, derived from the engine persona so both brains
+    describe the same person. Archetype HUMAN: the character addresses the user as 你."""
+    traits = "、".join(entry.get("traits", [])) or "温和"
+    interests = "、".join(entry.get("interests", [])) or ""
+    style = entry.get("speech_style", "")
+    role = entry.get("role_label", "陪伴")
+    backstory = (
+        f"{entry['name']}是住在用户家里的{role}，和其他伙伴一起照看这个家。性格{traits}。"
+        + (f"平时最在意：{interests}。" if interests else "")
+        + (f"说话方式：{style}。" if style else "")
+        + "是 AI 角色，不吃饭、不做菜，也不会假装有人类的身体需求；把用户当平等的同伴，而不是主人。"
+    )
+    return {
+        "name": entry["name"],
+        "archetype": "HUMAN",
+        "species": role,
+        "backstory": backstory,
+        "relationship": "同住的伙伴",
+        "personality": _numeric_personality(entry),
+        "catchphrases": [entry["comfort_line"]] if entry.get("comfort_line") else [],
+        "topics": list(entry.get("interests", [])),
+        "forbidden": ["吃饭", "做菜", "菜谱", "主人"],
+        "response_length": "SHORT",
+        "engine_id": entry["id"],
+    }
+
+
+def sync_persona(
+    character_id: str, *, bind_device: str | None = None
+) -> dict[str, Any]:
+    """Push one persona into ai-core's character table (upsert by name, PUBLISHED)."""
+    import os
+    import urllib.request
+
+    brand = os.environ.get("SOUL_BRAND_ID") or _dotenv("SOUL_BRAND_ID")
+    token = os.environ.get("SERVICE_TOKEN") or _dotenv("SERVICE_TOKEN")
+    url = (
+        (
+            os.environ.get("AI_CORE_URL")
+            or _dotenv("AI_CORE_URL")
+            or "http://127.0.0.1:8100"
+        )
+        .rstrip("/")
+        .replace("localhost", "127.0.0.1")
+    )
+    if not brand or not token:
+        raise RuntimeError(
+            "SOUL_BRAND_ID and SERVICE_TOKEN are required to sync into ai-core"
+        )
+    data, _ = export_persona(character_id, include_model=False)
+    body = json.dumps(
+        {
+            "soul_b64": base64.b64encode(data).decode(),
+            "upsert_by_name": True,
+            "publish": True,
+            "archetype": "HUMAN",
+            "bind_device": bind_device,
+        }
+    ).encode()
+    req = urllib.request.Request(
+        f"{url}/soul-packs/import",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Service-Token": token,
+            "X-Brand-Id": brand,
+        },
+    )
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({})
+    )  # local call: no proxy
+    with opener.open(req, timeout=30) as resp:
+        return json.loads(resp.read())
+
+
+def sync_all(*, web_device: str | None = "web_vrm-live") -> list[dict[str, Any]]:
+    """Every persona in characters.json → ai-core; the first one becomes the web body's character."""
+    out = []
+    for i, entry in enumerate(_load()["characters"]):
+        r = sync_persona(entry["id"], bind_device=web_device if i == 0 else None)
+        out.append(
+            {
+                "id": entry["id"],
+                **{k: r.get(k) for k in ("character_id", "updated", "bound_device")},
+            }
+        )
+    return out
+
+
+def _dotenv(key: str) -> str:
+    env = ROOT / ".env"
+    if not env.exists():
+        return ""
+    for line in env.read_text().splitlines():
+        if line.startswith(key + "="):
+            return line.split("=", 1)[1].strip().strip('"')
+    return ""
 
 
 def _slug(name: str, taken: set[str]) -> str:

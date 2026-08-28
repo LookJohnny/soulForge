@@ -30,7 +30,7 @@ await shot('start');
 // 1. autonomy: watch them live for 25 s
 await p.waitForTimeout(12000); await shot('autonomy_a'); await p.waitForTimeout(13000); await shot('autonomy_b');
 // 2. conversation
-await p.fill('#text', '@luna @kai 今晚吃什么'); await p.press('#text', 'Enter');
+await p.fill('#text', '@luna @kai'); await p.press('#text', 'Enter');
 const linesAt = () => p.evaluate(() => window.__live.logs.filter((l) => /^(Luna|Kai): /.test(l.text)).map((l) => l.text));
 let lines = []; const convStart = Date.now();
 for (let i = 0; i < 40 && Date.now() - convStart < 200000; i++) {

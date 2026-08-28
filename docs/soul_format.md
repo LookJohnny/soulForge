@@ -51,3 +51,14 @@ SOUL2\n                      ← 魔数
 
 - `manifest.compat.soulforge` 是最低兼容版本；读取端遇到未知文件直接忽略（向前兼容）。
 - 未来的"灵魂 Key 注册表"（输入短码即拉包）只是在这个格式之上加托管与签名，不改容器。
+
+## 统一人格来源（2026-08-28）
+
+`configs/characters.json` 是唯一的人格来源；`studio/soul_io.ai_core_character()` 把引擎人格派生成 ai-core 的对话人格
+（archetype **HUMAN** → 角色称呼用户"你"而不是"主人"；backstory 含 traits/interests/speech_style；`forbidden` 含吃饭/做菜/主人；
+`personality` 是五项 0–100 数值，ai-core 的 prompt builder 只认这个形状）。
+
+- `uv run python scripts/sync_souls.py`：全部人格 upsert 进 ai-core（按名字匹配、PUBLISHED），第一位绑定到 web 身体设备 `web_vrm-live`；
+  同时清掉 gateway 的 `device:*` 缓存和 ai-core 的 `char:{brand}:{id}` 提示词缓存（否则一小时内还是旧人格）。
+- Studio `POST /api/soul/sync`（可带 `character_id` / `bind_device`）；`/live` 导入 `.soul` 时也走 upsert。
+- 需要 `.env`：`SOUL_BRAND_ID`、`SERVICE_TOKEN`、`AI_CORE_URL`。

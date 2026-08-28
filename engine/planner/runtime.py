@@ -260,6 +260,7 @@ class CompanionRuntime:
         minute: float | None = None,
         topic: str = "",
         max_turns: int | None = None,
+        force: bool = False,
     ):
         """Put two characters in a conversation; the opener speaks on the next event pass."""
         return self.conversations.start(
@@ -268,6 +269,7 @@ class CompanionRuntime:
             self.world.sim_minute if minute is None else minute,
             topic,
             max_turns,
+            force=force,
         )
 
     # -- events -----------------------------------------------------------

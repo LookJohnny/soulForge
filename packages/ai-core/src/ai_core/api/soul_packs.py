@@ -45,6 +45,13 @@ class ImportRequest(BaseModel):
     soul_b64: str | None = None
     soulpack_b64: str | None = None  # legacy field name
     passphrase: str | None = None
+    # sync mode: the .soul is the source of truth for a character that may already exist
+    upsert_by_name: bool = (
+        False  # update the brand's character with the same name instead of inserting
+    )
+    publish: bool = False  # PUBLISHED instead of DRAFT
+    archetype: str | None = None  # override (e.g. HUMAN → the character says 你, never 主人)
+    bind_device: str | None = None  # point this device at the (up)serted character
 
     @property
     def blob_b64(self) -> str:
@@ -178,31 +185,69 @@ async def import_soul(req: ImportRequest, request: Request):
         raise HTTPException(status_code=400, detail="Soul file contains no character")
 
     pool = await get_pool()
-    new_id = str(uuid.uuid4())
     personality = character.get("personality", {})
-    try:
-        await pool.execute(
-            """INSERT INTO characters
-                   (id, brand_id, name, archetype, species, backstory, relationship,
-                    personality, catchphrases, suffix, topics, forbidden,
-                    response_length, voice_speed, status, created_at, updated_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-                       'DRAFT', now(), now())""",
-            new_id,
+    fields = {
+        "name": character.get("name"),
+        "archetype": req.archetype or character.get("archetype", "ANIMAL"),
+        "species": character.get("species"),
+        "backstory": character.get("backstory"),
+        "relationship": character.get("relationship"),
+        "personality": personality if isinstance(personality, str) else json.dumps(personality),
+        "catchphrases": list(character.get("catchphrases") or []),
+        "suffix": character.get("suffix"),
+        "topics": list(character.get("topics") or []),
+        "forbidden": list(character.get("forbidden") or []),
+        "response_length": character.get("response_length", "SHORT"),
+        "voice_speed": float(character.get("voice_speed") or 1.0),
+        "status": "PUBLISHED" if req.publish else "DRAFT",
+    }
+    existing = None
+    if req.upsert_by_name:
+        existing = await pool.fetchrow(
+            "SELECT id FROM characters WHERE brand_id = $1 AND name = $2 "
+            "ORDER BY created_at LIMIT 1",
             brand_id,
-            character.get("name"),
-            character.get("archetype", "ANIMAL"),
-            character.get("species"),
-            character.get("backstory"),
-            character.get("relationship"),
-            personality if isinstance(personality, str) else json.dumps(personality),
-            list(character.get("catchphrases") or []),
-            character.get("suffix"),
-            list(character.get("topics") or []),
-            list(character.get("forbidden") or []),
-            character.get("response_length", "SHORT"),
-            float(character.get("voice_speed") or 1.0),
+            fields["name"],
         )
+    new_id = str(existing["id"]) if existing else str(uuid.uuid4())
+    cols = list(fields)
+    try:
+        if existing:
+            sets = ", ".join(f"{c} = ${i + 1}" for i, c in enumerate(cols))
+            await pool.execute(
+                f"UPDATE characters SET {sets}, updated_at = now() WHERE id = ${len(cols) + 1}",
+                *[fields[c] for c in cols],
+                new_id,
+            )
+        else:
+            placeholders = ", ".join(f"${i + 1}" for i in range(len(cols) + 2))
+            await pool.execute(
+                f"INSERT INTO characters (id, brand_id, {', '.join(cols)}, created_at, updated_at) "
+                f"VALUES ({placeholders}, now(), now())",
+                new_id,
+                brand_id,
+                *[fields[c] for c in cols],
+            )
+        if existing:  # the prompt builder caches the character row for an hour
+            try:
+                from ai_core.services.cache import CacheService
+
+                await CacheService().delete(f"char:{brand_id}:{new_id}")
+            except Exception:
+                logger.warning("soul.char_cache_invalidate_failed", exc_info=True)
+        if req.bind_device:
+            await pool.execute(
+                "UPDATE devices SET character_id = $1, updated_at = now() WHERE id = $2",
+                new_id,
+                req.bind_device,
+            )
+            # the gateway caches device→character in redis; drop it so the rebinding is live
+            try:
+                from ai_core.services.cache import _get_redis
+
+                await (await _get_redis()).delete(f"device:{req.bind_device}")
+            except Exception:
+                logger.warning("soul.device_cache_invalidate_failed", exc_info=True)
     except Exception as e:
         logger.exception("soul.import_character_failed")
         raise HTTPException(status_code=500, detail="Failed to import character") from e
@@ -214,6 +259,8 @@ async def import_soul(req: ImportRequest, request: Request):
 
     return {
         "character_id": new_id,
+        "updated": bool(existing),
+        "bound_device": req.bind_device,
         "manifest": manifest,
         "character_name": character["name"],
         # the caller (studio) persists these on its own side — DB has no columns for them

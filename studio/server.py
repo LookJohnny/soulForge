@@ -434,7 +434,9 @@ async def api_soul_export(request: web.Request) -> web.Response:
     return web.Response(
         body=data,
         content_type="application/octet-stream",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"
+        },
     )
 
 
@@ -443,7 +445,9 @@ async def api_soul_peek(request: web.Request) -> web.Response:
 
     body = await request.json()
     try:
-        return web.json_response(SoulPackBuilder.peek(base64.b64decode(body["soul_b64"])))
+        return web.json_response(
+            SoulPackBuilder.peek(base64.b64decode(body["soul_b64"]))
+        )
     except Exception as e:
         return web.json_response({"error": f"not a soul file: {e}"}, status=400)
 
@@ -468,17 +472,42 @@ async def api_soul_import(request: web.Request) -> web.Response:
             async with aiohttp.ClientSession() as sess:
                 async with sess.post(
                     f"{AI_CORE_URL}/soul-packs/import",
-                    json={"soul_b64": soul_b64, "passphrase": body.get("passphrase") or None},
+                    json={
+                        "soul_b64": soul_b64,
+                        "passphrase": body.get("passphrase") or None,
+                        "upsert_by_name": True,
+                        "publish": True,
+                        "archetype": "HUMAN",
+                    },
                     headers={"X-Service-Token": AI_CORE_TOKEN, "X-Brand-Id": brand},
                     timeout=aiohttp.ClientTimeout(total=30),
                 ) as resp:
                     j = await resp.json()
-                    result["ai_core"] = j.get("character_id") if resp.status < 300 else None
+                    result["ai_core"] = (
+                        j.get("character_id") if resp.status < 300 else None
+                    )
                     if resp.status >= 300:
                         result["ai_core_error"] = j.get("detail") or j
         except Exception as e:
             result["ai_core_error"] = str(e)
     return web.json_response(result)
+
+
+async def api_soul_sync(request: web.Request) -> web.Response:
+    """configs/characters.json → ai-core characters (upsert by name); first persona → web body."""
+    from studio import soul_io
+
+    body = await request.json() if request.can_read_body else {}
+    try:
+        if body.get("character_id"):
+            out = soul_io.sync_persona(
+                body["character_id"], bind_device=body.get("bind_device")
+            )
+        else:
+            out = soul_io.sync_all(web_device=body.get("bind_device", "web_vrm-live"))
+    except Exception as e:  # missing env / ai-core down: say so
+        return web.json_response({"error": str(e)}, status=502)
+    return web.json_response({"synced": out})
 
 
 async def api_animations(_request: web.Request) -> web.Response:
@@ -797,6 +826,7 @@ def build_app() -> web.Application:
     app.router.add_post("/api/soul/export", api_soul_export)
     app.router.add_post("/api/soul/peek", api_soul_peek)
     app.router.add_post("/api/soul/import", api_soul_import)
+    app.router.add_post("/api/soul/sync", api_soul_sync)
     app.router.add_post("/api/chat", api_chat)
     app.router.add_post("/api/tts", api_tts)
     app.router.add_static("/studio/", STUDIO_WEB)

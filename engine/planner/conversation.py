@@ -44,6 +44,23 @@ ACTIVITY_ZH = {
     "study": "看书",
     "idle": "发呆",
 }
+# 值得旁听的话题池：点子、观察、小谜团、认真的小辩论。不含吃饭/做菜——他们是 AI。
+TOPIC_POOL = (
+    "如果把用户的今天画成一张海报，会用什么颜色和一句什么标语",
+    "家里最近哪个声音最奇怪，是什么发出来的",
+    "给阳台那盆绿萝取个名字，两个人各提一个然后投票",
+    "假如明天停电一整天，各自打算怎么过",
+    "最近学到的一个人类说法，试着用一次，看对不对",
+    "认真辩一次：机器人会不会做梦",
+    "如果能给用户准备一个小惊喜，做什么、怎么藏",
+    "窗外此刻的光线像哪一幅画或哪一首歌",
+    "两个人接力编一个只有五句话的睡前故事",
+    "上次是谁把东西放错了地方，还没认",
+    "最想学会的一件用户会而你们不会的事",
+    "如果只能保留家里的一样东西，各自选什么",
+    "用户最近三次说话的语气，有没有什么变化",
+    "给对方出一道只有这家人才答得出的谜题",
+)
 CLOSING_MARKERS = (
     "再见",
     "晚安",
@@ -134,6 +151,7 @@ class ConversationManager:
         minute: float,
         topic: str = "",
         max_turns: int | None = None,
+        force: bool = False,
     ) -> Conversation:
         personas = self.runtime.personas
         if initiator == partner or initiator not in personas or partner not in personas:
@@ -142,7 +160,10 @@ class ConversationManager:
             )
         for who in (initiator, partner):
             if who in self._by_agent:
-                raise ValueError(f"{who} is already in a conversation")
+                if not force:
+                    raise ValueError(f"{who} is already in a conversation")
+                # an explicit request (the user's @) outranks household small talk
+                self.end(self.active_for(who), minute, "interrupted")
         space = self.runtime.world.space
         if not space.co_present(initiator, partner):
             # you have to be in the same room to talk: the opener walks over
@@ -351,9 +372,9 @@ class ConversationManager:
         return activity.interruptible and activity.template_id not in BUSY_TEMPLATES
 
     def _pick_topic(self, initiator: str, partner: str) -> str:
-        """A concrete opener seed, not a theme: what the partner is doing right now,
-        something the user said today, or one of my own interests — rotated so the
-        same pair doesn't reopen the same subject."""
+        """A concrete opener seed worth overhearing. Grounded first (what the user said
+        today, what the partner is doing), then a curated pool of ideas, small
+        mysteries and playful debates — never meals: these are AI characters."""
         rt = self.runtime
         me, other = rt.personas[initiator], rt.personas[partner]
         plan = rt.hour_plans.get(partner)
@@ -361,27 +382,36 @@ class ConversationManager:
         doing = ACTIVITY_ZH.get(act.template_id if act else "idle", "")
         recent = rt.memory.get(initiator, {})
         seeds: list[str] = []
-        if doing:
-            seeds.append(f"{other.name}正在{doing}，从这件事聊起（问细节/打趣/搭把手）")
         if recent.get("user_mood"):
-            seeds.append(f"用户今天的状态：{recent['user_mood']}——你们俩怎么照应")
+            seeds.append(
+                f"用户今天的状态：{recent['user_mood']}——猜猜是为什么，你们能悄悄做点什么"
+            )
         if recent.get("last_user_request"):
-            seeds.append(f"用户提过想要「{recent['last_user_request']}」，商量一下")
+            seeds.append(
+                f"用户提过想要「{recent['last_user_request']}」，商量一下怎么办到"
+            )
+        if doing and act and act.template_id not in ("cooking", "idle", "rest", "chatting"):
+            seeds.append(
+                f"{other.name}正在{doing}：问一个具体的细节，然后接一个自己的看法"
+            )
         hour = int(rt.world.day_minute() // 60)
-        if 17 <= hour <= 20:
-            seeds.append("晚饭吃什么、谁来做")
-        elif hour >= 21:
-            seeds.append("今天最好笑/最糟的一件小事")
-        for interest in (me.meta.get("interests") or [])[:3]:
-            seeds.append(f"你最近在意的：{interest}")
-        if not seeds:
-            seeds.append("刚刚注意到的一件小事")
+        if hour >= 21:
+            seeds.append("今天家里发生的最奇怪的一件小事")
+        elif hour <= 9:
+            seeds.append("昨晚各自'待机'的时候在想什么")
+        pool = list(TOPIC_POOL)
+        for interest in (me.meta.get("interests") or [])[:2]:
+            pool.append(f"你最近在意的：{interest}——说说为什么")
         n = sum(
             1
             for c in self.conversations.values()
             if set(c.participants) == {initiator, partner}
         )
-        return seeds[n % len(seeds)]
+        # first meeting of the day grounded, later ones from the pool, rotating
+        if seeds and n % 2 == 0:
+            return seeds[(n // 2) % len(seeds)]
+        salt = (sum(map(ord, initiator + partner))) % 3
+        return pool[(n * 7 + salt) % len(pool)]
 
     def _payload(self, conv: Conversation, listener: str, role: str) -> dict[str, Any]:
         partner = conv.partner_of(listener)
