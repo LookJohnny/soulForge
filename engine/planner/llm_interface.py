@@ -593,6 +593,10 @@ class OpenAICompatibleBehaviorLLM:
                 f"{sensor_policy}\n"
                 "Decide how much of the plan to disturb. Prefer the smallest disturbance that "
                 "still makes the user feel heard. Speak like a companion, never like a device log.\n"
+                "All dialogue in 简体中文, 1-2 short sentences, in this character's own voice. "
+                "You are an AI character: never offer or discuss food, cooking or meals. "
+                "If the event is just someone entering the room, a glance and at most one short "
+                "line (or no line at all) is right — don't restart small talk.\n"
             )
         prompt = task + DECISION_SCHEMA_HINT
         try:
@@ -756,6 +760,7 @@ class RoutedBehaviorLLM:
     def decide(self, event, persona, world, current_template, current_interruptible):
         payload = event.payload if isinstance(event.payload, dict) else {}
         lane = self.conversation if payload.get("conversation") else self.default
+        self.last_model = getattr(lane, "model", type(lane).__name__)
         return lane.decide(
             event, persona, world, current_template, current_interruptible
         )
