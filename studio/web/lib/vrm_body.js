@@ -182,6 +182,26 @@ export class VrmBody {
     return head ? head.getWorldPosition(out) : null;
   }
 
+  /** Walk to (x, z) over `seconds`: eased slide + a light step bob; resolves on arrival. */
+  walkTo(x, z = 0, seconds = 2, offsetX = 0) {
+    const from = this.origin.clone(); const to = new THREE.Vector3(x + offsetX, 0, z);
+    const dist = from.distanceTo(to);
+    if (dist < 0.02) return Promise.resolve();
+    const dur = Math.max(0.6, Math.min(seconds, dist / 0.6));
+    return new Promise((resolve) => {
+      const t0 = performance.now();
+      const step = () => {
+        const p = Math.min(1, (performance.now() - t0) / (dur * 1000));
+        const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+        this.place(from.x + (to.x - from.x) * e, from.z + (to.z - from.z) * e);
+        const root = this.vrm?.scene;
+        if (root) root.position.y = (root.userData.floorY ?? 0) + Math.abs(Math.sin(p * dist * 9)) * 0.02 * (1 - Math.abs(2 * p - 1));
+        if (p < 1) requestAnimationFrame(step); else { if (root) root.position.y = root.userData.floorY ?? 0; resolve(); }
+      };
+      step();
+    });
+  }
+
   /** Look at a world point (another character's head); null → back to the viewer. */
   lookAtPoint(point) { this.lookPoint = point ? point.clone() : null; }
 

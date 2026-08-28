@@ -127,6 +127,15 @@ class ConversationManager:
         for who in (initiator, partner):
             if who in self._by_agent:
                 raise ValueError(f"{who} is already in a conversation")
+        space = self.runtime.world.space
+        if not space.co_present(initiator, partner):
+            # you have to be in the same room to talk: the opener walks over
+            self.runtime.move_to(
+                initiator,
+                space.where(partner),
+                minute,
+                reason=f"to talk with {partner}",
+            )
         conv = Conversation(
             id=uuid.uuid4().hex[:10],
             participants=(initiator, partner),
@@ -277,9 +286,12 @@ class ConversationManager:
             return None
         self._last_auto_check = minute
         free = [a for a in self.runtime.personas if self._is_free(a, minute)]
+        space = self.runtime.world.space
         best: tuple[float, str, str] | None = None
         for i, a in enumerate(free):
             for b in free[i + 1 :]:
+                if not space.co_present(a, b):  # small talk needs the same room
+                    continue
                 score = min(
                     self.runtime.personas[a].relationships.get(b, 0.5),
                     self.runtime.personas[b].relationships.get(a, 0.5),
@@ -321,11 +333,20 @@ class ConversationManager:
         partner = conv.partner_of(listener)
         me = self.runtime.personas[listener]
         other = self.runtime.personas[partner]
+        plan = self.runtime.hour_plans.get(partner)
+        act = plan.activity_at(self.runtime.world.sim_minute) if plan else None
         return {
             "conversation": {
                 "id": conv.id,
                 "role": role,  # open | reply
                 "topic": conv.topic,
+                "place": self.runtime.world.space.label(
+                    self.runtime.world.space.where(listener)
+                ),
+                "partner_activity": act.template_id if act else "idle",
+                "partner_relationship": round(
+                    other.relationships.get(listener, 0.5), 2
+                ),
                 "partner_id": partner,
                 "partner_name": other.name,
                 "partner_traits": list(other.traits)[:4],

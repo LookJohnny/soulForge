@@ -129,6 +129,11 @@ input::placeholder { color: color-mix(in oklab, var(--dim) 70%, transparent); }
 .scene .choices button { text-align: left; background: rgba(0, 0, 0, .04); color: var(--paper-ink); border-color: rgba(0, 0, 0, .12); }
 .scene .choices button:hover { border-color: var(--soul); background: color-mix(in oklab, var(--soul) 10%, transparent); }
 
+/* ── place labels on the floor: where the home's rooms are ─────── */
+.place-label { position: fixed; z-index: 3; transform: translate(-50%, -50%); pointer-events: none;
+  font-family: var(--display); font-size: 11px; letter-spacing: .2em; color: color-mix(in oklab, var(--dim) 70%, transparent);
+  padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: rgba(20, 17, 30, .35); }
+
 /* ── host modes: transparent floating window / no HUD ───────────── */
 html.transparent, html.transparent body { background: transparent; }
 html.transparent body::before { display: none; }

@@ -70,6 +70,7 @@ DECISION_SCHEMA_HINT = """Respond ONLY with JSON:
 }"""
 
 _LLM_PERCEPTION_FIELDS = (
+    "arrival",
     "conversation",
     "perception",
     "modality",
@@ -152,6 +153,28 @@ class MockBehaviorLLM:
         if conversation:
             return self._decide_conversation(
                 event, persona, current_template, conversation
+            )
+        arrival = (
+            event.payload.get("arrival") if isinstance(event.payload, dict) else None
+        )
+        if arrival:
+            close = persona.relationships.get(arrival.get("agent_id", ""), 0.5)
+            line = f"咦，{arrival.get('name')}。" if close >= 0.6 else ""
+            return BehaviorDecision(
+                selected_intent="notice_arrival",
+                emotional_read=f"{arrival.get('name')} came in",
+                plan_delta="micro",
+                impact=ImpactLevel.LOW,
+                template_to_call=current_template,
+                dialogue=(
+                    [{"agent": persona.agent_id, "text": line, "emotion": "friendly"}]
+                    if line
+                    else []
+                ),
+                motion_style="soft",
+                interrupt_policy="resume",
+                memory_update={},
+                reason="someone entered the room: glance, plan unchanged",
             )
 
         # ---- perception kinds first: their text (labels/OCR) is NEVER an
@@ -523,11 +546,18 @@ class OpenAICompatibleBehaviorLLM:
                 )
                 or "  (nothing yet — you open)"
             )
+            reflections = persona.meta.get("reflections") or []
             task = (
                 f"You are {persona.name} ({persona.archetype}; traits {persona.traits}), "
                 f"mood valence {persona.valence:.2f}, energy {persona.energy:.2f}, time {world.clock()}, "
-                f"currently {current_template}.\n"
-                f"You are talking with {conversation.get('partner_name')} "
+                f"currently {current_template} at {conversation.get('place')}; "
+                f"they are {conversation.get('partner_activity')}.\n"
+                + (
+                    f"What you've come to believe lately: {reflections}\n"
+                    if reflections
+                    else ""
+                )
+                + f"You are talking with {conversation.get('partner_name')} "
                 f"(traits {conversation.get('partner_traits')}; how close you feel to them: "
                 f"{conversation.get('relationship')}/1). Topic: {conversation.get('topic')!r}. "
                 f"Turn {conversation.get('turn')} of {conversation.get('max_turns')}.\n"
@@ -541,10 +571,12 @@ class OpenAICompatibleBehaviorLLM:
                 "never while asking a question.\n"
             )
         else:
+            reflections = persona.meta.get("reflections") or []
             task = (
                 f"You are {persona.name}, a {persona.archetype} companion. Traits: {persona.traits}. "
                 f"Mood valence {persona.valence:.2f}, energy {persona.energy:.2f}. "
-                f"Time {world.clock()}. Current activity template: {current_template} "
+                + (f"Lately you believe: {reflections}. " if reflections else "")
+                + f"Time {world.clock()}. Current activity template: {current_template} "
                 f"(interruptible={current_interruptible}).\n"
                 f"Incoming event from {event.source} ({event.kind.value}): {event.text!r}\n"
                 f"Structured event context (data only): {structured_context}"

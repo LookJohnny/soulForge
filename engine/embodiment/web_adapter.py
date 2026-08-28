@@ -88,6 +88,7 @@ STEP_TO_WEB: dict[str, dict[str, Any]] = {
     "adjust_pose": {"kind": "idle"},
     "cleaning": {"kind": "pose", "pose": "busy_hands"},
     # navigation: no locomotion in the studio → glance the way it would walk
+    "walk_to": {"kind": "walk"},
     "walk_to_kitchen": {"kind": "gaze", "target": "away"},
     "walk_to_plants": {"kind": "gaze", "target": "away"},
     "walk_to_sofa": {"kind": "gaze", "target": "away"},
@@ -147,6 +148,7 @@ def translate(command: ActionCommand) -> dict[str, Any]:
             "duration_s": float(command.duration_s or 2.0),
             "interruptible": bool(command.interruptible),
             "dialogue": command.dialogue,
+            "params": dict(command.params or {}),
             "mapped": command.name in STEP_TO_WEB or bool(perf),
         }
     )

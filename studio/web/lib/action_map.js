@@ -52,6 +52,7 @@ export const STEP_TO_WEB = {
   turn_wrench: { kind: 'pose', pose: 'busy_hands' },
   adjust_pose: { kind: 'idle' },
   cleaning: { kind: 'pose', pose: 'busy_hands' },
+  walk_to: { kind: 'walk' },
   walk_to_kitchen: { kind: 'gaze', target: 'away' },
   walk_to_plants: { kind: 'gaze', target: 'away' },
   walk_to_sofa: { kind: 'gaze', target: 'away' },
@@ -81,7 +82,7 @@ export function translate(cmd) {
     ...prim,
     command_id: cmd.command_id, agent_id: cmd.agent_id, step: cmd.name,
     duration_s: Number(cmd.duration_s ?? 2), interruptible: cmd.interruptible !== false,
-    dialogue: cmd.dialogue ?? null, mapped: cmd.name in STEP_TO_WEB || !!perf,
+    dialogue: cmd.dialogue ?? null, params: cmd.params ?? {}, mapped: cmd.name in STEP_TO_WEB || !!perf,
   };
 }
 
@@ -120,6 +121,13 @@ export async function perform(body, prim, env = {}) {
     case 'speak':
       if (prim.dialogue && env.speak) await env.speak(prim.dialogue);
       return;
+    case 'walk': {
+      const place = env.places?.[prim.params?.to];
+      const x = place?.x ?? prim.params?.x, z = place?.z ?? prim.params?.z;
+      if (typeof x === 'number' && body.walkTo) await body.walkTo(x, z, prim.duration_s ?? 2, env.slotOffset?.(prim.agent_id) ?? 0);
+      else await sleep(Math.min(ms, 500));
+      return;
+    }
     default:
       await sleep(Math.min(ms, 500));
   }

@@ -101,6 +101,27 @@ let primaryAgent = null;
 const personaById = new Map();           // /api/characters 条目
 const bodyFor = (agentId) => stage.get(agentId) ?? (agentId === primaryAgent || !primaryAgent ? body : null);
 const STAGE_SLOTS = { 1: [0], 2: [-0.62, 0.62], 3: [-1.15, 0, 1.15], 4: [-1.6, -0.55, 0.55, 1.6] };
+// 家的地图（与 engine/planner/space.py HOME 一致）：walk_to 的目的地；同一地点多人时错开站位
+const PLACES = { sofa: { label: '客厅沙发', x: 0, z: 0.3 }, kitchen: { label: '厨房', x: -1.7, z: -0.4 }, desk: { label: '书桌', x: 1.5, z: 0 }, plants: { label: '阳台花架', x: 1.9, z: -1.3 } };
+const slotOffset = (agentId) => { const ids = [...stage.keys()]; const i = ids.indexOf(agentId); return ids.length > 1 ? (i - (ids.length - 1) / 2) * 0.5 : 0; };
+const placeLabels = new Map();
+function ensurePlaceLabels() {
+  if (placeLabels.size || !stage.size) return;
+  for (const [id, pl] of Object.entries(PLACES)) {
+    const el = document.createElement('div'); el.className = 'place-label'; el.textContent = pl.label; document.body.appendChild(el);
+    placeLabels.set(id, el);
+  }
+}
+function placePlaceLabels() {
+  if (!placeLabels.size) return;
+  const v = new THREE.Vector3();
+  for (const [id, el] of placeLabels) {
+    const pl = PLACES[id]; v.set(pl.x, 0.02, pl.z).project(camera);
+    el.style.left = ((v.x + 1) * 50) + '%'; el.style.top = ((-v.y + 1) * 50) + '%';
+    const here = [...stage].filter(([a]) => a).length;
+    el.classList.toggle('hidden', v.z > 1 || here === 0);
+  }
+}
 async function arrangeStage(agentIds) {
   // 第一位站在 primary 身体上（已加载），其余按人格 embodiment.model 各加载一具
   const ids = agentIds.length ? agentIds : [primaryAgent].filter(Boolean);
@@ -119,12 +140,14 @@ async function arrangeStage(agentIds) {
     try { await b.load(model, { kind: persona.embodiment.kind }); log(`${persona.name} 上台了`, 'sys'); }
     catch (e) { log(`${id} 模型加载失败: ${e.message}`, 'sys'); stage.delete(id); b.dispose(); }
   }
+  // everyone starts on the sofa (engine default place) side by side; walk_to moves them from there
   const slots = STAGE_SLOTS[Math.min(4, stage.size)] ?? STAGE_SLOTS[4];
-  [...stage.keys()].forEach((id, i) => stage.get(id).place(slots[i] ?? 0, 0));
+  [...stage.keys()].forEach((id, i) => { const b = stage.get(id); if (stage.size > 1) b.place(PLACES.sofa.x + slotOffset(id), PLACES.sofa.z); else b.place(slots[i] ?? 0, 0); });
   // 双人/群像：拉远成中景，视线高度略降
   controls.target.set(0, stage.size > 1 ? 1.0 : 1.05, 0);
   camera.position.set(0, stage.size > 1 ? 1.15 : 1.25, stage.size > 1 ? 3.2 + 1.0 * (stage.size - 1) : 2.6);
   controls.maxDistance = Math.max(5, 3.5 + stage.size);
+  if (stage.size > 1) { ensurePlaceLabels(); camera.position.set(0, 1.3, 4.6); controls.target.set(0, 0.95, -0.3); }
 }
 
 async function loadAssets() {
@@ -350,7 +373,7 @@ async function connectBody() {
   // 台词：没有 gateway 时全部由本页念；有 gateway 时用户对话走 gateway，角色之间的对话仍由本页念
   const standalone = !gw;
   const speak = (text, agentId, cmd) => (standalone || isAgentTalk(cmd)) ? speakStandalone(text, agentId) : Promise.resolve();
-  bodyClient = new BodyClient({ url, bodyId: 'web-vrm-live', agentIds, speech: true }).attach(bodyFor, { animations: animationsList, speak });
+  bodyClient = new BodyClient({ url, bodyId: 'web-vrm-live', agentIds, speech: true }).attach(bodyFor, { animations: animationsList, speak, places: PLACES, slotOffset });
   bodyClient.addEventListener('action', (e) => {
     const { cmd, prim } = e.detail;
     if (cmd.dialogue && (standalone || isAgentTalk(cmd))) { const n = personaById.get(cmd.agent_id)?.name ?? cmd.agent_id; log(`${n}: ${cmd.dialogue}`); showBubble(cmd.dialogue, cmd.agent_id); }
@@ -499,7 +522,7 @@ function animate() {
   if (gw && !body.lipsync.analyser) body.setSpeakingLevel(gw.level());
   for (const b of stage.values()) if (b !== body) b.update();
   body.update();
-  placeBubbles();
+  placeBubbles(); placePlaceLabels();
   const k = body.mood.pad; const sig = `${k.p.toFixed(2)}${k.a.toFixed(2)}${k.d.toFixed(2)}`;
   if (sig !== lastPad) { lastPad = sig; padUI(); }
   renderer.render(scene, camera);

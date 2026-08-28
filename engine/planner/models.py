@@ -100,6 +100,13 @@ class WorldState:
     user_present: bool = True
     user_mood_hint: str = "unknown"
     flags: dict[str, Any] = field(default_factory=dict)
+    space: Any = None  # SpaceState — who is in which place (lazy: avoids import cycle)
+
+    def __post_init__(self) -> None:
+        if self.space is None:
+            from engine.planner.space import SpaceState
+
+            self.space = SpaceState()
 
     def day_minute(self) -> float:
         return self.sim_minute % (24 * 60)

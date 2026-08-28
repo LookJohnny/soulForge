@@ -21,6 +21,7 @@ from engine.planner.hour_planner import expand_hour
 from engine.planner.llm_interface import BehaviorDecision, build_llm
 from engine.planner.minute_planner import plan_minute
 from engine.planner.models import (
+    EventKind,
     DayPlan,
     Event,
     HourPlan,
@@ -239,6 +240,11 @@ class CompanionRuntime:
         from engine.planner.conversation import ConversationManager
 
         self.conversations = ConversationManager(self, social_policy)
+        # everyone starts somewhere (the sofa) so co-presence is well defined from tick 0
+        from engine.planner.space import DEFAULT_PLACE
+
+        for agent_id in self.personas:
+            self.world.space.agent_place.setdefault(agent_id, DEFAULT_PLACE)
 
     # -- conversations --------------------------------------------------------
     def start_conversation(
@@ -288,9 +294,100 @@ class CompanionRuntime:
         actions: dict[str, MinuteAction] = {}
         for agent_id, persona in self.personas.items():
             minute_action = plan_minute(persona, self.hour_plans[agent_id], minute)
+            self._move_if_needed(agent_id, minute_action.template_id, minute)
             self._dispatch(agent_id, minute_action)
             actions[agent_id] = minute_action
         return actions
+
+    # -- space -----------------------------------------------------------------
+    def where(self, agent_id: str) -> str:
+        return self.world.space.where(agent_id)
+
+    def _move_if_needed(
+        self, agent_id: str, template_id: str | None, minute: float
+    ) -> None:
+        """Activities happen somewhere: walk there first. Anywhere-activities stay put."""
+        from engine.planner.space import template_location
+
+        target = template_location(template_id)
+        if target is None or target == self.where(agent_id):
+            return
+        self.move_to(agent_id, target, minute, reason=f"activity {template_id}")
+
+    def move_to(
+        self, agent_id: str, place: str, minute: float, reason: str = ""
+    ) -> None:
+        from engine.planner.space import walk_seconds
+
+        space = self.world.space
+        origin = self.where(agent_id)
+        if origin == place:
+            return
+        space.move(agent_id, place)
+        seconds = walk_seconds(origin, place)
+        self._dispatch_micro(
+            agent_id,
+            MicroAction(
+                name="walk_to",
+                params={
+                    "to": place,
+                    "from": origin,
+                    "label": space.label(place),
+                    "x": space.places[place].x,
+                    "z": space.places[place].z,
+                },
+                duration_s=seconds,
+            ),
+            minute,
+        )
+        self._log(
+            minute, agent_id, "move", {"from": origin, "to": place, "reason": reason}
+        )
+        # whoever is already there notices the arrival (a low-key social event)
+        for other in space.others_at(agent_id):
+            self.push_event(
+                Event(
+                    t_min=minute + seconds / 60.0,
+                    kind=EventKind.AGENT_STATE,
+                    source=agent_id,
+                    text=f"{self.personas[agent_id].name}来了{space.label(place)}",
+                    payload={
+                        "arrival": {
+                            "agent_id": agent_id,
+                            "name": self.personas[agent_id].name,
+                            "place": place,
+                            "label": space.label(place),
+                        }
+                    },
+                    target_agent=other,
+                )
+            )
+
+    # -- reflection --------------------------------------------------------------
+    def reflect(self, agent_id: str, minute: float, day: int | None = None) -> list:
+        """End-of-day reflection: memories → insights → tomorrow's goals/prompt."""
+        from engine.planner.reflection import apply_reflections, reflect_day
+
+        persona = self.personas[agent_id]
+        names = {a: p.name for a, p in self.personas.items()}
+        reflections = reflect_day(persona, self.memory.get(agent_id, {}), names)
+        apply_reflections(persona, reflections)
+        day = int(minute // (24 * 60)) if day is None else day
+        for i, r in enumerate(reflections):
+            key = f"reflection_d{day}_{i}"
+            self.memory_store.remember(agent_id, "semantic", key, r.insight)
+        if reflections:
+            self._log(
+                minute,
+                agent_id,
+                "reflection",
+                {
+                    "day": day,
+                    "insights": [r.insight for r in reflections],
+                    "goals": list(persona.daily_goals),
+                },
+            )
+        return reflections
 
     def run(
         self, start_min: float, duration_min: float, step_min: float = 1.0
@@ -307,6 +404,8 @@ class CompanionRuntime:
         hour = int(minute // 60)  # TOTAL hour index: survives midnights
         for agent_id, persona in self.personas.items():
             if self.day_plans[agent_id].day != day:
+                # the day that just ended is reflected on before tomorrow is planned
+                self.reflect(agent_id, minute, day=self.day_plans[agent_id].day)
                 # a new simulated day gets a fresh day plan — never degrade to idle
                 self.day_plans[agent_id] = generate_day_plan(
                     persona, self.world, day=day

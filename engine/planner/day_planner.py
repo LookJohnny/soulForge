@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from engine.planner.templates import TEMPLATE_REGISTRY
 from engine.planner.models import DayBlock, DayPlan, Persona, WorldState
 
 
@@ -71,9 +72,23 @@ def generate_day_plan(
         ),
     ]
 
+    # yesterday's reflection asks for a behaviour → carve 17:00-17:30 out of the secondary block
+    prefer = persona.meta.get("prefer_template")
+    if prefer and prefer in TEMPLATE_REGISTRY and prefer != secondary[0]:
+        idx = next(i for i, b in enumerate(blocks) if b.start_min == 17 * 60)
+        blocks[idx] = DayBlock(
+            17 * 60 + 30, 19 * 60, secondary[0], secondary[1], persona.agent_id
+        )
+        why = persona.daily_goals[0] if persona.daily_goals else prefer
+        blocks.insert(
+            idx,
+            DayBlock(17 * 60, 17 * 60 + 30, prefer, f"昨天的想法：{why}", persona.agent_id),
+        )
+
     rationale = (
         f"{persona.name}({persona.archetype}) energy={persona.energy:.2f} mood={persona.mood_word()}; "
         f"goals={persona.daily_goals}; 用户在家={world.user_present} -> 晚上预留共同时段"
+        + (f"; 反思→{prefer}" if prefer else "")
     )
     plan_day = world.day_index() if day is None else day
     return DayPlan(

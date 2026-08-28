@@ -34,7 +34,7 @@ def test_every_planner_micro_step_is_mapped():
 
 def test_primitive_kinds_are_known():
     for step, prim in STEP_TO_WEB.items():
-        assert prim["kind"] in {"clip", "gaze", "pose", "idle", "speak"}, step
+        assert prim["kind"] in {"clip", "gaze", "pose", "idle", "speak", "walk"}, step
         if prim["kind"] == "clip":
             assert (
                 ROOT / "assets" / "animations" / f"vrma_{prim['clip']}.vrma"
