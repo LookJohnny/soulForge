@@ -53,11 +53,36 @@ PROVIDERS = {
         models=["deepseek-v4-pro"],
         price=4.0,
     ),
-    "kimi": dict(
+    "deepseek-reasoner": dict(
+        env="DEEPSEEK_API_KEY",
+        base="https://api.deepseek.com/v1",
+        models=["deepseek-reasoner"],
+        price=8.0,
+    ),
+    # Kimi: one entry per model so each shows up as its own column
+    "kimi-k2-turbo": dict(
         env="MOONSHOT_API_KEY",
         base="https://api.moonshot.cn/v1",
-        models=["kimi-k2-turbo-preview", "kimi-k2-0711-preview", "moonshot-v1-8k"],
+        models=["kimi-k2-turbo-preview"],
         price=6.0,
+    ),
+    "kimi-k2": dict(
+        env="MOONSHOT_API_KEY",
+        base="https://api.moonshot.cn/v1",
+        models=["kimi-k2-0905-preview", "kimi-k2-0711-preview"],
+        price=4.0,
+    ),
+    "kimi-k2-thinking": dict(
+        env="MOONSHOT_API_KEY",
+        base="https://api.moonshot.cn/v1",
+        models=["kimi-k2-thinking"],
+        price=8.0,
+    ),
+    "moonshot-v1": dict(
+        env="MOONSHOT_API_KEY",
+        base="https://api.moonshot.cn/v1",
+        models=["moonshot-v1-8k"],
+        price=12.0,
     ),
     "qwen": dict(
         env="DASHSCOPE_API_KEY",
