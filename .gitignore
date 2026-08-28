@@ -75,3 +75,6 @@ apps/desktop/src-tauri/gen/
 
 # Mixamo-licensed sample models (fetch with scripts/fetch_samples.sh)
 assets/vtubers/samples/mixamo/
+
+# installed .soul model files
+assets/vtubers/souls/

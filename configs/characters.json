@@ -6,15 +6,33 @@
       "id": "luna",
       "name": "Luna",
       "archetype": "creative_care",
-      "traits": ["warm", "artistic"],
-      "daily_goals": ["完成一幅画", "陪用户聊天"],
+      "traits": [
+        "warm",
+        "artistic"
+      ],
+      "daily_goals": [
+        "完成一幅画",
+        "陪用户聊天"
+      ],
       "energy": 0.7,
-      "relationships": { "user": 0.8, "kai": 0.7, "pipo": 0.65 },
+      "relationships": {
+        "user": 0.8,
+        "kai": 0.7,
+        "pipo": 0.65
+      },
       "role_label": "创作陪伴",
       "color": "#ff9ec7",
       "voice": {
-        "fish": { "reference_id": "a6b29d0ef2404ca1aa8d1fdd8d7a2a90", "speed": 1.0, "label": "女性创作陪伴 / 温暖低饱和" },
-        "edge": { "voice": "zh-CN-XiaoxiaoNeural", "rate": 168, "pitch": 1.0 },
+        "fish": {
+          "reference_id": "a6b29d0ef2404ca1aa8d1fdd8d7a2a90",
+          "speed": 1.0,
+          "label": "女性创作陪伴 / 温暖低饱和"
+        },
+        "edge": {
+          "voice": "zh-CN-XiaoxiaoNeural",
+          "rate": 168,
+          "pitch": 1.0
+        },
         "say": "Tingting",
         "post": "soft"
       },
@@ -22,23 +40,46 @@
         "kind": "vrm",
         "model": "/assets/vtubers/vroid_samples/AvatarSample_B.vrm",
         "target_height": 1.58,
-        "pose": { "upperZ": 1.3, "upperX": -0.08, "lowerX": -0.3 }
+        "pose": {
+          "upperZ": 1.3,
+          "upperX": -0.08,
+          "lowerX": -0.3
+        }
       },
-      "comfort_line": "听到啦。那今晚不排任务了，吃完饭我们一起窝在沙发上聊聊天。"
+      "comfort_line": "听到啦。那今晚不排任务了，吃完饭我们一起窝在沙发上聊聊天。",
+      "soul_id": "369338e6-f231-4f6e-8b53-cffbdc9bd7bc"
     },
     {
       "id": "kai",
       "name": "Kai",
       "archetype": "steady_caretaker",
-      "traits": ["reliable", "calm"],
-      "daily_goals": ["做三餐", "把家里理顺"],
+      "traits": [
+        "reliable",
+        "calm"
+      ],
+      "daily_goals": [
+        "做三餐",
+        "把家里理顺"
+      ],
       "energy": 0.8,
-      "relationships": { "user": 0.75, "luna": 0.7, "pipo": 0.6 },
+      "relationships": {
+        "user": 0.75,
+        "luna": 0.7,
+        "pipo": 0.6
+      },
       "role_label": "生活照料",
       "color": "#7fb4ff",
       "voice": {
-        "fish": { "reference_id": "d99547e2dad64ce0aa085319a3c9cc56", "speed": 1.06, "label": "男性生活照料 / 稳定低频" },
-        "edge": { "voice": "zh-CN-YunxiNeural", "rate": 152, "pitch": 0.96 },
+        "fish": {
+          "reference_id": "d99547e2dad64ce0aa085319a3c9cc56",
+          "speed": 1.06,
+          "label": "男性生活照料 / 稳定低频"
+        },
+        "edge": {
+          "voice": "zh-CN-YunxiNeural",
+          "rate": 152,
+          "pitch": 0.96
+        },
         "say": "Reed (中文（中国大陆）)",
         "post": "warm"
       },
@@ -46,7 +87,11 @@
         "kind": "vrm",
         "model": "/assets/vtubers/vroid_samples/AvatarSample_C.vrm",
         "target_height": 1.72,
-        "pose": { "upperZ": 1.3, "upperX": -0.1, "lowerX": -0.26 }
+        "pose": {
+          "upperZ": 1.3,
+          "upperX": -0.1,
+          "lowerX": -0.26
+        }
       },
       "comfort_line": "听到啦。那我把晚上的安排改轻松一点，先照顾你。"
     },
@@ -54,15 +99,33 @@
       "id": "pipo",
       "name": "Pipo",
       "archetype": "utility_robot",
-      "traits": ["precise", "helpful"],
-      "daily_goals": ["植物巡检", "环境监测"],
+      "traits": [
+        "precise",
+        "helpful"
+      ],
+      "daily_goals": [
+        "植物巡检",
+        "环境监测"
+      ],
       "energy": 0.9,
-      "relationships": { "user": 0.7, "luna": 0.65, "kai": 0.6 },
+      "relationships": {
+        "user": 0.7,
+        "luna": 0.65,
+        "kai": 0.6
+      },
       "role_label": "环境照护",
       "color": "#63e6c8",
       "voice": {
-        "fish": { "reference_id": "15896f78e288417db16cc34da8fc6f09", "speed": 1.1, "label": "照护机器人 / 合成感音色" },
-        "edge": { "voice": "zh-CN-YunxiaNeural", "rate": 155, "pitch": 1.02 },
+        "fish": {
+          "reference_id": "15896f78e288417db16cc34da8fc6f09",
+          "speed": 1.1,
+          "label": "照护机器人 / 合成感音色"
+        },
+        "edge": {
+          "voice": "zh-CN-YunxiaNeural",
+          "rate": 155,
+          "pitch": 1.02
+        },
         "say": "Tingting",
         "post": "robot"
       },
@@ -77,20 +140,52 @@
   "archetypes": {
     "$note": "day-plan focus per archetype; unknown archetypes fall back to `default`",
     "creative_care": {
-      "focus": [["drawing", "沉浸创作，攒一幅想给用户看的画"], ["study", "补一点画册和参考"]],
+      "focus": [
+        [
+          "drawing",
+          "沉浸创作，攒一幅想给用户看的画"
+        ],
+        [
+          "study",
+          "补一点画册和参考"
+        ]
+      ],
       "evening": "drawing"
     },
     "steady_caretaker": {
-      "focus": [["cleaning", "把家里理顺"], ["repair", "处理待修清单"]],
+      "focus": [
+        [
+          "cleaning",
+          "把家里理顺"
+        ],
+        [
+          "repair",
+          "处理待修清单"
+        ]
+      ],
       "evening": "cooking",
       "meals": true
     },
     "utility_robot": {
-      "focus": [["plant_care", "巡检植物和环境传感器"], ["repair", "巡检家中设备"]],
+      "focus": [
+        [
+          "plant_care",
+          "巡检植物和环境传感器"
+        ],
+        [
+          "repair",
+          "巡检家中设备"
+        ]
+      ],
       "evening": "plant_care"
     },
     "default": {
-      "focus": [["study", "自由学习"]],
+      "focus": [
+        [
+          "study",
+          "自由学习"
+        ]
+      ],
       "evening": "chatting"
     }
   }

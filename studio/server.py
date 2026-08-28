@@ -13,6 +13,7 @@ Open: http://127.0.0.1:8899
 from __future__ import annotations
 
 import argparse
+import base64
 import asyncio
 import json
 import sys
@@ -412,6 +413,74 @@ async def api_models(_request: web.Request) -> web.Response:
     return web.json_response(models)
 
 
+async def api_soul_export(request: web.Request) -> web.Response:
+    """Pack one persona of configs/characters.json (+ its model file) into a `.soul`."""
+    from studio import soul_io
+
+    body = await request.json() if request.can_read_body else {}
+    cid = body.get("character_id") or request.query.get("character")
+    if not cid:
+        return web.json_response({"error": "character_id required"}, status=400)
+    try:
+        data, filename = soul_io.export_persona(
+            cid,
+            passphrase=body.get("passphrase") or None,
+            include_model=body.get("include_model", True),
+        )
+    except KeyError:
+        return web.json_response({"error": f"unknown character {cid}"}, status=404)
+    from urllib.parse import quote
+
+    return web.Response(
+        body=data,
+        content_type="application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
+
+
+async def api_soul_peek(request: web.Request) -> web.Response:
+    from studio.soul_io import SoulPackBuilder
+
+    body = await request.json()
+    try:
+        return web.json_response(SoulPackBuilder.peek(base64.b64decode(body["soul_b64"])))
+    except Exception as e:
+        return web.json_response({"error": f"not a soul file: {e}"}, status=400)
+
+
+async def api_soul_import(request: web.Request) -> web.Response:
+    """Unpack a `.soul`: install model, write persona, mirror to ai-core when a brand is set."""
+    from studio import soul_io
+
+    body = await request.json()
+    try:
+        blob = base64.b64decode(body["soul_b64"])
+        result = soul_io.import_persona(blob, passphrase=body.get("passphrase") or None)
+    except (KeyError, ValueError) as e:
+        return web.json_response({"error": str(e)}, status=400)
+    soul_b64 = result.pop("soul_b64")
+    result["ai_core"] = None
+    brand = load_dotenv_key("SOUL_BRAND_ID")
+    if brand and AI_CORE_TOKEN:  # ai-core needs a brand context; optional mirror
+        import aiohttp
+
+        try:
+            async with aiohttp.ClientSession() as sess:
+                async with sess.post(
+                    f"{AI_CORE_URL}/soul-packs/import",
+                    json={"soul_b64": soul_b64, "passphrase": body.get("passphrase") or None},
+                    headers={"X-Service-Token": AI_CORE_TOKEN, "X-Brand-Id": brand},
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as resp:
+                    j = await resp.json()
+                    result["ai_core"] = j.get("character_id") if resp.status < 300 else None
+                    if resp.status >= 300:
+                        result["ai_core_error"] = j.get("detail") or j
+        except Exception as e:
+            result["ai_core_error"] = str(e)
+    return web.json_response(result)
+
+
 async def api_animations(_request: web.Request) -> web.Response:
     """VRMA motion assets under assets/animations/ (drop .vrma files there)."""
     out = []
@@ -716,7 +785,7 @@ async def no_cache(request: web.Request, handler):
 
 
 def build_app() -> web.Application:
-    app = web.Application(client_max_size=2 * 1024 * 1024, middlewares=[no_cache])
+    app = web.Application(client_max_size=256 * 1024 * 1024, middlewares=[no_cache])
     app.router.add_get("/", index)
     app.router.add_get("/live", live)
     app.router.add_route("*", "/api/core/{path:.*}", api_core_proxy)
@@ -725,6 +794,9 @@ def build_app() -> web.Application:
     app.router.add_get("/api/models", api_models)
     app.router.add_get("/api/voices", api_voices)
     app.router.add_get("/api/animations", api_animations)
+    app.router.add_post("/api/soul/export", api_soul_export)
+    app.router.add_post("/api/soul/peek", api_soul_peek)
+    app.router.add_post("/api/soul/import", api_soul_import)
     app.router.add_post("/api/chat", api_chat)
     app.router.add_post("/api/tts", api_tts)
     app.router.add_static("/studio/", STUDIO_WEB)

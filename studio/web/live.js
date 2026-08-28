@@ -236,6 +236,49 @@ $('file-import').onchange = async () => {
   $('file-import').value = '';
 };
 
+// ── .soul 灵魂包：整角色（人格+音色+外观+表情）导出/导入 ──
+async function loadSoulCharacters() {
+  const sel = $('soul-char'); sel.innerHTML = '';
+  try {
+    const list = await (await fetch('/api/characters')).json();
+    for (const c of (list.characters ?? list)) {
+      const o = document.createElement('option'); o.value = c.id; o.textContent = `${c.name} (${c.id})`; sel.appendChild(o);
+    }
+  } catch (e) { log('角色列表获取失败: ' + e.message, 'sys'); }
+}
+$('btn-soul-export').onclick = async () => {
+  const id = $('soul-char').value; if (!id) return toast('没有可导出的角色');
+  const pass = prompt('发布口令（留空 = 不加密，任何人可加载）：', '') ?? null;
+  if (pass === null) return;
+  try {
+    const r = await fetch('/api/soul/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ character_id: id, passphrase: pass || null, include_model: true }) });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
+    const blob = await r.blob();
+    const name = decodeURIComponent((r.headers.get('Content-Disposition') || '').match(/filename\*?=(?:UTF-8'')?"?([^";]+)/)?.[1] || `${id}.soul`);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    toast(`已导出 ${name}${pass ? '（口令加密）' : ''}`);
+  } catch (e) { toast('导出 .soul 失败: ' + e.message, 6000); }
+};
+$('btn-soul-import').onclick = () => $('file-soul').click();
+$('file-soul').onchange = async () => {
+  const f = $('file-soul').files[0]; $('file-soul').value = ''; if (!f) return;
+  try {
+    const buf = new Uint8Array(await f.arrayBuffer());
+    let b64 = ''; for (let i = 0; i < buf.length; i += 0x8000) b64 += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+    b64 = btoa(b64);
+    const head = await (await fetch('/api/soul/peek', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ soul_b64: b64 }) })).json();
+    let passphrase = null;
+    if (head.encrypted) { passphrase = prompt(`「${f.name}」需要发布口令：`); if (!passphrase) return; }
+    const r = await fetch('/api/soul/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ soul_b64: b64, passphrase }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    toast(`已导入角色 ${j.name}（${j.id}）${j.model_url ? '，模型已安装' : ''}${j.ai_core ? '，已入库' : ''}`, 5000);
+    await loadSoulCharacters(); $('soul-char').value = j.id;
+    if (j.model_url) { await loadAssets(); const sel = $('model'); sel.value = j.model_url; if (sel.value === j.model_url) await pick(j.model_url, j.model_kind); }
+  } catch (e) { toast('导入 .soul 失败: ' + e.message, 6000); }
+};
+loadSoulCharacters();
+
 // ── Runtime Server /body（Protocol 0.2 web 身体）──────
 let bodyClient = null;
 const animationsList = [];

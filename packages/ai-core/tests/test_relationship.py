@@ -98,7 +98,7 @@ class TestComputeStage:
 
     def test_days_known_gate(self):
         s = _state(affection=400, trust=80, comfort=60)
-        s["first_interaction_at"] = (NOW - timedelta(days=2)).isoformat()
+        s["first_interaction_at"] = (datetime.now(UTC) - timedelta(days=2)).isoformat()
         assert compute_stage(s, []) == "ACQUAINTANCE"  # FRIEND needs 3 days
 
     def test_romance_requires_events(self):
