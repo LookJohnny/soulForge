@@ -2,7 +2,9 @@
    节点 = 记忆，边 = 语义相似度 ≥ 阈值；大小 = 重要度，透明度 = 新旧，
    颜色 = 记忆层。自绘 canvas 力导向，无第三方库。 */
 
-const LAYER_COLORS = { PROFILE: '#01B2FF', EPISODIC: '#34d399', SEMANTIC: '#e8b34b', RELATIONAL: '#f472b6' };
+// Four layers, four inks: profile = pale gold, episodic = sage, semantic = lavender, relational = her colour.
+const LAYER_COLORS = { PROFILE: '#e9d8a6', EPISODIC: '#9fd3b5', SEMANTIC: '#b9a7e6', RELATIONAL: 'soul' };
+const soul = () => getComputedStyle(document.documentElement).getPropertyValue('--soul').trim() || '#ff9ec7';
 
 export class MemoryGraph {
   constructor(canvas) {
@@ -30,7 +32,7 @@ export class MemoryGraph {
         x: W / 2 + Math.cos(i * 2.4) * (40 + i * 3), y: H / 2 + Math.sin(i * 2.4) * (40 + i * 3), vx: 0, vy: 0,
         r: 4 + (Math.min(10, n.importance ?? 3) / 10) * 10,
         alpha: age <= 7 ? 1 : age <= 30 ? 0.8 : age <= 90 ? 0.6 : 0.4,
-        color: LAYER_COLORS[n.layer] ?? '#8a8f9a',
+        color: (LAYER_COLORS[n.layer] === 'soul' ? soul() : LAYER_COLORS[n.layer]) ?? '#9c94ad',
       };
       idx.set(n.id, node); return node;
     });
@@ -65,7 +67,7 @@ export class MemoryGraph {
   draw() {
     const c = this.ctx, W = this.canvas.width, H = this.canvas.height;
     c.clearRect(0, 0, W, H);
-    for (const e of this.edges) { c.strokeStyle = `rgba(138,143,154,${0.15 + e.w * 0.5})`; c.lineWidth = 0.5 + e.w * 2; c.beginPath(); c.moveTo(e.a.x, e.a.y); c.lineTo(e.b.x, e.b.y); c.stroke(); }
+    for (const e of this.edges) { c.strokeStyle = `rgba(200,190,215,${0.12 + e.w * 0.45})`; c.lineWidth = 0.5 + e.w * 2; c.beginPath(); c.moveTo(e.a.x, e.a.y); c.lineTo(e.b.x, e.b.y); c.stroke(); }
     for (const n of this.nodes) { c.globalAlpha = n.alpha; c.fillStyle = n.color; c.beginPath(); c.arc(n.x, n.y, n.r, 0, Math.PI * 2); c.fill(); }
     c.globalAlpha = 1;
     const h = this.hover;
@@ -73,8 +75,8 @@ export class MemoryGraph {
       c.font = '12px -apple-system, "PingFang SC", sans-serif';
       const text = `${h.layer} · ${h.content}`.slice(0, 60);
       const w = c.measureText(text).width + 12, x = Math.min(W - w - 4, h.x + 10), y = Math.max(16, h.y - 12);
-      c.fillStyle = 'rgba(22,25,35,.95)'; c.fillRect(x, y - 12, w, 18);
-      c.fillStyle = '#e8e6e1'; c.fillText(text, x + 6, y + 1);
+      c.fillStyle = 'rgba(247,241,232,.96)'; c.fillRect(x, y - 12, w, 18);
+      c.fillStyle = '#2a2331'; c.fillText(text, x + 6, y + 1);
     }
   }
 }

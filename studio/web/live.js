@@ -53,7 +53,7 @@ canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); log('We
 canvas.addEventListener('webglcontextrestored', () => log('WebGL 上下文已恢复', 'sys'));
 
 const scene = new THREE.Scene();
-if (!host.transparent) scene.background = new THREE.Color(0x0d0f14);
+if (!host.transparent) scene.background = new THREE.Color(0x14121c);
 const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
 camera.position.set(0, 1.25, 2.6);
 const controls = new OrbitControls(camera, canvas);
@@ -128,7 +128,7 @@ async function loadAssets() {
 async function pick(url, kind) {
   try {
     await body.load(url, { kind: kind ?? $('model').selectedOptions[0]?.dataset.kind });
-    $('hud-name').textContent = decodeURIComponent(url.split('/').pop()).replace(/\.(vrm|glb|gltf|fbx|pmx)$/i, '');
+    if (!document.documentElement.dataset.persona) $('hud-name').textContent = decodeURIComponent(url.split('/').pop()).replace(/\.(vrm|glb|gltf|fbx|pmx)$/i, '');
     const a = body.vrm?.userData?.adapter;
     log('已换装 ' + decodeURIComponent(url.split('/').pop()) + (a ? `（${a.rig} 骨架 ${a.bones} 根，表情 ${a.expressions.length} 通道）` : ''), 'sys');
     if (a && a.expressions.length === 0) toast('这个模型没有表情 morph：只有身体动作和注视，不会有口型/表情');
@@ -236,6 +236,12 @@ $('file-import').onchange = async () => {
   $('file-import').value = '';
 };
 
+/** The UI wears her colour: persona `color` → --soul. */
+function setSoulColor(hex, name) {
+  if (/^#[0-9a-f]{6}$/i.test(hex ?? '')) document.documentElement.style.setProperty('--soul', hex);
+  if (name) { document.documentElement.dataset.persona = name; $('hud-name').textContent = name; }
+}
+
 // ── .soul 灵魂包：整角色（人格+音色+外观+表情）导出/导入 ──
 async function loadSoulCharacters() {
   const sel = $('soul-char'); sel.innerHTML = '';
@@ -244,6 +250,8 @@ async function loadSoulCharacters() {
     for (const c of (list.characters ?? list)) {
       const o = document.createElement('option'); o.value = c.id; o.textContent = `${c.name} (${c.id})`; sel.appendChild(o);
     }
+    const first = (list.characters ?? list)[0]; if (first) setSoulColor(first.color, first.name);
+    sel.onchange = () => { const c = (list.characters ?? list).find((c) => c.id === sel.value); if (c) setSoulColor(c.color, c.name); };
   } catch (e) { log('角色列表获取失败: ' + e.message, 'sys'); }
 }
 $('btn-soul-export').onclick = async () => {
