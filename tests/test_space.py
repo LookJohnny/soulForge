@@ -51,7 +51,9 @@ def test_activities_walk_agents_to_their_place():
     walks = [
         t
         for t in rt.trace
-        if t.kind == "dispatch" and t.detail.get("step") == "walk_to" and t.agent_id == "kai"
+        if t.kind == "dispatch"
+        and t.detail.get("step") == "walk_to"
+        and t.agent_id == "kai"
     ]
     assert walks and walks[0].detail["params"]["label"] == "厨房"
     rt.tick(19 * 60 + 31)
@@ -150,3 +152,22 @@ def test_day_rollover_reflects_before_replanning():
     assert refl and any("Kai" in i for i in refl[0].detail["insights"])
     assert rt.memory_store.recall("luna", "semantic")
     assert rt.day_plans["luna"].day == 1 and "反思" in rt.day_plans["luna"].rationale
+
+
+def test_nobody_walks_away_mid_conversation():
+    rt = CompanionRuntime(
+        personas(), WorldState(sim_minute=18 * 60 + 58), llm=MockBehaviorLLM()
+    )
+    rt.tick(18 * 60 + 58)
+    rt.world.space.move("kai", "sofa")
+    rt.world.space.move("luna", "sofa")
+    conv = rt.start_conversation("luna", "kai", topic="今天", max_turns=8)
+    rt.tick(18 * 60 + 59)
+    rt.tick(
+        19 * 60 + 0.5
+    )  # 19:00 → kai's cooking hour begins, but he's mid-conversation
+    assert not conv.ended and rt.where("kai") == "sofa"
+    rt.run(19 * 60 + 1, 6)
+    assert conv.ended
+    rt.tick(19 * 60 + 8)
+    assert rt.where("kai") == "kitchen"  # now he goes

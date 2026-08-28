@@ -312,6 +312,8 @@ class CompanionRuntime:
         target = template_location(template_id)
         if target is None or target == self.where(agent_id):
             return
+        if self.conversations.active_for(agent_id) is not None:
+            return  # you don't walk off mid-sentence; the activity waits for the conversation
         self.move_to(agent_id, target, minute, reason=f"activity {template_id}")
 
     def move_to(
