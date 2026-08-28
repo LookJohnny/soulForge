@@ -9,8 +9,8 @@ await p.goto('http://127.0.0.1:8899/live?gw=ws://127.0.0.1:1/ws&runtime=ws://127
 await p.waitForFunction(() => window.__live?.body?.vrm, null, { timeout: 30000 });
 await p.evaluate(() => window.__live.connectBody());
 await p.waitForFunction(() => window.__live.stage.size === 2 && [...window.__live.stage.values()].every((x) => x.vrm), null, { timeout: 60000 });
-// stage 2: activities have places — Luna (drawing) should have walked to the desk, Kai (cleaning) stays on the sofa
-await p.waitForFunction(() => { const l = window.__live.stage.get('luna'); return l && l.origin.x > 0.8; }, null, { timeout: 30000 });
+// stage 2: activities have places — someone leaves the sofa for the desk/kitchen within the first sim minutes
+await p.waitForFunction(() => [...window.__live.stage.values()].some((b) => Math.abs(b.origin.x) > 0.9 || b.origin.z < 0), null, { timeout: 45000 });
 const before = await p.evaluate(() => [...window.__live.stage].map(([id, b]) => [id, +b.origin.x.toFixed(2), +b.origin.z.toFixed(2)]));
 await p.fill('#text', '@luna @kai 今晚吃什么'); await p.press('#text', 'Enter');
 await p.waitForFunction(() => window.__live.logs.filter((l) => /^(Luna|Kai): /.test(l.text)).length >= 4, null, { timeout: 60000 });

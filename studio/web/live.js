@@ -112,12 +112,25 @@ function ensurePlaceLabels() {
     placeLabels.set(id, el);
   }
 }
+// 镜头跟随：多人时机位缓慢跟着大家的重心走（他们会走去厨房/书桌）
+const follow = { x: 0, z: 0 };
+function followStage(dt) {
+  if (stage.size < 2) return;
+  let cx = 0, cz = 0, n = 0;
+  for (const b of stage.values()) { cx += b.origin.x; cz += b.origin.z; n++; }
+  if (!n) return;
+  cx /= n; cz /= n;
+  const k = 1 - Math.exp(-1.8 * dt);
+  follow.x += (cx - follow.x) * k; follow.z += (cz - follow.z) * k;
+  controls.target.x = follow.x; controls.target.z = follow.z - 0.2;
+  camera.position.x = follow.x; camera.position.z = follow.z + 4.4;
+}
 function placePlaceLabels() {
   if (!placeLabels.size) return;
   const v = new THREE.Vector3();
   for (const [id, el] of placeLabels) {
     const pl = PLACES[id]; v.set(pl.x, 0.02, pl.z).project(camera);
-    el.style.left = ((v.x + 1) * 50) + '%'; el.style.top = ((-v.y + 1) * 50) + '%';
+    el.style.left = ((v.x + 1) * 50) + '%'; el.style.top = Math.min(84, (-v.y + 1) * 50) + '%';
     const here = [...stage].filter(([a]) => a).length;
     el.classList.toggle('hidden', v.z > 1 || here === 0);
   }
@@ -147,7 +160,7 @@ async function arrangeStage(agentIds) {
   controls.target.set(0, stage.size > 1 ? 1.0 : 1.05, 0);
   camera.position.set(0, stage.size > 1 ? 1.15 : 1.25, stage.size > 1 ? 3.2 + 1.0 * (stage.size - 1) : 2.6);
   controls.maxDistance = Math.max(5, 3.5 + stage.size);
-  if (stage.size > 1) { ensurePlaceLabels(); camera.position.set(0, 1.3, 4.6); controls.target.set(0, 0.95, -0.3); }
+  if (stage.size > 1) { ensurePlaceLabels(); camera.position.set(0, 1.3, 4.6); controls.target.set(0, 0.95, -0.3); controls.enabled = false; }
 }
 
 async function loadAssets() {
@@ -515,9 +528,11 @@ $('gw').value = params.get('gateway') ?? '';
 
 // ── 主循环 ────────────────────────────────────────────
 let lastPad = '';
+const followClock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
   resizeIfNeeded();
+  followStage(Math.min(0.1, followClock.getDelta()));
   controls.update();
   if (gw && !body.lipsync.analyser) body.setSpeakingLevel(gw.level());
   for (const b of stage.values()) if (b !== body) b.update();
