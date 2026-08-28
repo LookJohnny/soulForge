@@ -92,6 +92,8 @@ export class VrmBody {
     this.gazeTarget.position.set(0, 1.35, 2.5);
     scene.add(this.gazeTarget);
     this.gaze = new THREE.Vector2(0, 0);
+    this.origin = new THREE.Vector3(opts.x ?? 0, 0, opts.z ?? 0); // where this body stands
+    this.lookPoint = null;                                        // world point overriding gaze (a partner's head)
 
     this.speakingLevel = 0;
     this.speaking = false;
@@ -163,7 +165,25 @@ export class VrmBody {
     root.position.x -= center.x; root.position.z -= center.z;
     root.position.y = -scaled.min.y;
     root.userData.floorY = root.position.y;
+    root.userData.baseX = root.position.x; root.userData.baseZ = root.position.z;
+    root.position.x += this.origin.x; root.position.z += this.origin.z;
   }
+
+  /** Stand at (x, z) on the floor — several bodies share one stage. */
+  place(x, z = 0) {
+    this.origin.set(x, 0, z);
+    const root = this.vrm?.scene;
+    if (root) { root.position.x = (root.userData.baseX ?? 0) + x; root.position.z = (root.userData.baseZ ?? 0) + z; }
+  }
+
+  /** Head world position (or null before load). */
+  getHeadWorld(out = new THREE.Vector3()) {
+    const head = this.vrm?.humanoid?.getNormalizedBoneNode(B.Head);
+    return head ? head.getWorldPosition(out) : null;
+  }
+
+  /** Look at a world point (another character's head); null → back to the viewer. */
+  lookAtPoint(point) { this.lookPoint = point ? point.clone() : null; }
 
   _restPose() {
     const cfg = VRM_POSE_CONFIG[this.metaVersion];
@@ -331,11 +351,21 @@ export class VrmBody {
   _gazeLayer(vrm, t, dt) {
     const preset = this.mood.preset;
     const gy = this.gaze.y - (preset.gaze?.y ?? 0);
-    this.gazeTarget.position.set(this.gaze.x * 1.6, 1.35 - gy * 0.8, 2.2);
+    let gx = this.gaze.x, gyy = gy;
+    if (this.lookPoint) {
+      // partner's head → eyes on it, head turns most of the way (bodies stay facing the viewer)
+      this.gazeTarget.position.copy(this.lookPoint);
+      const head = this.getHeadWorld(this._v3a) ?? this.origin;
+      const dx = this.lookPoint.x - head.x, dz = this.lookPoint.z - head.z;
+      gx = Math.max(-1, Math.min(1, Math.atan2(dx, Math.max(0.25, dz + 0.6)) / (Math.PI / 3)));
+      gyy = Math.max(-1, Math.min(1, (head.y - this.lookPoint.y) * 1.5));
+    } else {
+      this.gazeTarget.position.set(this.origin.x + this.gaze.x * 1.6, 1.35 - gy * 0.8, this.origin.z + 2.2);
+    }
     const headT = {
-      x: this.gaze.y * 0.18 + (preset.head?.x ?? 0),
-      y: this.gaze.x * 0.32 + (preset.head?.y ?? 0),
-      z: this.gaze.x * -0.05 + (preset.head?.z ?? 0),
+      x: gyy * 0.18 + (preset.head?.x ?? 0),
+      y: gx * 0.32 * (this.lookPoint ? 2.2 : 1) + (preset.head?.y ?? 0),
+      z: gx * -0.05 + (preset.head?.z ?? 0),
     };
     // fidget（动画层接管时只保留视线类小动作）
     let fx = 0, fy = 0, fz = 0;

@@ -7,7 +7,7 @@ trap 'kill 0' EXIT
 export GATEWAY_PORT="${GATEWAY_PORT:-8081}"
 uv run --package ai-core -- uvicorn ai_core.main:app --port 8100 &
 uv run --package gateway -- uvicorn gateway.main:app --port "$GATEWAY_PORT" &
-uv run python -m engine.server.server --port 8765 --time-scale 2 &
+uv run python -m engine.server.server --port 8765 --time-scale 2 --llm-timeout 20 --social &
 uv run python studio/server.py --port 8899 &
 sleep 8
 echo ""

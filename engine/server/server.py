@@ -31,6 +31,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 import websockets
 
 from engine.planner import CompanionRuntime, Persona, WorldState
+from engine.planner.conversation import SocialPolicy
+from engine.planner.llm_interface import MockBehaviorLLM
 from engine.planner.models import Event as PlannerEvent, EventKind, MicroAction
 from engine.planner.templates import TEMPLATE_REGISTRY
 from engine.server.capability import EmbodimentManifest
@@ -75,8 +77,10 @@ class SoulForgeRuntimeServer:
         tick_hz: float = 1.0,
         llm=None,
         llm_timeout_s: float = 6.0,
+        social: bool = False,
     ):
-        """time_scale: simulated minutes advanced per real second."""
+        """time_scale: simulated minutes advanced per real second.
+        social: characters strike up small talk with each other on their own."""
         import math
 
         self.time_scale = _require_finite_positive("time_scale", time_scale)
@@ -95,6 +99,7 @@ class SoulForgeRuntimeServer:
             WorldState(sim_minute=start_minute),
             llm=self.llm,
             adapter=self._on_planner_dispatch,
+            social_policy=SocialPolicy(auto_start=True) if social else None,
         )
         self.sim_minute = start_minute
         self.bodies: dict[str, BodyConnection] = {}
@@ -113,6 +118,15 @@ class SoulForgeRuntimeServer:
         """CompanionRuntime adapter hook: queue micro-actions for broadcast."""
         self._pending_micro.append((agent_id, action))
 
+    def _drain_runtime_events(self) -> None:
+        """Events the runtime queued for itself (conversation turns, deferred
+        events) become due on the sim clock; hand them to the event worker."""
+        due = [e for e in list(self.runtime.event_queue) if e.t_min <= self.sim_minute]
+        for event in due:
+            with contextlib.suppress(ValueError):
+                self.runtime.event_queue.remove(event)
+            self._event_queue.put_nowait(event)
+
     async def _tick_loop(self) -> None:
         """Drift-corrected: next tick is scheduled on the absolute clock, so a
         slow tick doesn't permanently slow the simulated day."""
@@ -123,6 +137,7 @@ class SoulForgeRuntimeServer:
             try:
                 # consume_events=False: the event worker owns LLM-bound work
                 self.runtime.tick(self.sim_minute, consume_events=False)
+                self._drain_runtime_events()
                 await self._flush_pending()
                 await self._broadcast_new_trace()
                 await self._broadcast(
@@ -544,6 +559,15 @@ def main() -> None:
         help="simulated minutes per real second",
     )
     parser.add_argument("--tick-hz", type=float, default=1.0)
+    parser.add_argument("--llm-timeout", type=float, default=6.0)
+    parser.add_argument(
+        "--mock-llm", action="store_true", help="offline: deterministic MockBehaviorLLM"
+    )
+    parser.add_argument(
+        "--social",
+        action="store_true",
+        help="let characters start small talk with each other on their own",
+    )
     args = parser.parse_args()
     hours, minutes = args.start_clock.split(":")
     start_minute = int(hours) * 60 + int(minutes)
@@ -552,6 +576,9 @@ def main() -> None:
         start_minute=start_minute,
         time_scale=args.time_scale,
         tick_hz=args.tick_hz,
+        social=args.social,
+        llm_timeout_s=args.llm_timeout,
+        llm=MockBehaviorLLM() if args.mock_llm else None,
     )
     asyncio.run(server.serve(args.host, args.port))
 

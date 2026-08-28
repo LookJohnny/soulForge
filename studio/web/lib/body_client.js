@@ -20,13 +20,15 @@ export class BodyClient extends EventTarget {
     this.ws = null;
     this.welcome = null;
     this.planState = {};
-    this.current = null; // {command_id, agent_id, interruptible, cancel}
-    this.queue = [];
-    this.body = null;
+    this.lanes = new Map(); // agent_id → {current, queue}: characters act in parallel, each in order
+    this.bodyFor = () => null;
     this.env = {};
   }
 
-  attach(body, env = {}) { this.body = body; this.env = env; return this; }
+  /** `body` may be a VrmBody or a resolver (agent_id) → VrmBody for multi-character stages. */
+  attach(body, env = {}) { this.bodyFor = typeof body === 'function' ? body : () => body; this.env = env; return this; }
+  get body() { return this.bodyFor(this.agentIds[0]); }
+  _lane(agentId) { let l = this.lanes.get(agentId); if (!l) { l = { current: null, queue: [] }; this.lanes.set(agentId, l); } return l; }
 
   manifest() {
     return {
@@ -71,25 +73,28 @@ export class BodyClient extends EventTarget {
     if (this.agentIds.length && !this.agentIds.includes(cmd.agent_id)) return;
     const prim = translate(cmd);
     this._emit('action', { cmd, prim });
-    if (this.current) {
-      if (this.current.interruptible) { this.current.cancel(); this.observe(this.current, 'interrupted'); }
-      else { this.queue.push(cmd); return; }
+    const lane = this._lane(cmd.agent_id);
+    if (lane.current) {
+      if (lane.current.interruptible) { lane.current.cancel(); this.observe(lane.current, 'interrupted'); }
+      else { lane.queue.push(cmd); return; }
     }
     await this._run(cmd, prim);
   }
 
   async _run(cmd, prim) {
+    const lane = this._lane(cmd.agent_id);
     let cancelled = false;
-    this.current = { ...cmd, cancel: () => { cancelled = true; } };
+    lane.current = { ...cmd, cancel: () => { cancelled = true; } };
     this.observe(cmd, 'accepted', { detail: `web:${prim.kind}`, payload: { mapped: prim.mapped, primitive: prim.kind } });
     try {
-      if (this.body) await perform(this.body, prim, this.env);
+      const body = this.bodyFor(cmd.agent_id);
+      if (body) await perform(body, prim, { ...this.env, agentId: cmd.agent_id, speak: this.env.speak ? (t) => this.env.speak(t, cmd.agent_id, cmd) : undefined });
       if (!cancelled) this.observe(cmd, 'done');
     } catch (e) {
       if (!cancelled) this.observe(cmd, 'failed', { detail: String(e?.message ?? e), error_code: 'E_WEB_ANIM' });
     } finally {
-      if (this.current?.command_id === cmd.command_id) this.current = null;
-      const next = this.queue.shift();
+      if (lane.current?.command_id === cmd.command_id) lane.current = null;
+      const next = lane.queue.shift();
       if (next) this._run(next, translate(next));
     }
   }

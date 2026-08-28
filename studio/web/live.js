@@ -95,6 +95,38 @@ canvas.addEventListener('pointermove', (e) => {
 });
 canvas.addEventListener('pointerleave', () => body.setGaze(0, 0));
 
+// ── 舞台：多个角色同台（agent_id → VrmBody）。primary = 用户面前的那位（gateway 语音/PAD 绑定它）
+const stage = new Map();
+let primaryAgent = null;
+const personaById = new Map();           // /api/characters 条目
+const bodyFor = (agentId) => stage.get(agentId) ?? (agentId === primaryAgent || !primaryAgent ? body : null);
+const STAGE_SLOTS = { 1: [0], 2: [-0.62, 0.62], 3: [-1.15, 0, 1.15], 4: [-1.6, -0.55, 0.55, 1.6] };
+async function arrangeStage(agentIds) {
+  // 第一位站在 primary 身体上（已加载），其余按人格 embodiment.model 各加载一具
+  const ids = agentIds.length ? agentIds : [primaryAgent].filter(Boolean);
+  if (!ids.length) return;
+  primaryAgent = ids[0];
+  for (const [id, b] of [...stage]) if (!ids.includes(id) && b !== body) { b.dispose(); scene.remove(b.gazeTarget); stage.delete(id); }
+  stage.set(primaryAgent, body);
+  for (const id of ids.slice(1)) {
+    if (stage.has(id)) continue;
+    const persona = personaById.get(id);
+    const model = persona?.embodiment?.model;
+    if (!model) { log(`角色 ${id} 没有 embodiment.model，无法上台`, 'sys'); continue; }
+    const b = new VrmBody(scene, { height: persona.embodiment.target_height ?? 1.55, idleUrls: body.idleUrls, talkingUrl: body.talkingUrl });
+    b.onLog = (m) => log(`[${persona.name}] ${m}`, 'sys');
+    stage.set(id, b);
+    try { await b.load(model, { kind: persona.embodiment.kind }); log(`${persona.name} 上台了`, 'sys'); }
+    catch (e) { log(`${id} 模型加载失败: ${e.message}`, 'sys'); stage.delete(id); b.dispose(); }
+  }
+  const slots = STAGE_SLOTS[Math.min(4, stage.size)] ?? STAGE_SLOTS[4];
+  [...stage.keys()].forEach((id, i) => stage.get(id).place(slots[i] ?? 0, 0));
+  // 双人/群像：拉远成中景，视线高度略降
+  controls.target.set(0, stage.size > 1 ? 1.0 : 1.05, 0);
+  camera.position.set(0, stage.size > 1 ? 1.15 : 1.25, stage.size > 1 ? 3.2 + 1.0 * (stage.size - 1) : 2.6);
+  controls.maxDistance = Math.max(5, 3.5 + stage.size);
+}
+
 async function loadAssets() {
   // idle/talking 动捕片段（assets/animations，来自 aikeya，MIT）
   try {
@@ -164,20 +196,37 @@ function padUI() {
 // ── 气泡 ──────────────────────────────────────────────
 let bubbleUntil = 0;
 let typingTimer = 0;
-function showBubble(text) {
+const agentBubbles = new Map(); // 非 primary 角色各自的气泡 {el, until}
+function showBubble(text, agentId = null) {
+  if (agentId && agentId !== primaryAgent && stage.has(agentId)) {
+    let bb = agentBubbles.get(agentId);
+    if (!bb) {
+      const el = document.createElement('div'); el.className = 'bubble agent-bubble';
+      el.style.borderLeftColor = personaById.get(agentId)?.color ?? ''; document.body.appendChild(el);
+      bb = { el, until: 0 }; agentBubbles.set(agentId, bb);
+    }
+    bb.el.textContent = text; bb.el.classList.remove('hidden'); bb.until = performance.now() + 6000 + text.length * 120;
+    return;
+  }
   $('bubble-text').textContent = text;
   $('bubble').classList.remove('hidden'); $('typing').classList.add('hidden');
   bubbleUntil = performance.now() + 6000 + text.length * 120;
 }
 function placeBubbles() {
-  const pos = body.getHeadScreenPos(camera);
-  const set = (el, dx, dy) => {
+  const set = (el, pos, dx, dy) => {
     if (!pos) { el.style.left = '58%'; el.style.top = '22%'; return; }
     el.style.left = Math.min(Math.max(pos.x + dx, 4), 70) + '%';
     el.style.top = Math.min(Math.max(pos.y + dy, 4), 70) + '%';
   };
-  set($('bubble'), 4, -9); set($('typing'), 2, -6);
+  const pos = body.getHeadScreenPos(camera);
+  set($('bubble'), pos, 4, -9); set($('typing'), pos, 2, -6);
   if (bubbleUntil && performance.now() > bubbleUntil && !gw?.speaking) { $('bubble').classList.add('hidden'); bubbleUntil = 0; }
+  for (const [id, bb] of agentBubbles) {
+    const b = stage.get(id);
+    if (!b) { bb.el.remove(); agentBubbles.delete(id); continue; }
+    set(bb.el, b.getHeadScreenPos(camera), 4, -9);
+    if (bb.until && performance.now() > bb.until && !b.speaking) { bb.el.classList.add('hidden'); bb.until = 0; }
+  }
 }
 
 // ── 事件场景卡（Phase 4 后端就绪后自动生效）────────────
@@ -248,6 +297,7 @@ async function loadSoulCharacters() {
   try {
     const list = await (await fetch('/api/characters')).json();
     for (const c of (list.characters ?? list)) {
+      personaById.set(c.id, c);
       const o = document.createElement('option'); o.value = c.id; o.textContent = `${c.name} (${c.id})`; sel.appendChild(o);
     }
     const first = (list.characters ?? list)[0]; if (first) setSoulColor(first.color, first.name);
@@ -295,36 +345,77 @@ async function connectBody() {
   const url = $('runtime').value.trim() || params.get('runtime');
   if (!url) { $('body-status').textContent = '未连接（可选）'; return; }
   const agentIds = ($('runtime-agents').value || params.get('agents') || '').split(',').map((x) => x.trim()).filter(Boolean);
-  // 没有 gateway 时身体自己说话（standalone）：引擎下发 dialogue，经 studio /api/tts 念出
+  if (!personaById.size) await loadSoulCharacters();
+  await arrangeStage(agentIds);
+  // 台词：没有 gateway 时全部由本页念；有 gateway 时用户对话走 gateway，角色之间的对话仍由本页念
   const standalone = !gw;
-  bodyClient = new BodyClient({ url, bodyId: 'web-vrm-live', agentIds, speech: standalone }).attach(body, { animations: animationsList, speak: standalone ? speakStandalone : undefined });
-  bodyClient.addEventListener('action', (e) => { if (e.detail.cmd.dialogue && standalone) { log(e.detail.cmd.dialogue); showBubble(e.detail.cmd.dialogue); } });
-  bodyClient.addEventListener('welcome', (e) => { $('body-status').textContent = `身体已注册 ${e.detail.body_id} · ${e.detail.supported_steps.length} 步`; log('runtime 已接入（web 身体）', 'sys'); });
-  bodyClient.addEventListener('action', (e) => { log(`▶ ${e.detail.cmd.name} → ${e.detail.prim.kind}${e.detail.prim.clip ? ':' + e.detail.prim.clip : ''}`, 'sys'); });
+  const speak = (text, agentId, cmd) => (standalone || isAgentTalk(cmd)) ? speakStandalone(text, agentId) : Promise.resolve();
+  bodyClient = new BodyClient({ url, bodyId: 'web-vrm-live', agentIds, speech: true }).attach(bodyFor, { animations: animationsList, speak });
+  bodyClient.addEventListener('action', (e) => {
+    const { cmd, prim } = e.detail;
+    if (cmd.dialogue && (standalone || isAgentTalk(cmd))) { const n = personaById.get(cmd.agent_id)?.name ?? cmd.agent_id; log(`${n}: ${cmd.dialogue}`); showBubble(cmd.dialogue, cmd.agent_id); }
+    if (isAgentTalk(cmd)) faceEachOther(cmd.agent_id, cmd.gaze_target, prim.duration_s);
+    log(`▶ ${cmd.agent_id} ${cmd.name} → ${prim.kind}${prim.clip ? ':' + prim.clip : ''}`, 'sys');
+  });
+  bodyClient.addEventListener('welcome', (e) => { $('body-status').textContent = `身体已注册 ${e.detail.body_id} · ${(e.detail.accepted_agents ?? agentIds).join('+') || '全部'} · ${e.detail.supported_steps.length} 步`; log('runtime 已接入（web 身体）', 'sys'); });
   bodyClient.addEventListener('close', () => { $('body-status').textContent = '身体连接断开'; });
   bodyClient.addEventListener('error', () => { $('body-status').textContent = '身体连接失败'; });
   try { await bodyClient.connect(); } catch { /* status shown */ }
 }
+const isAgentTalk = (cmd) => !!cmd.gaze_target && cmd.gaze_target !== 'user' && stage.has(cmd.gaze_target);
+let faceTimer = 0;
+/** 两人对话：说话者看向对方，对方看回来并点头；结束后各自回到看观众。 */
+function faceEachOther(speakerId, listenerId, seconds = 3) {
+  const a = stage.get(speakerId), b = stage.get(listenerId);
+  if (!a || !b) return;
+  const ah = a.getHeadWorld(), bh = b.getHeadWorld();
+  if (ah && bh) { a.lookAtPoint(bh); b.lookAtPoint(ah); b.nod?.(); }
+  clearTimeout(faceTimer);
+  faceTimer = setTimeout(() => { for (const x of stage.values()) x.lookAtPoint(null); }, (seconds + 2.5) * 1000);
+}
+/** 把两位角色拉进一场对话：`@luna @kai 今晚吃什么`（走 Runtime Server /control）。 */
+function startConversation(a, b, topic = '') {
+  const base = ($('runtime').value.trim() || params.get('runtime') || '').replace(/\/body\/?$/, '');
+  if (!base) return toast('先连接 Runtime Server（⚙ 设置）');
+  const ws = new WebSocket(base + '/control');
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'start_conversation', agents: [a, b], topic }));
+  ws.onmessage = (ev) => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.type === 'conversation') { toast(`${personaById.get(a)?.name ?? a} 和 ${personaById.get(b)?.name ?? b} 聊起了「${m.topic}」`); ws.close(); }
+    else if (m.type === 'error') { toast('无法开始对话: ' + m.error, 5000); ws.close(); }
+  };
+  ws.onerror = () => toast('连不上 Runtime Server /control');
+}
 let standaloneAudio = null;
-async function speakStandalone(text) {
+const speakQueue = new Map(); // agent → promise chain，同一角色的台词按顺序念
+async function speakStandalone(text, agentId = primaryAgent) {
   if (!text) return;
-  try {
-    const res = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, voice: { provider: 'edge', id: 'zh-CN-XiaoxiaoNeural', rate: 0, pitch: 0 } }) });
-    if (!res.ok) return;
-    const url = URL.createObjectURL(await res.blob());
-    await new Promise((resolve) => {
-      const audio = new Audio(url); standaloneAudio = audio;
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const src = ctx.createMediaElementSource(audio); const an = ctx.createAnalyser(); an.fftSize = 256; src.connect(an); an.connect(ctx.destination);
-      body.setAudioAnalyser(an); body.setSpeaking(true);
-      const done = () => { body.setSpeaking(false); body.setAudioAnalyser(null); URL.revokeObjectURL(url); standaloneAudio = null; resolve(); };
-      audio.onended = audio.onerror = done; audio.play().catch(done);
-    });
-  } catch { /* TTS optional */ }
+  const b = bodyFor(agentId) ?? body;
+  const edge = personaById.get(agentId)?.voice?.edge ?? {};
+  const voice = { provider: 'edge', id: edge.voice ?? 'zh-CN-XiaoxiaoNeural', rate: edge.rate ? Math.round((edge.rate - 100) * 0.5) : 0, pitch: 0 };
+  const run = async () => {
+    try {
+      const res = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, voice }) });
+      if (!res.ok) return;
+      const url = URL.createObjectURL(await res.blob());
+      await new Promise((resolve) => {
+        const audio = new Audio(url); standaloneAudio = audio;
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const src = ctx.createMediaElementSource(audio); const an = ctx.createAnalyser(); an.fftSize = 256; src.connect(an); an.connect(ctx.destination);
+        b.setAudioAnalyser(an); b.setSpeaking(true);
+        const done = () => { b.setSpeaking(false); b.setAudioAnalyser(gw && b === body ? gw.analyser : null); URL.revokeObjectURL(url); standaloneAudio = null; resolve(); };
+        audio.onended = audio.onerror = done; audio.play().catch(done);
+      });
+    } catch { /* TTS optional */ }
+  };
+  const chained = (speakQueue.get(agentId) ?? Promise.resolve()).then(run);
+  speakQueue.set(agentId, chained);
+  return chained;
 }
 $('connect-body').onclick = connectBody;
 $('runtime').value = params.get('runtime') ?? '';
 $('runtime-agents').value = params.get('agents') ?? '';
+$('runtime-agents').placeholder = 'luna,kai';
 
 // ── Gateway ───────────────────────────────────────────
 let gw = null;
@@ -378,6 +469,8 @@ $('chatbar').onsubmit = (e) => {
   e.preventDefault();
   const t = $('text').value.trim();
   if (!t) return;
+  const at = [...t.matchAll(/@([\w-]+)/g)].map((m) => m[1]);
+  if (at.length >= 2) { startConversation(at[0], at[1], t.replace(/@[\w-]+/g, '').trim()); log(t, 'user'); $('text').value = ''; return; }
   if (gw?.ws?.readyState === 1) { gw.sendText(t); }
   else if (gw) { toast('gateway 未连接，正在重连…'); connect(); return; }
   else if (bodyClient?.welcome) { bodyClient.sendUtterance(t); }
@@ -404,6 +497,7 @@ function animate() {
   resizeIfNeeded();
   controls.update();
   if (gw && !body.lipsync.analyser) body.setSpeakingLevel(gw.level());
+  for (const b of stage.values()) if (b !== body) b.update();
   body.update();
   placeBubbles();
   const k = body.mood.pad; const sig = `${k.p.toFixed(2)}${k.a.toFixed(2)}${k.d.toFixed(2)}`;
@@ -418,4 +512,4 @@ loadServerDefaults().then(loadAssets).then(() => {
 animate();
 
 // 供 Playwright 冒烟测试与控制台调试
-window.__live = { body, camera, get gw() { return gw; }, get bodyClient() { return bodyClient; }, connect, connectBody, logs, renderRelationship, renderMood, showEvent, session, graph, refreshMemoryGraph };
+window.__live = { stage,  body, camera, get gw() { return gw; }, get bodyClient() { return bodyClient; }, connect, connectBody, logs, renderRelationship, renderMood, showEvent, session, graph, refreshMemoryGraph };

@@ -14,6 +14,7 @@
     "db:studio": "cd packages/database && pnpm prisma studio",
     "test:studio": "node studio/tests/test_live_smoke.mjs",
     "test:studio:workbench": "node studio/tests/test_studio_smoke.mjs",
+    "test:duo": "node studio/tests/test_duo_smoke.mjs",
     "test:models": "node studio/tests/test_models_smoke.mjs && node studio/tests/test_humanoid_tables.mjs"
   },
   "devDependencies": {
