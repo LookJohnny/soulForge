@@ -535,8 +535,10 @@ class OpenAICompatibleBehaviorLLM:
                 "Say your next line in Chinese, 1-2 short sentences, in your own voice — react to "
                 "what was just said, don't narrate. Put exactly one dialogue entry with agent="
                 f"{persona.agent_id!r}. Keep impact=1 and plan_delta='micro' unless something "
-                "said truly changes your plans. When it feels natural to stop, set "
-                "selected_intent='end_conversation' and say goodbye in the line.\n"
+                "said truly changes your plans. selected_intent is normally 'chat'; use "
+                "'end_conversation' ONLY after they have already said goodbye, or after "
+                "several turns when the topic is settled — never on an opening line, "
+                "never while asking a question.\n"
             )
         else:
             task = (

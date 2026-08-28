@@ -216,9 +216,11 @@ class ConversationManager:
         wants_end = decision.selected_intent == "end_conversation" or bool(
             decision.template_params.get("end_conversation")
         )
+        # nobody hangs up before the other side has spoken at least once
+        may_end = conv.turns >= 2
         if not text:
             self.end(conv, minute, "silence")
-        elif wants_end or _is_closing(text):
+        elif may_end and (wants_end or _is_closing(text)):
             self.end(conv, minute, "closed")
         elif conv.turns >= conv.max_turns:
             self.end(conv, minute, "turn_cap")
