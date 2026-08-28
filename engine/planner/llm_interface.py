@@ -690,11 +690,19 @@ class SafeDecisionLLM:
     it falls back to the deterministic mock — the action loop never blocks and
     the event is never dropped."""
 
-    def __init__(self, inner, timeout_s: float = 8.0, fallback=None):
+    def __init__(
+        self,
+        inner,
+        timeout_s: float = 8.0,
+        fallback=None,
+        conversation_timeout_s: float | None = None,
+    ):
         import concurrent.futures
 
         self.inner = inner
         self.timeout_s = timeout_s
+        # overheard lines queue behind TTS: a slower, better model may take longer
+        self.conversation_timeout_s = conversation_timeout_s or timeout_s * 2
         self.fallback = fallback or MockBehaviorLLM()
         self._pool = concurrent.futures.ThreadPoolExecutor(
             max_workers=2, thread_name_prefix="behavior-llm"
@@ -713,7 +721,12 @@ class SafeDecisionLLM:
                 current_template,
                 current_interruptible,
             )
-            decision = future.result(timeout=self.timeout_s)
+            payload = event.payload if isinstance(event.payload, dict) else {}
+            decision = future.result(
+                timeout=self.conversation_timeout_s
+                if payload.get("conversation")
+                else self.timeout_s
+            )
             return validate_decision(decision, current_template)
         except concurrent.futures.TimeoutError:
             self.last_fallback_reason = f"llm timeout after {self.timeout_s}s"
@@ -731,10 +744,32 @@ class SafeDecisionLLM:
         self._pool.shutdown(wait=False, cancel_futures=True)
 
 
-def build_llm() -> MockBehaviorLLM | OpenAICompatibleBehaviorLLM:
+class RoutedBehaviorLLM:
+    """Two lanes: user-facing decisions (latency matters) and character↔character
+    conversation lines (overheard, queued behind TTS — a slower, better model is
+    fine). Picked by the event payload, so the runtime contract is unchanged."""
+
+    def __init__(self, default, conversation=None):
+        self.default = default
+        self.conversation = conversation or default
+
+    def decide(self, event, persona, world, current_template, current_interruptible):
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        lane = self.conversation if payload.get("conversation") else self.default
+        return lane.decide(
+            event, persona, world, current_template, current_interruptible
+        )
+
+
+def build_llm() -> MockBehaviorLLM | OpenAICompatibleBehaviorLLM | RoutedBehaviorLLM:
     """Real LLM when a key is configured, mock otherwise. The default model
     follows the provider actually selected — an OpenAI key never silently
-    routes to `deepseek-chat`."""
+    routes to `deepseek-chat`.
+
+    Env:
+      BEHAVIOR_LLM_BASE_URL / BEHAVIOR_LLM_MODEL          user-facing decisions + dialogue
+      CONVERSATION_LLM_MODEL [/ _BASE_URL / _API_KEY]     character↔character lines (optional)
+    """
     deepseek_key = os.environ.get("DEEPSEEK_API_KEY")
     openai_key = os.environ.get("OPENAI_API_KEY")
     api_key = deepseek_key or openai_key
@@ -746,4 +781,13 @@ def build_llm() -> MockBehaviorLLM | OpenAICompatibleBehaviorLLM:
         default_base, default_model = "https://api.openai.com/v1", "gpt-4o-mini"
     base_url = os.environ.get("BEHAVIOR_LLM_BASE_URL", default_base)
     model = os.environ.get("BEHAVIOR_LLM_MODEL", default_model)
-    return OpenAICompatibleBehaviorLLM(api_key, base_url, model)
+    default = OpenAICompatibleBehaviorLLM(api_key, base_url, model)
+    conv_model = os.environ.get("CONVERSATION_LLM_MODEL")
+    if not conv_model or conv_model == model:
+        return default
+    conversation = OpenAICompatibleBehaviorLLM(
+        os.environ.get("CONVERSATION_LLM_API_KEY", api_key),
+        os.environ.get("CONVERSATION_LLM_BASE_URL", base_url),
+        conv_model,
+    )
+    return RoutedBehaviorLLM(default, conversation)

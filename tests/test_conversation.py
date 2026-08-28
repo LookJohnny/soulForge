@@ -185,3 +185,51 @@ def test_release_hands_floor_over_as_soon_as_line_is_spoken():
     assert not rt.conversations.release(
         "luna", 15 * 60 + 2
     )  # nothing pending for luna now
+
+
+def test_routed_llm_sends_conversation_events_to_the_conversation_lane():
+    from engine.planner import RoutedBehaviorLLM
+
+    class Tagged(MockBehaviorLLM):
+        def __init__(self, tag):
+            super().__init__()
+            self.tag = tag
+            self.calls = 0
+
+        def decide(self, *a, **k):
+            self.calls += 1
+            return super().decide(*a, **k)
+
+    user_lane, conv_lane = Tagged("user"), Tagged("conv")
+    rt = CompanionRuntime(
+        personas(),
+        WorldState(sim_minute=15 * 60),
+        llm=RoutedBehaviorLLM(user_lane, conv_lane),
+    )
+    rt.push_event(
+        Event(
+            t_min=15 * 60,
+            kind=EventKind.USER_UTTERANCE,
+            source="user",
+            text="你好",
+            target_agent="luna",
+        )
+    )
+    rt.start_conversation("luna", "kai", topic="x", max_turns=2)
+    rt.run(15 * 60, 4)
+    assert user_lane.calls == 1 and conv_lane.calls == 2
+
+
+def test_build_llm_routes_when_conversation_model_differs(monkeypatch):
+    from engine.planner import RoutedBehaviorLLM, build_llm
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.delenv("CONVERSATION_LLM_MODEL", raising=False)
+    assert not isinstance(build_llm(), RoutedBehaviorLLM)
+    monkeypatch.setenv("CONVERSATION_LLM_MODEL", "deepseek-reasoner")
+    llm = build_llm()
+    assert (
+        isinstance(llm, RoutedBehaviorLLM)
+        and llm.conversation.model == "deepseek-reasoner"
+    )
+    assert llm.default.model == "deepseek-chat"

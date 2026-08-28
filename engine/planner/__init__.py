@@ -21,7 +21,12 @@ from engine.planner.characters import (
     load_characters,
     load_personas,
 )
-from engine.planner.llm_interface import BehaviorDecision, MockBehaviorLLM, build_llm
+from engine.planner.llm_interface import (
+    BehaviorDecision,
+    MockBehaviorLLM,
+    RoutedBehaviorLLM,
+    build_llm,
+)
 from engine.planner.day_planner import generate_day_plan
 from engine.planner.hour_planner import expand_hour
 from engine.planner.minute_planner import plan_minute
@@ -49,6 +54,7 @@ __all__ = [
     "ImpactLevel",
     "MinuteAction",
     "MockBehaviorLLM",
+    "RoutedBehaviorLLM",
     "Persona",
     "PlanDelta",
     "PlannedActivity",

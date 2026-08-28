@@ -606,6 +606,9 @@ class CompanionRuntime:
                     "intent": decision.selected_intent,
                     "emotional_read": decision.emotional_read,
                     "interrupt_policy": decision.interrupt_policy,
+                    "llm": getattr(
+                        getattr(self.llm, "inner", self.llm), "last_model", None
+                    ),
                 },
             )
 
