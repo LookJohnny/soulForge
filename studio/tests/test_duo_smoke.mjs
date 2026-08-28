@@ -31,7 +31,7 @@ const r = await p.evaluate(() => {
 const speakers = r.lines.map((l) => l.split(':')[0]);
 const alternate = speakers.every((s, i) => i === 0 || s !== speakers[i - 1]);
 // to talk, Luna walked over to Kai: both now stand at the same place (sofa), offset side by side
-const together = Math.abs(r.after[0][2] - r.after[1][2]) < 0.05 && Math.abs(r.after[0][1] - r.after[1][1]) < 0.7;
+const together = Math.abs(r.after[0][2] - r.after[1][2]) < 0.05 && Math.abs(r.after[0][1] - r.after[1][1]) < 1.0;
 const ok = r.stageSize === 2 && r.apart > 5 && r.lines.length >= 4 && alternate && together && r.placeLabels.length === 4 && consoleErrors.length === 0;
 console.log(JSON.stringify({ ok, before, ...r, alternate, together, consoleErrors }, null, 1));
 await b.close(); process.exit(ok ? 0 : 1);

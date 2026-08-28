@@ -33,6 +33,17 @@ if TYPE_CHECKING:  # pragma: no cover
     from engine.planner.llm_interface import BehaviorDecision
     from engine.planner.runtime import CompanionRuntime
 
+ACTIVITY_ZH = {
+    "cooking": "做饭",
+    "drawing": "画画",
+    "chatting": "闲聊",
+    "plant_care": "照顾植物",
+    "repair": "修东西",
+    "rest": "歇着",
+    "cleaning": "收拾屋子",
+    "study": "看书",
+    "idle": "发呆",
+}
 CLOSING_MARKERS = (
     "再见",
     "晚安",
@@ -86,8 +97,8 @@ class SocialPolicy:
     """When the household starts talking on its own. Off by default: hosts opt in."""
 
     auto_start: bool = False
-    check_every_min: float = 15.0  # how often the runtime looks for a pair to pair up
-    cooldown_min: float = 60.0  # per-agent quiet time after a conversation
+    check_every_min: float = 20.0  # how often the runtime looks for a pair to pair up
+    cooldown_min: float = 180.0  # per-agent quiet time after a conversation (they're roommates, not chatbots)
     min_relationship: float = 0.5
     max_turns: int = 6
     turn_gap_min: float = 0.5  # sim minutes between one line and the reply
@@ -320,14 +331,37 @@ class ConversationManager:
         return activity.interruptible and activity.template_id not in BUSY_TEMPLATES
 
     def _pick_topic(self, initiator: str, partner: str) -> str:
-        persona = self.runtime.personas[initiator]
-        recent = self.runtime.memory.get(initiator, {})
-        for key in ("user_mood", "last_user_request", "critical_event"):
-            if recent.get(key):
-                return f"{key}: {recent[key]}"[:60]
-        if persona.daily_goals:
-            return persona.daily_goals[0]
-        return "今天过得怎么样"
+        """A concrete opener seed, not a theme: what the partner is doing right now,
+        something the user said today, or one of my own interests — rotated so the
+        same pair doesn't reopen the same subject."""
+        rt = self.runtime
+        me, other = rt.personas[initiator], rt.personas[partner]
+        plan = rt.hour_plans.get(partner)
+        act = plan.activity_at(rt.world.sim_minute) if plan else None
+        doing = ACTIVITY_ZH.get(act.template_id if act else "idle", "")
+        recent = rt.memory.get(initiator, {})
+        seeds: list[str] = []
+        if doing:
+            seeds.append(f"{other.name}正在{doing}，从这件事聊起（问细节/打趣/搭把手）")
+        if recent.get("user_mood"):
+            seeds.append(f"用户今天的状态：{recent['user_mood']}——你们俩怎么照应")
+        if recent.get("last_user_request"):
+            seeds.append(f"用户提过想要「{recent['last_user_request']}」，商量一下")
+        hour = int(rt.world.day_minute() // 60)
+        if 17 <= hour <= 20:
+            seeds.append("晚饭吃什么、谁来做")
+        elif hour >= 21:
+            seeds.append("今天最好笑/最糟的一件小事")
+        for interest in (me.meta.get("interests") or [])[:3]:
+            seeds.append(f"你最近在意的：{interest}")
+        if not seeds:
+            seeds.append("刚刚注意到的一件小事")
+        n = sum(
+            1
+            for c in self.conversations.values()
+            if set(c.participants) == {initiator, partner}
+        )
+        return seeds[n % len(seeds)]
 
     def _payload(self, conv: Conversation, listener: str, role: str) -> dict[str, Any]:
         partner = conv.partner_of(listener)
@@ -350,6 +384,9 @@ class ConversationManager:
                 "partner_id": partner,
                 "partner_name": other.name,
                 "partner_traits": list(other.traits)[:4],
+                "partner_interests": list(other.meta.get("interests") or [])[:3],
+                "my_interests": list(me.meta.get("interests") or [])[:3],
+                "my_style": me.meta.get("speech_style", ""),
                 "relationship": round(me.relationships.get(partner, 0.5), 2),
                 "turn": conv.turns,
                 "max_turns": conv.max_turns,

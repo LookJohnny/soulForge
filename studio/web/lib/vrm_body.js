@@ -131,6 +131,7 @@ export class VrmBody {
       if (native) { VRMUtils.removeUnnecessaryVertices(vrm.scene); VRMUtils.combineSkeletons(vrm.scene); }
     }
     VRMUtils.rotateVRM0(vrm);
+    this.baseYaw = vrm.scene.rotation.y; // VRM0 gets π here: keep it under our walking yaw
     vrm.scene.traverse((o) => { o.frustumCulled = false; if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     this._normalize(vrm.scene, this.height);
     this.scene.add(vrm.scene);
@@ -182,24 +183,37 @@ export class VrmBody {
     return head ? head.getWorldPosition(out) : null;
   }
 
-  /** Walk to (x, z) over `seconds`: eased slide + a light step bob; resolves on arrival. */
+  /** Walk to (x, z): turns toward the way, swings legs/arms (procedural walk cycle
+   *  layered over idle), then turns back to the viewer. Poses are dropped while walking. */
   walkTo(x, z = 0, seconds = 2, offsetX = 0) {
     const from = this.origin.clone(); const to = new THREE.Vector3(x + offsetX, 0, z);
     const dist = from.distanceTo(to);
-    if (dist < 0.02) return Promise.resolve();
-    const dur = Math.max(0.6, Math.min(seconds, dist / 0.6));
-    return new Promise((resolve) => {
-      const t0 = performance.now();
-      const step = () => {
-        const p = Math.min(1, (performance.now() - t0) / (dur * 1000));
-        const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
-        this.place(from.x + (to.x - from.x) * e, from.z + (to.z - from.z) * e);
-        const root = this.vrm?.scene;
-        if (root) root.position.y = (root.userData.floorY ?? 0) + Math.abs(Math.sin(p * dist * 9)) * 0.02 * (1 - Math.abs(2 * p - 1));
-        if (p < 1) requestAnimationFrame(step); else { if (root) root.position.y = root.userData.floorY ?? 0; resolve(); }
-      };
-      step();
-    });
+    if (dist < 0.05) return Promise.resolve();
+    this.pose = null; this.lastPose = null;
+    const dur = Math.max(0.8, dist / 0.7);
+    this.walking = { from, to, dist, t0: performance.now(), dur, yaw: Math.atan2(to.x - from.x, to.z - from.z), phase: 0 };
+    return new Promise((resolve) => { this.walking.done = resolve; });
+  }
+  _walkLayer(t, dt) {
+    const w = this.walking; if (!w) { this.yaw = damp(this.yaw ?? 0, 0, 6, dt); if (this.vrm) this.vrm.scene.rotation.y = (this.baseYaw ?? 0) + this.yaw; return; }
+    const p = Math.min(1, (performance.now() - w.t0) / (w.dur * 1000));
+    const e = p < 0.15 ? p / 0.15 * 0.5 * p / 0.15 : p > 0.85 ? 1 - Math.pow((1 - p) / 0.15, 2) * 0.5 : (p - 0.075) / 0.85; // ease in/out, linear middle
+    this.place(w.from.x + (w.to.x - w.from.x) * e, w.from.z + (w.to.z - w.from.z) * e);
+    // face the way we go (VRM faces +Z at yaw 0), turn back to the viewer at the end
+    const targetYaw = p < 0.8 ? w.yaw : 0;
+    this.yaw = damp(this.yaw ?? 0, targetYaw, 8, dt); if (this.vrm) this.vrm.scene.rotation.y = (this.baseYaw ?? 0) + this.yaw;
+    // step cycle: ~1.9 steps/s scaled by speed; amplitude fades in/out with the ease
+    const speed = w.dist / w.dur; w.phase += dt * Math.PI * 2 * (1.9 * Math.min(1.4, speed / 0.7));
+    const amp = Math.sin(Math.min(1, Math.min(p / 0.15, (1 - p) / 0.15)) * Math.PI / 2);
+    const s1 = Math.sin(w.phase), s2 = Math.sin(w.phase + Math.PI);
+    const sz = Math.sign(VRM_POSE_CONFIG[this.metaVersion].leftUpperArm.z);
+    this.blendBone(B.LeftUpperLeg, -0.55 * s1, 0.04, 0, amp); this.blendBone(B.RightUpperLeg, -0.55 * s2, -0.04, 0, amp);
+    this.blendBone(B.LeftLowerLeg, Math.max(0, 0.9 * s2) + 0.1, 0, 0, amp); this.blendBone(B.RightLowerLeg, Math.max(0, 0.9 * s1) + 0.1, 0, 0, amp);
+    this.blendBone(B.LeftFoot, 0.15 * s1, 0, 0, amp); this.blendBone(B.RightFoot, 0.15 * s2, 0, 0, amp);
+    this.blendBone(B.LeftUpperArm, 0.35 * s2 + 0.06, 0.04, sz * 1.25, amp); this.blendBone(B.RightUpperArm, 0.35 * s1 + 0.06, -0.04, -sz * 1.25, amp);
+    this.addBone(B.Spine, 0.06 * amp, 0.05 * s1 * amp, 0);
+    const root = this.vrm?.scene; if (root) root.position.y = (root.userData.floorY ?? 0) + Math.abs(Math.sin(w.phase)) * 0.025 * amp;
+    if (p >= 1) { if (root) root.position.y = root.userData.floorY ?? 0; const done = w.done; this.walking = null; done?.(); }
   }
 
   /** Look at a world point (another character's head); null → back to the viewer. */
@@ -329,7 +343,7 @@ export class VrmBody {
   nod() { this.nodAt = this.clock.elapsedTime; }
 
   /** 程序化保持姿态 seconds 秒：sit / kneel / lean_back / busy_hands（叠加层）。 */
-  holdPose(name, seconds = 2) { this.pose = { name, until: this.clock.elapsedTime + Math.max(0.3, seconds) }; }
+  holdPose(name, seconds = 2) { if (this.walking) return; this.pose = { name, until: this.clock.elapsedTime + Math.max(0.3, seconds) }; }
 
   /** 头部在画布上的百分比坐标 {x,y}（0–100），供 DOM 气泡跟随。 */
   getHeadScreenPos(camera) {
@@ -361,6 +375,7 @@ export class VrmBody {
     const breath = Math.sin(t * (1.6 + this.mood.pad.a * 0.6)) * 0.02;
     if (!this.animated) this._proceduralBody(vrm, t, dt, breath);
     if (!this.oneShot) this._gazeLayer(vrm, t, dt);
+    this._walkLayer(t, dt);
 
     // 3. 表情层（口型必须在 vrm.update 之前写）
     this._face(vrm, t, dt);
@@ -430,12 +445,12 @@ export class VrmBody {
     const a = this.poseAmt, name = this.pose?.name ?? this.lastPose; if (this.pose) this.lastPose = name;
     const sz = Math.sign(VRM_POSE_CONFIG[this.metaVersion].leftUpperArm.z);
     switch (name) {
-      case 'busy_hands': // 手在身前忙碌
-        this.addBone(B.LeftUpperArm, -0.5 * a, 0.2 * a, -sz * 0.5 * a);
-        this.addBone(B.RightUpperArm, -0.5 * a, -0.2 * a, sz * 0.5 * a);
-        this.addBone(B.LeftLowerArm, -1.2 * a + 0.1 * a * Math.sin(t * 5), 0, 0);
-        this.addBone(B.RightLowerArm, -1.2 * a + 0.1 * a * Math.cos(t * 5), 0, 0);
-        this.addBone(B.Chest, 0.12 * a, 0, 0); break;
+      case 'busy_hands': // 手在身前忙碌：上臂略前抬、肘前弯，手腕在腰前小幅动作（正X = 向前）
+        this.addBone(B.LeftUpperArm, 0.75 * a, 0.2 * a, sz * 0.15 * a);
+        this.addBone(B.RightUpperArm, 0.75 * a, -0.2 * a, -sz * 0.15 * a);
+        this.addBone(B.LeftLowerArm, (1.5 + 0.15 * Math.sin(t * 5)) * a, sz * 0.4 * a, 0);
+        this.addBone(B.RightLowerArm, (1.5 + 0.15 * Math.cos(t * 5)) * a, -sz * 0.4 * a, 0);
+        this.addBone(B.Spine, 0.08 * a, 0, 0); this.addBone(B.Head, 0.22 * a, 0, 0); break;
       case 'lean_back':
         this.addBone(B.Spine, -0.18 * a, 0, 0); this.addBone(B.Chest, -0.08 * a, 0, 0); break;
       case 'sit': // 腿部覆盖动捕（相加会变成"马腿"），大腿水平、小腿垂直

@@ -8,6 +8,7 @@ import { VrmBody } from '/studio/lib/vrm_body.js';
 import { GatewayClient } from '/studio/lib/gateway_client.js';
 import { MemoryGraph } from '/studio/lib/memory_graph.js';
 import { BodyClient } from '/studio/lib/body_client.js';
+import { buildHome } from '/studio/lib/home_props.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -103,7 +104,13 @@ const bodyFor = (agentId) => stage.get(agentId) ?? (agentId === primaryAgent || 
 const STAGE_SLOTS = { 1: [0], 2: [-0.62, 0.62], 3: [-1.15, 0, 1.15], 4: [-1.6, -0.55, 0.55, 1.6] };
 // 家的地图（与 engine/planner/space.py HOME 一致）：walk_to 的目的地；同一地点多人时错开站位
 const PLACES = { sofa: { label: '客厅沙发', x: 0, z: 0.3 }, kitchen: { label: '厨房', x: -1.7, z: -0.4 }, desk: { label: '书桌', x: 1.5, z: 0 }, plants: { label: '阳台花架', x: 1.9, z: -1.3 } };
-const slotOffset = (agentId) => { const ids = [...stage.keys()]; const i = ids.indexOf(agentId); return ids.length > 1 ? (i - (ids.length - 1) / 2) * 0.5 : 0; };
+const slotOffset = (agentId) => { const ids = [...stage.keys()]; const i = ids.indexOf(agentId); return ids.length > 1 ? (i - (ids.length - 1) / 2) * 0.8 : 0; };
+let home = null;
+function ensureHome() {
+  if (home || host.transparent) return;
+  home = buildHome(scene, PLACES);
+  scene.traverse((o) => { if (o.geometry?.type === 'CircleGeometry' && o.parent === scene) o.visible = false; }); // 单人圆盘让位给整间屋子
+}
 const placeLabels = new Map();
 function ensurePlaceLabels() {
   if (placeLabels.size || !stage.size) return;
@@ -160,7 +167,7 @@ async function arrangeStage(agentIds) {
   controls.target.set(0, stage.size > 1 ? 1.0 : 1.05, 0);
   camera.position.set(0, stage.size > 1 ? 1.15 : 1.25, stage.size > 1 ? 3.2 + 1.0 * (stage.size - 1) : 2.6);
   controls.maxDistance = Math.max(5, 3.5 + stage.size);
-  if (stage.size > 1) { ensurePlaceLabels(); camera.position.set(0, 1.3, 4.6); controls.target.set(0, 0.95, -0.3); controls.enabled = false; }
+  if (stage.size > 1) { ensurePlaceLabels(); ensureHome(); camera.position.set(0, 1.3, 4.6); controls.target.set(0, 0.95, -0.3); controls.enabled = false; }
 }
 
 async function loadAssets() {

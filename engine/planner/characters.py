@@ -70,6 +70,8 @@ def load_personas(path: str | Path = _DEFAULT_PATH) -> list[Persona]:
                     "comfort_line": entry.get("comfort_line", ""),
                     "voice": entry.get("voice", {}),
                     "embodiment": entry.get("embodiment", {}),
+                    "interests": list(entry.get("interests", [])),
+                    "speech_style": entry.get("speech_style", ""),
                 },
             )
         )
