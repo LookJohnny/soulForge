@@ -520,7 +520,9 @@ class SoulForgeRuntimeServer:
     # ---------------------------------------------------------------- runners
     async def serve(self, host: str = "127.0.0.1", port: int = 8765) -> None:
         """Pass port=0 to bind an ephemeral port; read it from `bound_port`."""
-        async with websockets.serve(self._handle_connection, host, port) as ws_server:
+        async with websockets.serve(
+            self._handle_connection, host, port, ping_interval=20, ping_timeout=90
+        ) as ws_server:
             self.bound_port = ws_server.sockets[0].getsockname()[1]
             self.ready.set()
             ticker = asyncio.create_task(self._tick_loop())

@@ -123,14 +123,17 @@ function ensurePlaceLabels() {
 const follow = { x: 0, z: 0 };
 function followStage(dt) {
   if (stage.size < 2) return;
-  let cx = 0, cz = 0, n = 0;
-  for (const b of stage.values()) { cx += b.origin.x; cz += b.origin.z; n++; }
+  let cx = 0, cz = 0, n = 0, minX = Infinity, maxX = -Infinity;
+  for (const b of stage.values()) { cx += b.origin.x; cz += b.origin.z; n++; minX = Math.min(minX, b.origin.x); maxX = Math.max(maxX, b.origin.x); }
   if (!n) return;
   cx /= n; cz /= n;
-  const k = 1 - Math.exp(-1.8 * dt);
+  const k = 1 - Math.exp(-2.6 * dt);
   follow.x += (cx - follow.x) * k; follow.z += (cz - follow.z) * k;
+  // the wider they spread across the room, the further back the camera sits
+  const spread = maxX - minX; const dist = 4.2 + Math.max(0, spread - 1.2) * 0.9;
+  follow.d = (follow.d ?? dist) + (dist - (follow.d ?? dist)) * k;
   controls.target.x = follow.x; controls.target.z = follow.z - 0.2;
-  camera.position.x = follow.x; camera.position.z = follow.z + 4.4;
+  camera.position.x = follow.x; camera.position.z = follow.z + follow.d;
 }
 function placePlaceLabels() {
   if (!placeLabels.size) return;
@@ -241,17 +244,17 @@ let bubbleUntil = 0;
 let typingTimer = 0;
 const agentBubbles = new Map(); // 非 primary 角色各自的气泡 {el, until, timer}
 /** 气泡逐字出现：默认 ~9 字/秒；给了 durationMs（TTS 时长）就按它铺满。 */
-function typewrite(el, text, durationMs) {
+function typewrite(el, text, durationMs, keep = 0) {
   clearInterval(el._tw);
-  const total = text.length; const ms = durationMs && durationMs > 300 ? durationMs : total * 110;
-  const t0 = performance.now(); el.textContent = '';
+  const total = text.length; const fresh = Math.max(1, total - keep); const ms = durationMs && durationMs > 300 ? durationMs : fresh * 110;
+  const t0 = performance.now(); el.textContent = text.slice(0, keep);
   el._tw = setInterval(() => {
-    const n = Math.min(total, Math.ceil(((performance.now() - t0) / ms) * total));
+    const n = Math.min(total, keep + Math.ceil(((performance.now() - t0) / ms) * fresh));
     el.textContent = text.slice(0, n);
     if (n >= total) clearInterval(el._tw);
   }, 40);
 }
-function showBubble(text, agentId = null, durationMs = 0) {
+function showBubble(text, agentId = null, durationMs = 0, keep = 0) {
   if (agentId && agentId !== primaryAgent && stage.has(agentId)) {
     let bb = agentBubbles.get(agentId);
     if (!bb) {
@@ -263,7 +266,7 @@ function showBubble(text, agentId = null, durationMs = 0) {
     return;
   }
   $('bubble').classList.remove('hidden'); $('typing').classList.add('hidden');
-  typewrite($('bubble-text'), text, durationMs);
+  typewrite($('bubble-text'), text, durationMs, keep);
   bubbleUntil = performance.now() + Math.max(durationMs, 0) + 2500 + text.length * 40;
 }
 function placeBubbles() {
@@ -393,6 +396,7 @@ loadSoulCharacters();
 
 // ── Runtime Server /body（Protocol 0.2 web 身体）──────
 let bodyClient = null;
+let bodyReconnect = 0;
 const animationsList = [];
 async function connectBody() {
   bodyClient?.close();
@@ -412,7 +416,7 @@ async function connectBody() {
     log(`▶ ${cmd.agent_id} ${cmd.name} → ${prim.kind}${prim.clip ? ':' + prim.clip : ''}`, 'sys');
   });
   bodyClient.addEventListener('welcome', (e) => { $('body-status').textContent = `身体已注册 ${e.detail.body_id} · ${(e.detail.accepted_agents ?? agentIds).join('+') || '全部'} · ${e.detail.supported_steps.length} 步`; log('runtime 已接入（web 身体）', 'sys'); });
-  bodyClient.addEventListener('close', () => { $('body-status').textContent = '身体连接断开'; });
+  bodyClient.addEventListener('close', () => { $('body-status').textContent = '身体连接断开，5 秒后重连…'; clearTimeout(bodyReconnect); bodyReconnect = setTimeout(() => { if (bodyClient && !bodyClient.ws) connectBody(); }, 5000); });
   bodyClient.addEventListener('error', () => { $('body-status').textContent = '身体连接失败'; });
   try { await bodyClient.connect(); } catch { /* status shown */ }
 }
@@ -507,7 +511,10 @@ async function connect() {
     if (Date.now() - lastErrorToast > 4000) { lastErrorToast = Date.now(); toast('⚠ ' + m); }
     $('typing').classList.add('hidden');
   });
-  gw.addEventListener('sentence', (e) => { clearTimeout(typingTimer); log(e.detail.text); showBubble(e.detail.text); });
+  // one reply = one bubble: sentences accumulate as they arrive; the bubble resets on the next turn
+  let replyText = '';
+  gw.addEventListener('sentence', (e) => { clearTimeout(typingTimer); log(e.detail.text); const keep = replyText.length; replyText += e.detail.text; showBubble(replyText, null, 0, keep); });
+  gw.addEventListener('speaking', (e) => { if (!e.detail.speaking) replyText = ''; });
   gw.addEventListener('speaking', (e) => { body.setSpeaking(e.detail.speaking); if (!e.detail.speaking) { bubbleUntil = performance.now() + 2500; setTimeout(() => { refreshMemoryGraph(); refreshNearEvents(); }, 4000); } });
   gw.addEventListener('emotion', (e) => { body.setPad(e.detail.pad); renderMood(e.detail); padUI(); });
   gw.addEventListener('control:session', (e) => {

@@ -195,13 +195,13 @@ export class VrmBody {
     return new Promise((resolve) => { this.walking.done = resolve; });
   }
   _walkLayer(t, dt) {
-    const w = this.walking; if (!w) { this.yaw = damp(this.yaw ?? 0, 0, 6, dt); if (this.vrm) this.vrm.scene.rotation.y = (this.baseYaw ?? 0) + this.yaw; return; }
+    const w = this.walking; if (!w) { this.yaw = damp(this.yaw ?? 0, 0, 4, dt); if (this.vrm) this.vrm.scene.rotation.y = (this.baseYaw ?? 0) + this.yaw; return; }
     const p = Math.min(1, (performance.now() - w.t0) / (w.dur * 1000));
     const e = p < 0.15 ? p / 0.15 * 0.5 * p / 0.15 : p > 0.85 ? 1 - Math.pow((1 - p) / 0.15, 2) * 0.5 : (p - 0.075) / 0.85; // ease in/out, linear middle
     this.place(w.from.x + (w.to.x - w.from.x) * e, w.from.z + (w.to.z - w.from.z) * e);
     // face the way we go (VRM faces +Z at yaw 0), turn back to the viewer at the end
     const targetYaw = p < 0.8 ? w.yaw : 0;
-    this.yaw = damp(this.yaw ?? 0, targetYaw, 8, dt); if (this.vrm) this.vrm.scene.rotation.y = (this.baseYaw ?? 0) + this.yaw;
+    this.yaw = damp(this.yaw ?? 0, targetYaw, 4.5, dt); if (this.vrm) this.vrm.scene.rotation.y = (this.baseYaw ?? 0) + this.yaw;
     // step cycle: ~1.9 steps/s scaled by speed; amplitude fades in/out with the ease
     const speed = w.dist / w.dur; w.phase += dt * Math.PI * 2 * (1.9 * Math.min(1.4, speed / 0.7));
     const amp = Math.sin(Math.min(1, Math.min(p / 0.15, (1 - p) / 0.15)) * Math.PI / 2);
@@ -451,8 +451,14 @@ export class VrmBody {
         this.addBone(B.LeftLowerArm, (1.5 + 0.15 * Math.sin(t * 5)) * a, sz * 0.4 * a, 0);
         this.addBone(B.RightLowerArm, (1.5 + 0.15 * Math.cos(t * 5)) * a, -sz * 0.4 * a, 0);
         this.addBone(B.Spine, 0.08 * a, 0, 0); this.addBone(B.Head, 0.22 * a, 0, 0); break;
-      case 'lean_back':
-        this.addBone(B.Spine, -0.18 * a, 0, 0); this.addBone(B.Chest, -0.08 * a, 0, 0); break;
+      case 'lean_back': // 退后半步端详：站着时只是微微后仰+抬头看画，坐着时才真的靠回椅背
+        { const seated = this.lastPose === 'sit' && this.poseAmt > 0.5 ? 1 : 0.35;
+          this.addBone(B.Spine, -0.16 * a * seated, 0, 0); this.addBone(B.Chest, -0.06 * a * seated, 0, 0);
+          this.addBone(B.Head, -0.14 * a, 0, 0);
+          const szl = Math.sign(VRM_POSE_CONFIG[this.metaVersion].leftUpperArm.z);
+          this.addBone(B.LeftUpperArm, 0.25 * a, 0.3 * a, szl * 0.1 * a); this.addBone(B.LeftLowerArm, 1.3 * a, szl * 0.6 * a, 0); // 一只手托着下巴/抱臂
+          this.addBone(B.RightUpperArm, 0.2 * a, -0.2 * a, -szl * 0.1 * a); this.addBone(B.RightLowerArm, 1.1 * a, -szl * 0.3 * a, 0); }
+        break;
       case 'sit': // 腿部覆盖动捕（相加会变成"马腿"），大腿水平、小腿垂直
         this.blendBone(B.LeftUpperLeg, -1.45, 0.08, 0, a); this.blendBone(B.RightUpperLeg, -1.45, -0.08, 0, a);
         this.blendBone(B.LeftLowerLeg, 1.45, 0, 0, a); this.blendBone(B.RightLowerLeg, 1.45, 0, 0, a);

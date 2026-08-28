@@ -198,6 +198,12 @@ class TraceEntry:
     seq: int = 0  # monotonic id — survives ring-buffer eviction
 
 
+MIN_RELOCATION_MIN = 15  # shorter activities don't justify a walk across the room
+PROP_BOUND_TEMPLATES = frozenset(
+    {"cooking", "plant_care"}
+)  # need the stove / the plants
+
+
 class CompanionRuntime:
     def __init__(
         self,
@@ -314,6 +320,16 @@ class CompanionRuntime:
             return
         if self.conversations.active_for(agent_id) is not None:
             return  # you don't walk off mid-sentence; the activity waits for the conversation
+        # short breaks (a 10-minute rest between two drawing stretches) are taken where
+        # you already are — nobody paces sofa↔desk every few minutes
+        plan = self.hour_plans.get(agent_id)
+        activity = plan.activity_at(minute) if plan else None
+        if (
+            activity is not None
+            and activity.duration_min < MIN_RELOCATION_MIN
+            and template_id not in PROP_BOUND_TEMPLATES
+        ):
+            return
         self.move_to(agent_id, target, minute, reason=f"activity {template_id}")
 
     def move_to(

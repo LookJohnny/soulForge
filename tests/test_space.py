@@ -171,3 +171,30 @@ def test_nobody_walks_away_mid_conversation():
     assert conv.ended
     rt.tick(19 * 60 + 8)
     assert rt.where("kai") == "kitchen"  # now he goes
+
+
+def test_short_breaks_do_not_send_agents_pacing():
+    from engine.planner.models import HourPlan, PlannedActivity
+
+    rt = CompanionRuntime(
+        personas(), WorldState(sim_minute=15 * 60), llm=MockBehaviorLLM()
+    )
+    rt.tick(15 * 60)
+    assert rt.where("luna") == "desk"
+    # a 10-minute rest wedged between drawing stretches: stay at the desk
+    rt.hour_plans["luna"] = HourPlan(
+        agent_id="luna",
+        hour=15,
+        goal="画画",
+        activities=[
+            PlannedActivity("drawing", 15 * 60, 20),
+            PlannedActivity("rest", 15 * 60 + 20, 10),
+            PlannedActivity("drawing", 15 * 60 + 30, 30),
+        ],
+    )
+    rt.tick(15 * 60 + 22)
+    assert rt.where("luna") == "desk"
+    # a real 30-minute rest is worth walking to the sofa
+    rt.hour_plans["luna"].activities[1] = PlannedActivity("rest", 15 * 60 + 20, 30)
+    rt.tick(15 * 60 + 24)
+    assert rt.where("luna") == "sofa"
