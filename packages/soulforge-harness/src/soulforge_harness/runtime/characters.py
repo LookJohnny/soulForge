@@ -92,8 +92,14 @@ def load_personas(path: str | Path = _DEFAULT_PATH) -> list[Persona]:
 
 
 def load_archetypes(path: str | Path = _DEFAULT_PATH) -> dict[str, Any]:
-    """Archetype day-plan profiles with a guaranteed `default` entry."""
-    archetypes = dict(load_characters(path).get("archetypes", {}))
+    """Archetype day-plan profiles with a guaranteed `default` entry.
+
+    SDK contract: with no characters.json anywhere (a bare pip install), day
+    planning still works off the built-in default archetype."""
+    try:
+        archetypes = dict(load_characters(path).get("archetypes", {}))
+    except CharacterConfigError:
+        archetypes = {}
     archetypes.pop("$note", None)
     archetypes.setdefault(
         "default", {"focus": [["study", "自由学习"]], "evening": "chatting"}
