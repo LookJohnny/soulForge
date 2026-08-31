@@ -1,78 +1,112 @@
-# SoulForge — AI 的身份层
+<div align="center">
 
-> **人类社会接受 AI 的前提，是 AI 先成为"某个谁"。**
-> 天网和贾维斯的差别不在算力，在中间少了一层：身份、记忆、情绪、关系、边界。
-> SoulForge 把这一层做成基础设施——给任何 AI（游戏 NPC、桌面助手、车机、毛绒玩具、本地部署的陪伴）一个**可移植的灵魂**。
+# SoulForge
 
-*本文面向投资人。工程文档见 [`docs/DEVELOPER.md`](docs/DEVELOPER.md)；SDK 见 [`packages/soulforge-harness`](packages/soulforge-harness)（MIT 开源）；竞品拆解见 [`docs/positioning/inworld-teardown.md`](docs/positioning/inworld-teardown.md)。*
+**Portable souls for AI — one identity, any body.**
+给任何 AI 一个可移植的灵魂：游戏 NPC、桌面伴侣、车机、毛绒玩具，同一个"她"。
+
+[![License: MIT](https://img.shields.io/badge/license-MIT%20(SDK)-blue.svg)](packages/soulforge-harness/LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](packages/soulforge-harness/pyproject.toml)
+[![Status: Alpha](https://img.shields.io/badge/status-alpha-orange.svg)](#roadmap)
+
+[Quickstart](#quickstart) · [.soul 格式](#the-soul-format) · [架构](#architecture) · [Benchmark](#benchmark) · [规范](spec/) · [愿景](docs/VISION.md) · [开发文档](docs/DEVELOPER.md)
+
+</div>
 
 ---
 
-## 1. 论点：智能会被商品化，身份不会
+LLM 把"聪明"变成了水电煤，但每个 AI 产品仍要自己回答：**这个 AI 是谁？它记得什么？它和用户是什么关系？它此刻心情如何？边界在哪里？**
 
-模型厂在把"聪明"卷成水电煤，但每个 AI 产品仍要自己回答同一组问题：这个 AI 是谁？它记得什么？它和这个用户是什么关系？它今天心情如何？它的边界在哪里？——今天每家都在重复造这一层，造得都不深。
+SoulForge 是这一层的基础设施——身份、记忆、情绪、关系的**人格中间件**。角色被打包成一个 `.soul` 文件，跨模型、跨身体、跨厂商携带；运行时让它在长对话中保持同一个人，在没人说话时也过自己的生活。
 
-这一层就是我们的产品。五行代码：
+## Features
+
+- 🧬 **`.soul` 便携身份** — 人格、音色、3D 外观、表情基线、知识装进一个签名文件；口令即授权（[规范](spec/soul-format.md)）
+- 🎭 **人格循环** — 每轮对话经过：人格提示 → LLM → 五轴关系演化（8 阶段）→ PAD 连续情绪 → 记忆，而不是一条裸 prompt
+- 🌱 **生活运行时** — 日程规划、事件重规划、角色↔角色对话、空间共处、每日反思（Generative Agents 内核）
+- 🤖 **具身协议** — 一份 WebSocket 契约（[Protocol 0.2](spec/embodiment-protocol.md)），浏览器 VRM、机器人、语音管道都是同一角色的"身体"
+- 🧪 **灵魂问卷** — 23 道心理学情境题，从用户画像生成契合的专属人格（Big Five + 依恋 + Mehrabian PAD 映射）
+- 🔌 **模型中立、本地优先** — 核心零第三方依赖，任何 OpenAI 兼容模型（DeepSeek/豆包/Kimi/本地小模型）即插即用
+
+## Quickstart
+
+```bash
+pip install packages/soulforge-harness        # PyPI 发布前从源码安装
+export DEEPSEEK_API_KEY=sk-...                # 或 OPENAI_API_KEY
+```
 
 ```python
 from soulforge_harness import Soul, Harness
+from soulforge_harness.soul import quiz
 
-soul = Soul.load("linwan.soul")        # 她的人格、音色、外观、情绪基线——一个文件
-h = Harness(soul)                      # 套在任何 OpenAI 兼容模型上
-print(h.chat("我今天加班到八点，有点累"))   # 回复带着她的性格、你们的关系、她此刻的心情
-print(h.stage, h.pad)                  # 关系阶段与 PAD 情绪，逐轮演化
+soul = Soul.from_quiz({q["id"]: 0 for q in quiz.QUESTIONS})   # 或 Soul.load("her.soul")
+soul.save("her.soul")                                          # 身份从此可携带
+
+h = Harness(soul)
+print(h.chat("我今天加班到八点，有点累"))
+print(h.stage, h.pad)          # 关系阶段与 PAD 情绪，逐轮演化
 ```
 
-**`.soul` 是身份的可移植格式**：一个签名的、可口令加密的文件装下整个角色（性格 prompt、五维人格、音色、3D 外观、表情基线、知识）。跨模型（DeepSeek/豆包/Kimi/本地小模型）、跨身体（网页/玩具/车机）、跨厂商携带；**口令即授权**——给 IP 方和玩具厂的商业化就是发口令。
+更多：[`examples/quickstart.py`](examples/quickstart.py)（终端对话）· [`examples/body_websocket.py`](examples/body_websocket.py)（把任意前端接成身体）。
 
-## 2. 为什么是基建，不是又一个陪伴 App
+完整体验（多角色小镇 + VRM 舞台 + 语音）：
 
-| | 云角色平台（Inworld 等） | SoulForge |
-|---|---|---|
-| 角色归属 | 锁在平台云里，用量计费依赖锁定 | **归用户/IP 方**，.soul 文件随身带走 |
-| 部署 | 全云 | 核心零依赖，**可本地/离线**（车机、无网玩具、数据不出境） |
-| 硬件 | 无 | Protocol 0.2 身体协议：网页 VRM / 机器人 / 语音管道已验证；**自有玩具厂**做 ¥100 BOM 灯塔 |
-| 模型 | 绑自家路由 | 中立层，任何 OpenAI 兼容模型 |
-| 角色的"活" | 被动应答 NPC | **生活模拟运行时**：日程规划、角色↔角色对话、空间共处、每日反思（Generative Agents 内核） |
+```bash
+docker compose up -d postgres redis && ./scripts/live-up.sh
+# → http://127.0.0.1:8899/live   首次进入即灵魂问卷
+```
 
-开源策略：**`.soul` 规范 + 参考运行时开源（MIT）换生态**；托管、灵魂 Key 注册表、人格生成（灵魂问卷）、多角色小镇等增值闭源收费。格式之战靠分发赢。
+## The .soul format
 
-## 3. 已经跑起来的（仓库内全部可运行、有测试）
+```text
+SOUL2\n                                  ← magic
+{"enc":"pass","salt":"…","soul_id":"…"}  ← 明文可读的头
+<ZIP>                                    ← manifest(逐文件 SHA-256) + character.json
+                                           + voice/ + embodiment/ + expression.json + rag/
+```
 
-### 身份与人格
-- **`.soul` v2 容器**：magic + 逐文件哈希清单 + 口令加密；导出/导入/跨端安装全链路已验证
-- **灵魂问卷**：23 道心理学情境题（Big Five + 依恋内核）→ 3 分钟生成契合用户的专属人格/音色/PAD 基线；映射规则来自人机交互研究（相似吸引 + 支配互补 + AI 永远情绪稳定）
-- **五轴关系 × 8 阶段**：升级需多条件合取 + 关键事件；LLM 只能建议、引擎夹钳（"应用是游戏主持人"）
-- **PAD 连续情绪 + 因果**：性格决定情绪基线；她知道自己为什么开心，会平复、会想你
+篡改即拒收；`enc:"pass"` 时口令派生密钥（PBKDF2 200k → AES-GCM），**分发口令就是授权动作**。详见 [spec/soul-format.md](spec/soul-format.md)。
 
-### 让角色"活着"的运行时
-- 日程→小时→分钟三层规划、四级重规划；角色之间自己找话聊（发言权仲裁、说完才轮到对方）、聊完互相记住并改变关系；家有空间概念（同屋才能搭话）；每晚反思改写明天的日程
-- 五层记忆 + pgvector 语义检索，敏感度分级与使用审计（儿童场景可控）
+## Architecture
 
-### 三个灯塔身体（同一个灵魂）
-| 身体 | 状态 |
+```mermaid
+flowchart LR
+    SOUL[".soul<br/>identity file"] --> H["Harness<br/>persona · PAD · relationship · memory"]
+    H <--> LLM["any OpenAI-compatible LLM"]
+    H --> RT["Life Runtime<br/>plans · conversations · space · reflection"]
+    RT -- "Protocol 0.2 (WebSocket)" --> B1["browser VRM"]
+    RT -- " " --> B2["plush toy (ESP32)"]
+    RT -- " " --> B3["robot / voice pipeline"]
+```
+
+| 目录 | 内容 |
 |---|---|
-| **毛绒玩具**（ESP32，自有工厂） | 语音全链路真机运行：VAD→ASR→LLM→TTS→Opus，可打断 |
-| **桌面伴侣**（浏览器 + macOS 透明悬浮窗） | VRM 舞台、口型、PAD 表情、关系 HUD、事件卡、多角色同台 |
-| **机器人** | Protocol 0.2 + 安全钳制（watchdog/故障锁存/安全姿态） |
+| [`packages/soulforge-harness`](packages/soulforge-harness) | **开源 SDK（MIT）**：.soul、人格数学、生活运行时、协议 |
+| [`spec/`](spec/) | `.soul` v2 与 Protocol 0.2 公开规范 |
+| [`packages/ai-core`](packages/ai-core) | 对话服务：五层记忆(pgvector)、关系引擎、TTS、灵魂问卷 API |
+| [`packages/gateway`](packages/gateway) | 设备语音网关（VAD → ASR → LLM → TTS → Opus，支持打断） |
+| `engine/` · `studio/` | 协议服务宿主 · VRM 舞台/多角色小镇前端 |
+| `apps/desktop` | macOS 桌面伴侣（Tauri，透明置顶悬浮窗） |
 
-通用人形模型支持（Mixamo/Sketchfab/Unity Humanoid 拖入即用）、Unity 协议客户端已具备。
+## Benchmark
 
-## 4. 商业模式（无聊但可算账）
+同一角色、同一 30 轮脚本，`benchmarks/consistency.py`，LLM 盲评五维（1–5）：
 
-1. **B2B2C 硬件授权**：模组 + 灵魂授权 ¥40/台 + 活跃分成——自有玩具厂是第一个 OEM，渠道即义乌
-2. **运行时/托管用量**：每千次会话的人格循环调用；本地部署收企业 license
-3. **灵魂 Key 注册表**：IP 方发行官方角色 .soul，按激活分成（口令即授权已实现，注册表在路线图）
-4. C 端桌面/App 订阅作为现金流与数据来源，不是主故事
+| | 语体一致 | 价值观 | 记忆回调 | 情绪连续 | 边界遵守 |
+|---|:-:|:-:|:-:|:-:|:-:|
+| **Harness** | **5** | **5** | **5** | **5** | **5** |
+| 裸 system prompt | 2 | 5 | 3 | 5 | 1 |
 
-## 5. 路线图与要钱做的事
+## Roadmap
 
-- **T+2 月**：SDK 公开发布（规范 + quickstart 已在库中）；三个设计伙伴（1 独立游戏工作室 + 1 硬件 OEM + 自有厂）；一致性 benchmark 首份数字（`benchmarks/consistency.py`）
-- **T+6 月**：灵魂 Key 注册表上线；500 台玩具试点出货，采 D30 留存/日均轮次/续费三数
-- **T+12 月**：Unity/TS SDK、车机 POC、注册表分成跑通第一个 IP
+- [x] `.soul` v2 · Protocol 0.2 · 生活运行时 · 灵魂问卷 · 多角色小镇
+- [ ] PyPI 发布 + 独立开源仓
+- [ ] TypeScript / Unity 客户端 SDK
+- [ ] 灵魂 Key 注册表（短码分发、IP 方分成）
+- [ ] 车机 / 本地小模型 POC
 
-**风险自认**：AI 陪伴 C 端红海且有监管风险（我们以基建+B 端为主故事）；平台方可能下场做人格层（我们的防线是中立性与可移植性——平台永远不会做反锁定）；团队需要补企业销售与 SDK DevRel。
+## Contributing & License
 
----
+SDK 与规范以 [MIT](packages/soulforge-harness/LICENSE) 开源，欢迎 issue / PR；monorepo 其余部分保留所有权利。测试：`uv run pytest tests packages/*/tests`（四套分开跑）。
 
-*演示：`./scripts/live-up.sh` 一键起全栈 → http://127.0.0.1:8899/live（首次进入即灵魂问卷）。60 秒演示脚本见 `docs/pitch/demo_60s_script.md`，单位经济模型见 `docs/pitch/unit_economics.md`。*
+<div align="center"><sub>SoulForge — because Jarvis needed a personality layer, and Skynet didn't have one.</sub></div>
