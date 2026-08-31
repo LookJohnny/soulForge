@@ -608,14 +608,18 @@ async function connect() {
   gw?.close();
   const url = $('gw').value.trim() || params.get('gateway') || serverDefaults.gateway_ws_url || `ws://${location.hostname}:8080/ws`;
   gw = new GatewayClient({ url, sessionName: 'vrm-live' });
+  const self = gw; // 被 connect() 顶替的旧客户端，其 close/error 一律作废——否则新旧连接互相重连成 3 秒循环
+  const alive = () => gw === self;
   gw.addEventListener('open', (e) => { reconnectTries = 0; $('status').textContent = `已连接 ${e.detail.device_id}`; $('hud-stage').textContent = '已连接'; log('gateway 已连接', 'sys'); body.setAudioAnalyser(gw.analyser); });
   gw.addEventListener('close', () => {
+    if (!alive()) return;
     $('status').textContent = '连接断开，3 秒后重连…'; $('hud-stage').textContent = '未连接'; $('mic').classList.remove('on'); body.setAudioAnalyser(null);
     $('typing').classList.add('hidden'); body.setSpeaking(false);
     if (++reconnectTries > 5) { $('status').textContent = '连接断开（已停止重连，点"重新连接"）'; return; }
     if (!reconnectTimer) reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(); }, 3000);
   });
   gw.addEventListener('error', (e) => {
+    if (!alive()) return;
     const d = e.detail;
     const m = d?.message ?? (d instanceof Event ? `连接 ${url} 失败` : String(d));
     log('⚠ ' + m, 'sys');
