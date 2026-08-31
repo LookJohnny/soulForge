@@ -75,8 +75,9 @@ flowchart LR
     H <--> LLM["any OpenAI-compatible LLM"]
     H --> RT["Life Runtime<br/>plans · conversations · space · reflection"]
     RT -- "Protocol 0.2 (WebSocket)" --> B1["browser VRM"]
-    RT -- " " --> B2["plush toy (ESP32)"]
-    RT -- " " --> B3["robot / voice pipeline"]
+    RT --> B2["plush toy (ESP32)"]
+    RT --> B3["robot / voice pipeline"]
+    RT -.-> B4["game NPC<br/>Unity / Unreal ⏳ in dev"]
 ```
 
 | 目录 | 内容 |
