@@ -1041,9 +1041,9 @@ async def _post_turn_processing(
     """Async post-turn: personality drift (relationship moved inline via
     ``_apply_relationship_turn`` so the turn's deltas can be streamed)."""
     try:
-        memory_svc = await get_memory_service()
-        memories = await memory_svc.retrieve_memories(end_user_id, character_id, limit=5)
-        recent_types = [m["type"] for m in memories[:3]]
+        # S9 (audit): a second full memory fan-out ran here every turn only to
+        # compute type labels that (S5) never matched anything. Removed.
+        recent_types: list[str] = []
 
         # Personality drift
         cache = get_cache()

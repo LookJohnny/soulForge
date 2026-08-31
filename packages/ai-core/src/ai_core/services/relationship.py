@@ -97,7 +97,13 @@ class RelationshipEngine:
                 state["_decay_mood_cause"] = decay.mood_cause
             if decay.deltas:
                 logger.info("relationship.decay", end_user_id=end_user_id, deltas=decay.deltas)
-            await self._save(end_user_id, character_id, state)
+            # S14 (audit): get_state used to _save here — a GET created rows for
+            # any id pair and a polling dashboard decayed every bond it looked
+            # at. Decay is applied to the returned value and persisted on the
+            # next real write (apply_turn/record_event both _save). Cache only:
+            await self.cache.set_json(
+                self._cache_key(end_user_id, character_id), state, ttl=_REL_CACHE_TTL
+            )
         return state
 
     async def _ensure_schema(self) -> bool:

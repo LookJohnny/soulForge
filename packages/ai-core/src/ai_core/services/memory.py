@@ -12,7 +12,7 @@ import hashlib
 import json
 import math
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import asyncpg
@@ -209,11 +209,14 @@ def _lexical_relevance(query: str, content: str) -> float:
 
 def _recency_value(memory: dict, now: datetime | None = None) -> float:
     now = now or datetime.now(UTC)
+    # S2 (audit): last_used_at came first, so every retrieved memory became
+    # maximally "recent" on the next turn and the recency term stopped
+    # discriminating. Recency = when the memory happened, not when we fetched it.
     dt = (
-        _parse_dt(memory.get("last_used_at"))
-        or _parse_dt(memory.get("timestamp"))
-        or _parse_dt(memory.get("updated_at"))
+        _parse_dt(memory.get("timestamp"))
         or _parse_dt(memory.get("created_at"))
+        or _parse_dt(memory.get("updated_at"))
+        or _parse_dt(memory.get("last_used_at"))
     )
     if not dt:
         return 0.5
@@ -460,6 +463,7 @@ class MemoryService:
         cache: CacheService,
         embedder: "EmbeddingService | None" = None,
     ):
+        self._usage_tasks: set = set()
         self.pool = pool
         self.llm = llm
         self.cache = cache
@@ -760,13 +764,17 @@ class MemoryService:
             context=context or {},
             limit=limit,
         )
-        memories: list[dict] = []
-        for item in pack["compiled_rules"]:
-            memories.append(item)
-        for item in pack["implicit"]:
-            memories.append(item)
-        for item in pack["direct"]:
-            memories.append(item)
+        # S8 (audit): direct-surface memories used to sit last and be truncated
+        # first — exactly the ones the policy cleared for natural mention.
+        # Order: compiled rules, then direct (reserve ≥2 slots), then implicit.
+        memories: list[dict] = list(pack["compiled_rules"])
+        direct = list(pack["direct"])
+        implicit = list(pack["implicit"])
+        reserve = min(len(direct), 2)
+        room = max(0, limit - len(memories) - reserve)
+        memories += direct[:reserve] + implicit[:room]
+        rest = direct[reserve:] + implicit[room:]
+        memories += rest[: max(0, limit - len(memories))]
         return memories[:limit]
 
     async def retrieve_memory_pack(
@@ -801,6 +809,7 @@ class MemoryService:
         direct: list[dict] = []
         implicit: list[dict] = []
         compiled_rules: list[dict] = []
+        surfaced_rows: list[dict] = []  # raw rows + decision, for usage marking
         blocked_count = 0
 
         for memory in candidates:
@@ -808,6 +817,9 @@ class MemoryService:
             if decision.decision == "BLOCKED":
                 blocked_count += 1
                 continue
+            surfaced_rows.append(
+                {**memory, "use_mode": decision.use_mode, "policy_reason": decision.reason}
+            )
 
             prompt_item = self._to_prompt_memory(memory, decision.use_mode)
             if memory["memory_table"] == "compiled_behavior_rules":
@@ -817,7 +829,16 @@ class MemoryService:
             else:
                 implicit.append(prompt_item)
 
-            await self._mark_used(memory, decision.use_mode, response_id=response_id)
+        # S2 (audit): usage marking moved out of the loop — one batched write for
+        # the rows that survived policy, off the critical path.
+        if surfaced_rows:
+            import asyncio as _asyncio
+
+            task = _asyncio.get_event_loop().create_task(
+                self._mark_used_batch(surfaced_rows, response_id)
+            )
+            self._usage_tasks.add(task)
+            task.add_done_callback(self._usage_tasks.discard)
 
         return {
             "direct": direct,
@@ -1001,33 +1022,36 @@ class MemoryService:
             )
         return hints
 
-    async def _mark_used(self, memory: dict, use_mode: str, response_id: str | None = None) -> None:
-        table = memory.get("memory_table")
-        if table not in _MEMORY_TABLES:
-            return
+    async def _mark_used_batch(self, memories: list[dict], response_id: str | None = None) -> None:
+        """Batched usage marking for memories that actually surfaced (S2/S11)."""
         try:
             async with self.pool.acquire() as conn:
-                await conn.execute(
-                    f"""UPDATE {table}
-                        SET last_used_at = now(), usage_count = usage_count + 1
-                        WHERE id = $1""",
-                    memory["id"],
-                )
-                await conn.execute(
-                    """INSERT INTO memory_usage_logs
-                       (id, response_id, user_id, character_id, memory_id, memory_table,
-                        use_mode, channel, policy_reason, created_at)
-                       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'prompt', $7, now())""",
-                    response_id,
-                    memory.get("user_id"),
-                    memory.get("character_id"),
-                    memory.get("id"),
-                    table,
-                    use_mode,
-                    "retrieved_for_prompt",
-                )
+                for memory in memories:
+                    table = memory.get("memory_table")
+                    if table not in _MEMORY_TABLES:
+                        continue
+                    await conn.execute(
+                        f"""UPDATE {table}
+                            SET last_used_at = now(), usage_count = usage_count + 1
+                            WHERE id = $1""",
+                        memory["id"],
+                    )
+                    await conn.execute(
+                        """INSERT INTO memory_usage_logs
+                           (id, response_id, user_id, character_id, memory_id, memory_table,
+                            use_mode, channel, policy_reason, created_at)
+                           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6,
+                                   'prompt', $7, now())""",
+                        response_id,
+                        memory.get("user_id"),
+                        memory.get("character_id"),
+                        memory.get("id"),
+                        table,
+                        memory.get("use_mode", "IMPLICIT_ONLY"),
+                        memory.get("policy_reason", "surfaced_in_prompt"),
+                    )
         except Exception as e:
-            logger.warning("memory.mark_used_failed", error=str(e), table=table)
+            logger.warning("memory.mark_used_failed", error=str(e))
 
     async def _retrieve_legacy_memories(
         self, end_user_id: str, character_id: str, limit: int = _MAX_MEMORIES
@@ -1170,71 +1194,49 @@ class MemoryService:
                 }
                 decision = self.policy.evaluate_write(candidate)
                 if decision.decision == "REQUIRE_CONFIRMATION":
-                    await self._insert_pending_confirmation(
-                        conn, end_user_id, character_id, candidate, decision.reason
+                    # S4 (audit): the pending-confirmation table had no read path,
+                    # no confirm API and no reaper — the most sensitive content
+                    # was the only content persisted forever with no way out.
+                    # Until a real confirmation flow exists, high-sensitivity
+                    # extractions are simply not stored.
+                    logger.info(
+                        "memory.high_sensitivity_rejected",
+                        layer=layer,
+                        sensitivity=sensitivity,
+                        reason=decision.reason,
                     )
                     continue
 
                 if layer == "PROFILE":
-                    memory_id = await self._upsert_profile_memory(
+                    await self._upsert_profile_memory(
                         conn,
                         end_user_id,
                         character_id,
                         content,
                         raw_source,
                         confidence,
-                        sensitivity,
-                        importance,
-                    )
-                    await self._create_policy(
-                        conn,
-                        end_user_id,
-                        memory_id,
-                        "profile_memories",
-                        layer,
-                        content,
                         sensitivity,
                         importance,
                     )
                 elif layer == "RELATIONAL":
-                    memory_id = await self._insert_relational_memory(
+                    await self._insert_relational_memory(
                         conn,
                         end_user_id,
                         character_id,
                         content,
                         raw_source,
                         confidence,
-                        sensitivity,
-                        importance,
-                    )
-                    await self._create_policy(
-                        conn,
-                        end_user_id,
-                        memory_id,
-                        "relational_memories",
-                        layer,
-                        content,
                         sensitivity,
                         importance,
                     )
                 else:
-                    memory_id = await self._insert_episodic_memory(
+                    await self._insert_episodic_memory(
                         conn,
                         end_user_id,
                         character_id,
                         content,
                         raw_source,
                         confidence,
-                        sensitivity,
-                        importance,
-                    )
-                    await self._create_policy(
-                        conn,
-                        end_user_id,
-                        memory_id,
-                        "episodic_memories",
-                        layer,
-                        content,
                         sensitivity,
                         importance,
                     )
@@ -1353,55 +1355,6 @@ class MemoryService:
         memory_id = str(row["id"])
         await self._store_embedding(conn, "relational_memories", memory_id, content)
         return memory_id
-
-    async def _insert_pending_confirmation(
-        self,
-        conn: asyncpg.Connection,
-        end_user_id: str,
-        character_id: str,
-        candidate: dict,
-        reason: str,
-    ) -> None:
-        await conn.execute(
-            """INSERT INTO memory_pending_confirmations
-               (id, user_id, character_id, proposed_memory, reason, expires_at)
-               VALUES (gen_random_uuid(), $1, $2, $3::jsonb, $4, $5)""",
-            end_user_id,
-            character_id,
-            _json(candidate),
-            reason,
-            datetime.now(UTC) + timedelta(days=7),
-        )
-
-    async def _create_policy(
-        self,
-        conn: asyncpg.Connection,
-        end_user_id: str,
-        memory_id: str,
-        table: str,
-        layer: str,
-        content: str,
-        sensitivity: str,
-        importance: int,
-    ) -> None:
-        use_mode = "IMPLICIT_ONLY"
-        await conn.execute(
-            """INSERT INTO memory_policies
-               (id, user_id, memory_id, memory_table, memory_type, content,
-                sensitivity_level, permission_level, importance_score, use_mode,
-                can_surface_directly,
-                implicit_only, allowed_channels)
-               VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'AUTO',
-                       $7, $8, false, true, ARRAY['response_style', 'robot_behavior']::TEXT[])""",
-            end_user_id,
-            memory_id,
-            table,
-            layer,
-            content,
-            sensitivity,
-            importance,
-            use_mode,
-        )
 
     async def _store_legacy_memories(
         self,
@@ -1535,7 +1488,7 @@ class MemoryService:
 
         async with self.pool.acquire() as conn:
             if layer == "PROFILE":
-                memory_id = await self._upsert_profile_memory(
+                await self._upsert_profile_memory(
                     conn,
                     user_id,
                     character_id,
@@ -1547,7 +1500,7 @@ class MemoryService:
                 )
                 table = "profile_memories"
             elif layer == "RELATIONAL":
-                memory_id = await self._insert_relational_memory(
+                await self._insert_relational_memory(
                     conn,
                     user_id,
                     character_id,
@@ -1590,10 +1543,6 @@ class MemoryService:
                     importance,
                 )
                 table = "episodic_memories"
-
-            await self._create_policy(
-                conn, user_id, memory_id, table, layer, content, sensitivity, importance
-            )
 
         return {"id": memory_id, "memory_type": layer, "status": "created"}
 

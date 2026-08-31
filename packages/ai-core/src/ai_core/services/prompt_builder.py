@@ -4,6 +4,7 @@ Merges designer character config + user customization + RAG context
 into a complete System Prompt for the LLM.
 """
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -242,7 +243,7 @@ class PromptBuilder:
                     continue
                 content = m.get("content", "")
                 fmts = _BY_TYPE.get(m.get("type", ""), _EVENT_FMTS)
-                fmt = fmts[hash(content) % len(fmts)]
+                fmt = fmts[int(hashlib.sha1(content.encode()).hexdigest(), 16) % len(fmts)]
                 memory_context.append(fmt.format(content=content))
 
         # Relationship stage description (use romance stages for idol archetype)

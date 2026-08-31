@@ -449,7 +449,11 @@ class TestRelationshipEngine:
         got = await eng.get_state("u", "c")
         assert got["affection"] < 800 and got["energy"] == 100
         assert got.get("_decay_mood_cause") == "想你了"
-        assert conn.execute.await_count == 1
+        # S14 (audit): reads no longer write — decay is applied to the returned
+        # value and cached; persistence happens on the next real write.
+        assert conn.execute.await_count == 0
+        cached = await eng.cache.get_json("rel:u:c")
+        assert cached["affection"] == got["affection"]
 
     @pytest.mark.asyncio
     async def test_award_points_compat(self):
