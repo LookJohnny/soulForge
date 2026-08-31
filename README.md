@@ -97,23 +97,19 @@ flowchart LR
 <p align="center"><img src="docs/assets/benchmark_probe28.svg" width="880" alt="第28轮记忆探针：静态prompt自信编造了名字，harness 记得名字和没被问到的偏好"/></p>
 
 **静态 prompt 不是忘了——它自信地编了一个名字、一段来历，还补了句"我没叫错过"。**
-这就是所有长期陪伴产品在第 N 天翻车的方式：不是变笨，是开始一本正经地胡说。
+这就是长期陪伴产品在第 N 天翻车的方式：不是变笨，是开始一本正经地胡说。而这只是 30 轮、单会话、单设备——对静态 prompt **最有利**的场地。它真正的问题是下面这张表：
 
-<p align="center"><img src="docs/assets/benchmark_timeline.svg" width="880" alt="30轮逐轮盲评存活线"/></p>
-
-把人格卡塞进 system prompt，是静态 prompt 能做到的**上限**——而 30 轮单会话恰恰是它唯一不露馅的场地（一切都还在上下文窗口里）。即便如此，记忆已经开始编造。真正的差距在这个测试根本测不到的地方：
-
-| 静态 system prompt 结构上就没有的东西 | 静态 prompt | SoulForge Harness |
+| 人格的组成部分 | 静态 system prompt | SoulForge Harness |
 |---|:-:|:-:|
-| 30 轮内语体一致（它的主场） | 97% | 100% |
-| 记忆滑出窗口后还记得（第 28 轮探针） | ✗ 编造了名字和来历 | ✓ 3/3 |
-| 关系随相处演化（五轴 · 8 阶段） | **不存在** | ✓ 陌生→挚友有状态、有条件、有事件 |
-| 情绪有惯性、有因果（PAD） | **不存在**（每轮重置） | ✓ 会平复、会想你、知道为什么 |
-| 明天还是同一个"她"（跨会话） | **不存在**（关窗即死） | ✓ `.soul` + 状态持久化 |
-| 换个身体还是她（玩具/桌面/游戏 NPC） | **不存在** | ✓ Protocol 0.2 |
-| 没人说话时她在生活 | **不存在** | ✓ 日程 · 角色互动 · 反思 |
+| 窗口之外的记忆 | ✗ 滑出即编造（上图实测） | ✓ 3/3 探针全中 |
+| 关系随相处演化 | **没有这个状态** | ✓ 五轴 · 8 阶段 · 条件与事件 |
+| 情绪有惯性、有因果 | **没有这个状态**（每轮重置） | ✓ PAD：会平复、会想你、知道为什么 |
+| 明天还是同一个"她" | **没有这个状态**（关窗即死） | ✓ `.soul` + 状态持久化 |
+| 换个身体还是她 | **没有这个状态** | ✓ Protocol 0.2：玩具 / 桌面 / 游戏 NPC |
+| 没人说话时她在生活 | **没有这个状态** | ✓ 日程 · 角色互动 · 每日反思 |
 
-前两行来自上面的盲评实测（复现：`uv run python benchmarks/consistency.py --turns 30 && uv run python benchmarks/render_report.py`）；后五行不需要 benchmark——静态 prompt 里根本没有这些状态可测。**这张表才是产品：不是把 prompt 写得更好，而是 prompt 之外的一整个人格状态机。**
+**这就是产品：不是把 prompt 写得更好，而是 prompt 根本装不下的那台人格状态机。**
+实测复现：`uv run python benchmarks/consistency.py --turns 30 && uv run python benchmarks/render_report.py`（LLM 盲评 + 确定性记忆探针，逐字记录随结果落盘）。
 
 ## Roadmap
 
