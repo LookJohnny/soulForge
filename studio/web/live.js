@@ -357,7 +357,7 @@ async function loadSoulCharacters() {
       personaById.set(c.id, c);
       const o = document.createElement('option'); o.value = c.id; o.textContent = `${c.name} (${c.id})`; sel.appendChild(o);
     }
-    const first = (list.characters ?? list)[0]; if (first) setSoulColor(first.color, first.name);
+    const first = (list.characters ?? list)[0]; if (first && !personaLocked) setSoulColor(first.color, first.name);
     sel.onchange = () => { const c = (list.characters ?? list).find((c) => c.id === sel.value); if (c) setSoulColor(c.color, c.name); };
   } catch (e) { log('角色列表获取失败: ' + e.message, 'sys'); }
 }
@@ -393,6 +393,117 @@ $('file-soul').onchange = async () => {
   } catch (e) { toast('导入 .soul 失败: ' + e.message, 6000); }
 };
 loadSoulCharacters();
+
+// ── 灵魂问卷：认识你 → 生成专属角色 ──────────────────
+const quiz = { questions: [], answers: {}, i: 0, result: null };
+function quizCard(html) { const box = $('quiz-overlay'); box.innerHTML = `<div class="quiz-card">${html}</div>`; box.classList.remove('hidden'); return box.firstElementChild; }
+function closeQuiz() { $('quiz-overlay').classList.add('hidden'); $('quiz-overlay').innerHTML = ''; }
+async function startQuiz() {
+  try {
+    if (!quiz.questions.length) quiz.questions = (await core.get('soul-quiz/questions')).questions;
+  } catch (e) { toast('题库加载失败: ' + e.message, 5000); return; }
+  quiz.answers = {}; quiz.i = 0; quiz.result = null;
+  renderQuizIntro();
+}
+function renderQuizIntro() {
+  const card = quizCard(`
+    <div class="eyebrow">灵魂问卷 · 约 3 分钟</div>
+    <h3>回答 23 个小问题，我们据此为你生成一位契合你的专属陪伴——TA 的性格、声音和情绪都由你的答案决定。</h3>
+    <p class="muted">没有对错，凭直觉选。结果不是给你贴标签，只用来塑造 TA。</p>
+    <div class="cta"><button class="go" data-a="start">开始</button><button data-a="skip">先逛逛</button></div>`);
+  card.onclick = (e) => {
+    const a = e.target.dataset.a; if (!a) return;
+    if (a === 'start') renderQuizQuestion();
+    else { localStorage.setItem('soulQuizDismissed', '1'); closeQuiz(); }
+  };
+}
+function renderQuizQuestion() {
+  const q = quiz.questions[quiz.i];
+  if (!q) return submitQuiz();
+  const dots = quiz.questions.map((_, k) => `<i class="${k <= quiz.i ? 'on' : ''}"></i>`).join('');
+  const card = quizCard(`
+    <div class="eyebrow">第 ${quiz.i + 1} / ${quiz.questions.length} 题</div>
+    <h3>${q.text}</h3>
+    <div class="opts">${q.options.map((o, k) => `<button data-k="${k}">${o.label}</button>`).join('')}</div>
+    <div class="dots">${dots}</div>
+    <div class="foot"><button data-a="back" ${quiz.i === 0 ? 'disabled' : ''}>上一题</button><button data-a="quit">先不测了</button></div>`);
+  card.onclick = (e) => {
+    const t = e.target;
+    if (t.dataset.k !== undefined) { quiz.answers[q.id] = +t.dataset.k; quiz.i++; renderQuizQuestion(); }
+    else if (t.dataset.a === 'back') { quiz.i--; renderQuizQuestion(); }
+    else if (t.dataset.a === 'quit') { localStorage.setItem('soulQuizDismissed', '1'); closeQuiz(); }
+  };
+}
+async function submitQuiz(reroll = 0) {
+  quizCard('<div class="eyebrow">灵魂问卷</div><h3>正在为你捏一个灵魂……</h3>');
+  try {
+    quiz.result = await core.send('POST', 'soul-quiz/submit', {
+      answers: quiz.answers, end_user_id: session.end_user_id, bind_device: 'web_vrm-live', reroll,
+    });
+  } catch (e) { quizCard(`<h3>生成失败</h3><p class="muted">${e.message}</p><div class="cta"><button class="go" onclick="location.reload()">重试</button></div>`); return; }
+  renderQuizResult();
+}
+function renderQuizResult() {
+  const c = quiz.result.card;
+  document.documentElement.style.setProperty('--soul', c.color);
+  const card = quizCard(`
+    <div class="eyebrow">你的专属陪伴已经醒来</div>
+    <div class="soul-name">${c.name}</div>
+    <div><span class="soul-type">${c.archetype_label}</span></div>
+    <p class="soul-tagline">${c.tagline}</p>
+    <div class="chips">${c.traits.map((t) => `<span>${t}</span>`).join('')}<span>♪ ${c.voice.voice.includes('Xiao') ? '女声' : '男声'} · ${c.voice.rate > 150 ? '轻快' : '沉稳'}</span></div>
+    <p class="muted">${c.speech_style}</p>
+    <div class="cta"><button class="go" data-a="meet">和 ${c.name} 见面</button><button data-a="listen">听听声音</button><button data-a="reroll">换个名字</button></div>`);
+  card.onclick = async (e) => {
+    const a = e.target.dataset.a; if (!a) return;
+    if (a === 'listen') {
+      try {
+        const res = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: c.comfort_line, voice: { provider: 'edge', id: c.voice.voice, rate: Math.round((c.voice.rate - 100) * 0.25), pitch: Math.round((c.voice.pitch - 1) * 200) } }) });
+        if (res.ok) new Audio(URL.createObjectURL(await res.blob())).play();
+      } catch { /* 试听失败不拦流程 */ }
+    } else if (a === 'reroll') { await submitQuiz((quiz.result?.reroll ?? 0) + 1); quiz.result.reroll = (quiz.result.reroll ?? 0) + 1; }
+    else if (a === 'meet') await meetGeneratedSoul();
+  };
+}
+async function meetGeneratedSoul() {
+  const r = quiz.result;
+  closeQuiz(); localStorage.setItem('soulQuizDismissed', '1');
+  try { await fetch('/api/soul/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ soul_b64: r.soul_b64 }) }); } catch { /* 引擎侧安装失败不拦见面 */ }
+  const e = r.engine_entry;
+  personaById.set(e.id, e);
+  personaLocked = true;
+  setSoulColor(e.color, e.name);
+  if (e.embodiment?.model) { try { await body.load(e.embodiment.model, { kind: e.embodiment.kind }); } catch { /* 模型缺失就沿用当前 */ } }
+  body.setMoodProfile(r.expression);
+  toast(`${e.name} 来了。TA 会慢慢认识你。`, 5000);
+  await loadSoulCharacters();
+  if (gw) connect(); // 重连 gateway：设备已绑到新角色，语音/记忆从这一刻起属于 TA
+}
+$('btn-quiz').onclick = () => { $('settings-panel').classList.add('hidden'); startQuiz(); };
+
+let quizOffered = false;
+async function maybeOfferQuiz() {
+  if (quizOffered || host.transparent) return;
+  quizOffered = true;
+  try {
+    const st = await core.get(`soul-quiz/status?end_user_id=${session.end_user_id}`);
+    if (!st.taken) { if (host.hud && !localStorage.getItem('soulQuizDismissed')) startQuiz(); return; }
+    // 已测过：舞台换上专属角色（configs/characters.json 里由 /api/soul/import 安装过）
+    if (!personaById.size) await loadSoulCharacters();
+    const mine = [...personaById.values()].find((c) => c.name === st.character_name);
+    if (mine) {
+      personaLocked = true;
+      setSoulColor(mine.color, mine.name);
+      if (mine.expression) body.setMoodProfile(mine.expression);
+      if (mine.embodiment?.model && !appliedQuizModel) {
+        appliedQuizModel = true;
+        try { await body.load(mine.embodiment.model, { kind: mine.embodiment.kind }); } catch { /* 沿用当前模型 */ }
+      }
+    }
+  } catch { /* ai-core 不在就不打扰 */ }
+}
+let appliedQuizModel = false;
+let personaLocked = false; // 问卷生成的专属角色优先于默认 Luna
 
 // ── Runtime Server /body（Protocol 0.2 web 身体）──────
 let bodyClient = null;
@@ -522,7 +633,7 @@ async function connect() {
     if (e.detail.character_name) $('hud-name').textContent = e.detail.character_name;
     const ok = !!(session.end_user_id && session.character_id);
     $('btn-export').disabled = !ok; $('btn-import').disabled = !ok;
-    if (ok) { refreshMemoryGraph(); refreshNearEvents(); }
+    if (ok) { refreshMemoryGraph(); refreshNearEvents(); maybeOfferQuiz(); }
   });
   gw.addEventListener('control:relationship', (e) => { renderRelationship(e.detail); $('opt-companion').checked = e.detail.app_mode === 'companion'; });
   gw.addEventListener('control:event', (e) => showEvent(e.detail));

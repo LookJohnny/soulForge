@@ -721,7 +721,8 @@ class RelationshipEngine:
                 async with self.pool.acquire() as conn:
                     exists = await conn.fetchval(
                         """SELECT 1 FROM information_schema.columns
-                           WHERE table_name = 'relationship_states' AND column_name = 'decay_clocks'"""
+                           WHERE table_name = 'relationship_states'
+                             AND column_name = 'decay_clocks'"""
                     )
                 self._axes_schema = bool(exists)
                 if not self._axes_schema:

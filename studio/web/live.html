@@ -65,12 +65,16 @@
     <div class="row"><button id="connect">重新连接</button><button id="btn-export" disabled>导出进度</button><label class="row" style="margin:0"><input id="file-import" type="file" accept="application/json" hidden /><button type="button" id="btn-import" disabled>导入进度</button></label></div>
     <div class="sec">灵魂包 .soul</div>
     <div class="row" title="一个 .soul = 人格+音色+外观+表情的完整角色包，可跨身体/跨品牌传递"><select id="soul-char"></select><button type="button" id="btn-soul-export">导出 .soul</button><input id="file-soul" type="file" accept=".soul,.soulpack" hidden /><button type="button" id="btn-soul-import">导入 .soul</button></div>
+    <div class="row"><button type="button" id="btn-quiz">灵魂问卷 · 生成我的专属角色</button></div>
     <p class="muted" id="near-events"></p>
     <p class="muted" id="status">未连接</p>
   </aside>
 
   <!-- 事件场景卡（Phase 4 填充） -->
   <div id="event-overlay" class="hidden"></div>
+
+  <!-- 灵魂问卷 -->
+  <div id="quiz-overlay" class="hidden"></div>
 
   <!-- 底部聊天条 -->
   <form id="chatbar">

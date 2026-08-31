@@ -38,6 +38,13 @@ def _save(raw: dict[str, Any]) -> None:
     CHARACTERS_JSON.write_text(
         json.dumps(raw, ensure_ascii=False, indent=2) + "\n", "utf-8"
     )
+    # studio 的 /api/characters 走 engine 的 lru_cache——写盘后必须失效，否则新角色要重启才可见
+    try:
+        from engine.planner.characters import _load_raw
+
+        _load_raw.cache_clear()
+    except Exception:
+        pass
 
 
 def _model_path(url: str | None) -> Path | None:

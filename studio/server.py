@@ -775,6 +775,9 @@ async def api_core_proxy(request: web.Request) -> web.Response:
     path = request.match_info["path"]
     url = f"{AI_CORE_URL}/{path}"
     headers = {"X-Service-Token": AI_CORE_TOKEN} if AI_CORE_TOKEN else {}
+    brand = load_dotenv_key("SOUL_BRAND_ID")
+    if brand:
+        headers["X-Brand-Id"] = brand
     body = await request.read() if request.can_read_body else None
     try:
         async with aiohttp.ClientSession() as sess:

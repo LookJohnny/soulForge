@@ -163,6 +163,66 @@ async def peek_soul(req: PeekRequest):
         raise HTTPException(status_code=400, detail=f"Not a soul file: {e}") from e
 
 
+async def upsert_character_row(
+    pool,
+    brand_id: str,
+    fields: dict,
+    *,
+    upsert_by_name: bool = False,
+    bind_device: str | None = None,
+) -> tuple[str, bool]:
+    """Insert or (by name) update a character row; invalidates prompt/device caches.
+
+    Returns (character_id, updated). Shared by .soul import and the soul quiz.
+    """
+    existing = None
+    if upsert_by_name:
+        existing = await pool.fetchrow(
+            "SELECT id FROM characters WHERE brand_id = $1 AND name = $2 "
+            "ORDER BY created_at LIMIT 1",
+            brand_id,
+            fields["name"],
+        )
+    new_id = str(existing["id"]) if existing else str(uuid.uuid4())
+    cols = list(fields)
+    if existing:
+        sets = ", ".join(f"{c} = ${i + 1}" for i, c in enumerate(cols))
+        await pool.execute(
+            f"UPDATE characters SET {sets}, updated_at = now() WHERE id = ${len(cols) + 1}",
+            *[fields[c] for c in cols],
+            new_id,
+        )
+    else:
+        placeholders = ", ".join(f"${i + 1}" for i in range(len(cols) + 2))
+        await pool.execute(
+            f"INSERT INTO characters (id, brand_id, {', '.join(cols)}, created_at, updated_at) "
+            f"VALUES ({placeholders}, now(), now())",
+            new_id,
+            brand_id,
+            *[fields[c] for c in cols],
+        )
+    if existing:  # the prompt builder caches the character row for an hour
+        try:
+            from ai_core.services.cache import CacheService
+
+            await CacheService().delete(f"char:{brand_id}:{new_id}")
+        except Exception:
+            logger.warning("soul.char_cache_invalidate_failed", exc_info=True)
+    if bind_device:
+        await pool.execute(
+            "UPDATE devices SET character_id = $1, updated_at = now() WHERE id = $2",
+            new_id,
+            bind_device,
+        )
+        try:
+            from ai_core.services.cache import _get_redis
+
+            await (await _get_redis()).delete(f"device:{bind_device}")
+        except Exception:
+            logger.warning("soul.device_cache_invalidate_failed", exc_info=True)
+    return new_id, bool(existing)
+
+
 @router.post("/import")
 async def import_soul(req: ImportRequest, request: Request):
     """Import a `.soul` (v2, optional passphrase) or legacy `.soulpack` (v1, brand key)."""
@@ -201,53 +261,16 @@ async def import_soul(req: ImportRequest, request: Request):
         "voice_speed": float(character.get("voice_speed") or 1.0),
         "status": "PUBLISHED" if req.publish else "DRAFT",
     }
-    existing = None
-    if req.upsert_by_name:
-        existing = await pool.fetchrow(
-            "SELECT id FROM characters WHERE brand_id = $1 AND name = $2 "
-            "ORDER BY created_at LIMIT 1",
-            brand_id,
-            fields["name"],
-        )
-    new_id = str(existing["id"]) if existing else str(uuid.uuid4())
-    cols = list(fields)
+    if character.get("emotion_config") is not None:
+        fields["emotion_config"] = json.dumps(character["emotion_config"])
     try:
-        if existing:
-            sets = ", ".join(f"{c} = ${i + 1}" for i, c in enumerate(cols))
-            await pool.execute(
-                f"UPDATE characters SET {sets}, updated_at = now() WHERE id = ${len(cols) + 1}",
-                *[fields[c] for c in cols],
-                new_id,
-            )
-        else:
-            placeholders = ", ".join(f"${i + 1}" for i in range(len(cols) + 2))
-            await pool.execute(
-                f"INSERT INTO characters (id, brand_id, {', '.join(cols)}, created_at, updated_at) "
-                f"VALUES ({placeholders}, now(), now())",
-                new_id,
-                brand_id,
-                *[fields[c] for c in cols],
-            )
-        if existing:  # the prompt builder caches the character row for an hour
-            try:
-                from ai_core.services.cache import CacheService
-
-                await CacheService().delete(f"char:{brand_id}:{new_id}")
-            except Exception:
-                logger.warning("soul.char_cache_invalidate_failed", exc_info=True)
-        if req.bind_device:
-            await pool.execute(
-                "UPDATE devices SET character_id = $1, updated_at = now() WHERE id = $2",
-                new_id,
-                req.bind_device,
-            )
-            # the gateway caches device→character in redis; drop it so the rebinding is live
-            try:
-                from ai_core.services.cache import _get_redis
-
-                await (await _get_redis()).delete(f"device:{req.bind_device}")
-            except Exception:
-                logger.warning("soul.device_cache_invalidate_failed", exc_info=True)
+        new_id, existing = await upsert_character_row(
+            pool,
+            brand_id,
+            fields,
+            upsert_by_name=req.upsert_by_name,
+            bind_device=req.bind_device,
+        )
     except Exception as e:
         logger.exception("soul.import_character_failed")
         raise HTTPException(status_code=500, detail="Failed to import character") from e
@@ -259,7 +282,7 @@ async def import_soul(req: ImportRequest, request: Request):
 
     return {
         "character_id": new_id,
-        "updated": bool(existing),
+        "updated": existing,
         "bound_device": req.bind_device,
         "manifest": manifest,
         "character_name": character["name"],

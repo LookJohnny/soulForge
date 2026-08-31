@@ -129,6 +129,34 @@ input::placeholder { color: color-mix(in oklab, var(--dim) 70%, transparent); }
 .scene .choices button { text-align: left; background: rgba(0, 0, 0, .04); color: var(--paper-ink); border-color: rgba(0, 0, 0, .12); }
 .scene .choices button:hover { border-color: var(--soul); background: color-mix(in oklab, var(--soul) 10%, transparent); }
 
+/* ── 灵魂问卷：纸卡问答流 ──────────────────────────── */
+#quiz-overlay { position: fixed; inset: 0; z-index: 8; display: grid; place-items: center; padding: 20px;
+  background: radial-gradient(80% 80% at 50% 45%, rgba(10, 7, 18, .55), rgba(6, 4, 12, .82)); }
+.quiz-card { width: min(560px, calc(100vw - 32px)); padding: 26px 28px 22px; border-radius: 4px 20px 20px 20px;
+  background: var(--paper); color: var(--paper-ink); border-left: 3px solid var(--soul);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .55); animation: bubble-in .3s var(--ease); }
+.quiz-card .eyebrow { font-size: 11px; letter-spacing: .2em; color: #8a7f95; margin-bottom: 10px; font-family: var(--body); }
+.quiz-card h3 { margin: 0 0 16px; font-family: var(--display); font-weight: 600; font-size: 20px; line-height: 1.5; }
+.quiz-card .opts { display: flex; flex-direction: column; gap: 8px; }
+.quiz-card .opts button { text-align: left; font-size: 15px; padding: 12px 14px; border-radius: 12px;
+  background: rgba(0, 0, 0, .04); color: var(--paper-ink); border: 1px solid rgba(0, 0, 0, .12); font-family: var(--display); }
+.quiz-card .opts button:hover { border-color: var(--soul); background: color-mix(in oklab, var(--soul) 10%, transparent); }
+.quiz-card .dots { display: flex; gap: 4px; margin-top: 18px; }
+.quiz-card .dots i { flex: 1; height: 3px; border-radius: 2px; background: rgba(0, 0, 0, .1); }
+.quiz-card .dots i.on { background: var(--soul); }
+.quiz-card .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
+.quiz-card .foot button { background: transparent; border: 0; color: #8a7f95; font-size: 12px; padding: 4px; }
+/* 结果卡 */
+.quiz-card .soul-name { font-family: var(--display); font-size: 34px; font-weight: 600; letter-spacing: .06em; margin: 2px 0 2px; }
+.quiz-card .soul-type { display: inline-block; font-family: var(--display); font-size: 13px; letter-spacing: .14em;
+  color: var(--soul); border: 1.5px solid var(--soul); border-radius: 3px; padding: 3px 8px; transform: rotate(-3deg); margin-bottom: 10px; }
+.quiz-card .soul-tagline { font-family: var(--display); font-size: 15px; margin: 0 0 12px; }
+.quiz-card .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.quiz-card .chips span { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: rgba(0, 0, 0, .06); }
+.quiz-card .cta { display: flex; gap: 8px; margin-top: 16px; }
+.quiz-card .cta button { flex: none; padding: 10px 18px; border-radius: 999px; font-size: 15px; }
+.quiz-card .cta .go { background: var(--soul); color: var(--night); border-color: var(--soul); font-weight: 600; flex: 1; }
+
 /* ── place labels on the floor: where the home's rooms are ─────── */
 .place-label { position: fixed; z-index: 3; transform: translate(-50%, -50%); pointer-events: none;
   font-family: var(--display); font-size: 11px; letter-spacing: .2em; color: color-mix(in oklab, var(--dim) 70%, transparent);

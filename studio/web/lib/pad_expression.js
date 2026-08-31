@@ -63,14 +63,22 @@ export const EXPR_CHANNELS = ['happy', 'sad', 'angry', 'surprised', 'relaxed'];
 
 /** 连续时间版的 PadFaceEngine 情绪状态。 */
 export class PadMood {
-  constructor({ intensity = DEFAULT_INTENSITY } = {}) {
+  constructor({ intensity = DEFAULT_INTENSITY, baseline } = {}) {
     this.intensity = intensity;
-    this.cur = [...BASELINE];
-    this.target = [...BASELINE];
+    this.baseline = Array.isArray(baseline) ? baseline.map((v) => clamp(Number(v) || 0)) : [...BASELINE];
+    this.cur = [...this.baseline];
+    this.target = [...this.baseline];
     this.key = 'rest';
     this.speaking = false;
     this._acc = 0;
     this.onChange = null; // (key, pad) => void
+  }
+
+  /** 问卷/.soul 的人格档：表情烈度 + 静息 PAD 基线（{p,a,d} 或 [p,a,d]）。 */
+  setProfile({ intensity, pad_baseline } = {}) {
+    if (typeof intensity === 'number') this.intensity = Math.max(0.1, Math.min(1, intensity));
+    const b = Array.isArray(pad_baseline) ? pad_baseline : pad_baseline && [pad_baseline.p, pad_baseline.a, pad_baseline.d];
+    if (b) { this.baseline = b.map((v) => clamp(Number(v) || 0)); this.target = [...this.baseline]; }
   }
 
   /** 网关推来的 PAD 快照：与 Python 一致，立即向目标迈 0.7 一大步。 */
@@ -110,7 +118,7 @@ export class PadMood {
   _step(approach) {
     for (let i = 0; i < 3; i++) {
       this.cur[i] += (this.target[i] - this.cur[i]) * approach;
-      this.target[i] += (BASELINE[i] - this.target[i]) * DECAY;
+      this.target[i] += (this.baseline[i] - this.target[i]) * DECAY;
     }
   }
 

@@ -68,7 +68,7 @@ export class VrmBody {
     this.scene = scene;
     this.height = opts.height ?? 1.55;
     this.vrm = null;
-    this.mood = new PadMood({ intensity: opts.intensity });
+    this.mood = new PadMood({ intensity: opts.intensity, baseline: opts.padBaseline });
     this.lipsync = new LipSync();
 
     this.loader = new GLTFLoader();
@@ -338,6 +338,9 @@ export class VrmBody {
   }
   setSpeakingLevel(level) { this.speakingLevel = Math.max(0, Math.min(1, level)); }
   setAudioAnalyser(analyser) { this.lipsync.setAnalyser(analyser); }
+
+  /** 人格表情档（.soul expression / 问卷生成）：烈度 + PAD 基线。 */
+  setMoodProfile(expression) { this.mood.setProfile(expression ?? {}); }
 
   /** 一次倾听式点头（叠加在生命层上）。 */
   nod() { this.nodAt = this.clock.elapsedTime; }
