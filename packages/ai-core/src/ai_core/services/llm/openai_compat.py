@@ -80,12 +80,10 @@ class OpenAICompatProvider(LLMProvider):
         resp = await self.client.chat.completions.create(**kwargs)
         return resp.choices[0].message.content or ""
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=10),
-        retry=retry_if_exception_type(_RETRYABLE),
-        reraise=True,
-    )
+    # NOTE: @retry on an async *generator* is inert — calling a generator
+    # function returns the generator object instantly; network faults surface
+    # during iteration, outside tenacity's scope. Removed rather than
+    # pretending to retry. (audit F12)
     async def generate_stream(
         self,
         system_prompt: str,

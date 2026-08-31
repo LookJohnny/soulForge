@@ -1,14 +1,13 @@
 """Tests for the Emotion State Machine."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from ai_core.services.emotion import (
-    EmotionEngine,
-    EMOTIONS,
     DEFAULT_EMOTION,
-    EMOTION_DESCRIPTIONS,
-    EMOTION_TTS_OFFSETS,
+    EMOTIONS,
+    EmotionEngine,
 )
 
 

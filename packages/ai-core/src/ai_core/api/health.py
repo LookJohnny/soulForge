@@ -39,17 +39,8 @@ async def health():
         checks["redis"] = f"error: {e}"
         overall = "degraded"
 
-    # Check Milvus (optional, not critical)
-    try:
-        from ai_core.dependencies import get_rag_engine
-
-        rag = await get_rag_engine()
-        if rag:
-            checks["milvus"] = "ok"
-        else:
-            checks["milvus"] = "unavailable"
-    except Exception as e:
-        checks["milvus"] = f"error: {e}"
+    # RAG/Milvus is hard-disabled (see dependencies.get_rag_engine)
+    checks["milvus"] = "disabled"
 
     checks["status"] = overall
     return checks

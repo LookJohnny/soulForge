@@ -135,14 +135,18 @@ def test_emergency_stop_rejects_whole_plan():
 
 
 async def test_actions_preview_api_returns_safe_plan():
+    from types import SimpleNamespace
+
+    request = SimpleNamespace(state=SimpleNamespace(auth=SimpleNamespace(brand_id="b1")))
     result = await preview_actions(
-        ActionPreviewRequest(
+        request=request,
+        req=ActionPreviewRequest(
             action_plan={
                 "intent": "quiet",
                 "speech": {"text": "我会小声一点", "volume_db": 70},
             },
             context={"quiet_mode": True},
-        )
+        ),
     )
 
     assert result["status"] == "modified"

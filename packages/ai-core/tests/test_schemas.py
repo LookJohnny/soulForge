@@ -10,7 +10,6 @@ from ai_core.models.schemas import (
     RagIngestRequest,
 )
 
-
 # ──────────────────────────────────────────────
 # ChatRequest audio_data size validation
 # ──────────────────────────────────────────────

@@ -1,11 +1,12 @@
 """Tests for user mood detection and time awareness."""
 
-import pytest
+from datetime import date, datetime
 from unittest.mock import AsyncMock, MagicMock
-from datetime import datetime, date, timedelta
 
-from ai_core.services.emotion import EmotionEngine, USER_MOOD_RESPONSES
-from ai_core.services.time_awareness import get_time_context, get_absence_context, build_time_prompt
+import pytest
+
+from ai_core.services.emotion import EmotionEngine
+from ai_core.services.time_awareness import build_time_prompt, get_absence_context, get_time_context
 
 
 class TestUserMoodDetection:

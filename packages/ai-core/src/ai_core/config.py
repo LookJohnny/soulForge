@@ -14,10 +14,6 @@ class Settings(BaseSettings):
     milvus_port: int = 19530
 
     # MinIO
-    minio_endpoint: str = "localhost:9000"
-    minio_access_key: str = "minioadmin"
-    minio_secret_key: str = "minioadmin"
-    minio_use_ssl: bool = False
 
     # DashScope (legacy, used as fallback API key)
     dashscope_api_key: str = ""
@@ -57,7 +53,6 @@ class Settings(BaseSettings):
     memory_embedding_model: str = "BAAI/bge-small-zh-v1.5"
     memory_embedding_dim: int = 512
     hf_home: str = ""  # HF cache dir (set HF_ENDPOINT for a CN mirror)
-    memory_graph_threshold: float = 0.6
 
     # RAG
     rag_top_k: int = 3
@@ -78,9 +73,6 @@ class Settings(BaseSettings):
     )
 
     # ─── Rate Limiting ──────────────────────────
-    rate_limit_chat: str = "30/minute"
-    rate_limit_tts: str = "20/minute"
-    rate_limit_default: str = "60/minute"
 
     # ─── Environment ────────────────────────────
     environment: str = "development"  # "development" | "production"
@@ -115,8 +107,6 @@ class Settings(BaseSettings):
             problems.append("AUTH_SECRET is required")
         if not self.service_token:
             problems.append("SERVICE_TOKEN is required")
-        if self.minio_access_key == "minioadmin" or self.minio_secret_key == "minioadmin":
-            problems.append("MINIO_ACCESS_KEY/MINIO_SECRET_KEY must not be the default")
         if "soulforge:soulforge_dev@" in self.database_url:
             problems.append("DATABASE_URL must not use the dev credentials")
         if problems:

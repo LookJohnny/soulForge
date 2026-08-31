@@ -30,41 +30,6 @@ services:
       retries: 5
     restart: unless-stopped
 
-  etcd:
-    image: quay.io/coreos/etcd:v3.5.5
-    environment:
-      ETCD_AUTO_COMPACTION_MODE: revision
-      ETCD_AUTO_COMPACTION_RETENTION: "1000"
-      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
-    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379
-    volumes:
-      - etcd_data:/etcd
-    restart: unless-stopped
-
-  milvus:
-    image: milvusdb/milvus:v2.4-latest
-    environment:
-      ETCD_ENDPOINTS: etcd:2379
-      MINIO_ADDRESS: minio:9000
-    depends_on:
-      etcd:
-        condition: service_started
-      minio:
-        condition: service_started
-    volumes:
-      - milvus_data:/var/lib/milvus
-    restart: unless-stopped
-
-  minio:
-    image: minio/minio:latest
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
-    command: server /data --console-address ":9001"
-    volumes:
-      - minio_data:/data
-    restart: unless-stopped
-
   # ─── Application Services ──────────────────────
   admin-web:
     build:
@@ -89,11 +54,6 @@ services:
     environment:
       DATABASE_URL: postgresql://soulforge:${DB_PASSWORD:-soulforge_prod}@postgres:5432/soulforge
       REDIS_URL: redis://:${REDIS_PASSWORD:-soulforge_redis}@redis:6379/0
-      MILVUS_HOST: milvus
-      MILVUS_PORT: "19530"
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
       LLM_PROVIDER: ${LLM_PROVIDER:-dashscope}
       LLM_MODEL: ${LLM_MODEL:-qwen2.5-7b-instruct}
@@ -112,8 +72,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      milvus:
-        condition: service_started
     restart: unless-stopped
 
   gateway:
@@ -149,6 +107,3 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  etcd_data:
-  milvus_data:
-  minio_data:

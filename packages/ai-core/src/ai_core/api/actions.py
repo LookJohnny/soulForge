@@ -1,6 +1,6 @@
 """ActionPlan DSL preview endpoint."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ai_core.services.action_plan import preview_action_plan
@@ -16,7 +16,10 @@ class ActionPreviewRequest(BaseModel):
 
 
 @router.post("/preview")
-async def preview_actions(req: ActionPreviewRequest):
+async def preview_actions(req: ActionPreviewRequest, request: Request):
+    auth = getattr(request.state, "auth", None)
+    if not auth or not auth.brand_id:  # F17 (audit): was the only unscoped endpoint
+        raise HTTPException(status_code=403, detail="No brand context in auth token")
     return preview_action_plan(
         action_plan=req.action_plan,
         device_manifest=req.device_manifest,

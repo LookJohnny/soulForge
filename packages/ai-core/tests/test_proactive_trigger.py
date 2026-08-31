@@ -1,7 +1,8 @@
 """Tests for Proactive Trigger Service."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from ai_core.services.proactive_trigger import ProactiveTriggerService
 

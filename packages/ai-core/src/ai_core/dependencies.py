@@ -41,19 +41,11 @@ def get_cache() -> CacheService:
 
 
 async def get_rag_engine() -> RagEngine | None:
-    global _rag_engine, _rag_failed
-    if _rag_failed:
-        return None
-    if _rag_engine is None:
-        try:
-            _rag_engine = RagEngine()
-            await _rag_engine.connect()
-            logger.info("rag.connected")
-        except Exception as e:
-            logger.warning("rag.connect_failed", error=str(e))
-            _rag_failed = True
-            return None
-    return _rag_engine
+    """RAG is hard-disabled: the Milvus image tag no longer exists, and the sync
+    gRPC connect blocked the whole event loop for ~5s per attempt (audit F3/F4).
+    PromptBuilder accepts rag_engine=None and renders no rag_context. Re-enable
+    by restoring this factory once a reachable vector store exists."""
+    return None
 
 
 async def get_prompt_builder() -> PromptBuilder:

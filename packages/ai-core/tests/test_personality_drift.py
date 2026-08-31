@@ -39,7 +39,6 @@ class TestMergeWithDrift:
 
     def test_clamped_to_0(self):
         base = {"curiosity": 5}
-        offsets = {"curiosity": -3}
         drift = {"curiosity": -10}
         result = merge_personality_with_drift(base, None, drift)
         assert result["curiosity"] == 0

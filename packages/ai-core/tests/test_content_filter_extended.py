@@ -1,7 +1,6 @@
 """Extended tests for Content Filter — anti-bypass, grooming, extremism, output filtering."""
 
-from ai_core.services.content_filter import ContentFilter, _OUTPUT_REPLACEMENT
-
+from ai_core.services.content_filter import _OUTPUT_REPLACEMENT, ContentFilter
 
 # ──────────────────────────────────────────────
 # Test all new keyword categories

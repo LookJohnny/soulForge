@@ -20,7 +20,7 @@ TIER_LIMITS = {
 }
 
 # Paths that consume conversation quota
-CONVERSATION_PATHS = {"/pipeline/chat", "/chat/preview"}
+CONVERSATION_PATHS = {"/pipeline/chat", "/pipeline/chat/stream", "/chat/preview"}
 
 # In-memory tier cache: {brand_id: (tier, expiry_timestamp)}
 _tier_cache: dict[str, tuple[str, float]] = {}

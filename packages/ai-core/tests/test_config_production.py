@@ -45,8 +45,6 @@ def test_development_allows_defaults(monkeypatch):
         ({"master_secret": "change-me-in-production"}, "MASTER_SECRET"),
         ({"auth_secret": ""}, "AUTH_SECRET"),
         ({"service_token": ""}, "SERVICE_TOKEN"),
-        ({"minio_access_key": "minioadmin"}, "MINIO"),
-        ({"minio_secret_key": "minioadmin"}, "MINIO"),
         (
             {"database_url": "postgresql://soulforge:soulforge_dev@localhost:5432/soulforge"},
             "DATABASE_URL",

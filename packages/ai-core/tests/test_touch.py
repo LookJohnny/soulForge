@@ -1,17 +1,18 @@
 """Tests for the Touch Perception Engine."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from ai_core.services.touch import (
-    TouchEngine,
-    TOUCH_GESTURES,
-    TOUCH_ZONES,
-    TOUCH_INTENT,
-    TOUCH_EMOTION_MAP,
-    ZONE_MODIFIERS,
-)
+import pytest
+
 from ai_core.services.emotion import EmotionEngine
+from ai_core.services.touch import (
+    TOUCH_EMOTION_MAP,
+    TOUCH_GESTURES,
+    TOUCH_INTENT,
+    TOUCH_ZONES,
+    ZONE_MODIFIERS,
+    TouchEngine,
+)
 
 
 class TestTouchGestureProcessing:
@@ -242,5 +243,5 @@ class TestTouchDefinitions:
             assert emotion in EMOTIONS, f"{gesture} maps to invalid emotion {emotion}"
 
     def test_affinity_bonuses_non_negative(self):
-        for gesture, info in TOUCH_INTENT.items():
+        for info in TOUCH_INTENT.values():
             assert info["affinity_bonus"] >= 0

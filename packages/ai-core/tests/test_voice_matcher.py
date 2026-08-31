@@ -1,14 +1,12 @@
 """Tests for the Voice Matcher service."""
 
 from ai_core.services.voice_matcher import (
-    SSML_PROFILES,
     VOICES,
     _build_character_vector,
     _classify_species,
     _compute_ssml_params,
     match_voice,
 )
-
 
 # ─── Species classification ────────────────────────
 

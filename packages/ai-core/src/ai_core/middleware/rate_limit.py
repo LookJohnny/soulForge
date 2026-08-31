@@ -25,6 +25,11 @@ def _get_rate_limit_key(request: Request) -> str:
         if auth.user_id:
             return f"user:{auth.user_id}"
         if auth.brand_id:
+            # F20 (audit): service-token traffic carries the whole device fleet;
+            # keying on brand alone capped every deployment at one bucket.
+            device = request.headers.get("x-device-id") or request.headers.get("x-session-id")
+            if device:
+                return f"brand:{auth.brand_id}:dev:{device[:64]}"
             return f"brand:{auth.brand_id}"
 
     # Real IP from proxy headers

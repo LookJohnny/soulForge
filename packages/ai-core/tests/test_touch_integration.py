@@ -7,14 +7,13 @@ Mocks DB/LLM/TTS since we only test touch data flow.
 
 import asyncio
 import json
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from ai_core.services.cache import CacheService
-from ai_core.services.touch import TouchEngine, TOUCH_GESTURES
 from ai_core.services.emotion import EmotionEngine
-
+from ai_core.services.touch import TOUCH_GESTURES, TouchEngine
 
 # ──────────────────────────────────────────────
 # Fixtures
@@ -256,8 +255,9 @@ class TestTouchPromptInjection:
 
     @pytest.mark.asyncio
     async def test_touch_context_in_prompt(self, mock_cache):
-        from jinja2 import Environment, FileSystemLoader
         from pathlib import Path
+
+        from jinja2 import Environment, FileSystemLoader
 
         template_dir = Path(__file__).parent.parent / "src" / "ai_core" / "templates"
         env = Environment(loader=FileSystemLoader(str(template_dir)))
@@ -296,8 +296,9 @@ class TestTouchPromptInjection:
 
     @pytest.mark.asyncio
     async def test_no_touch_no_section(self, mock_cache):
-        from jinja2 import Environment, FileSystemLoader
         from pathlib import Path
+
+        from jinja2 import Environment, FileSystemLoader
 
         template_dir = Path(__file__).parent.parent / "src" / "ai_core" / "templates"
         env = Environment(loader=FileSystemLoader(str(template_dir)))
@@ -337,7 +338,7 @@ class TestTouchPromptInjection:
 
 
 class TestFullTouchScenario:
-    """Simulate: user hugs toy → toy detects hug → says something → user speaks → LLM gets touch context."""
+    """Simulate: hug → toy reacts → user speaks → LLM sees touch context."""
 
     @pytest.mark.asyncio
     async def test_hug_then_chat_scenario(self, mock_cache):

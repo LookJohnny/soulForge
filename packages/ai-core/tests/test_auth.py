@@ -10,21 +10,20 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from cryptography.hazmat.primitives import hashes, padding as sym_padding
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import padding as sym_padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 # Import the module directly so mock.patch can resolve the target
 import ai_core.middleware.auth as auth_mod
 from ai_core.middleware.auth import (
-    AuthInfo,
-    AuthMiddleware,
     DEV_PUBLIC_PATHS,
     PUBLIC_PATHS,
+    AuthMiddleware,
     _verify_api_key,
     decrypt_nextauth_jwe,
 )
-
 
 # ──────────────────────────────────────────────
 # Helpers: create a valid JWE token for testing

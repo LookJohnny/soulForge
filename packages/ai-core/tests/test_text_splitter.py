@@ -2,7 +2,6 @@
 
 from ai_core.services.text_splitter import split_sentences
 
-
 # ──────────────────────────────────────────────
 # Chinese sentence splitting
 # ──────────────────────────────────────────────

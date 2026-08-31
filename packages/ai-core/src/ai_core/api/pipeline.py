@@ -53,6 +53,23 @@ content_filter = ContentFilter()
 MAX_AUDIO_BYTES = 10 * 1024 * 1024
 
 
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+
+def _spawn(coro, label: str = "task") -> None:
+    """F15 (audit): bare create_task results were dropped — tasks could be
+    GC'd mid-flight and exceptions vanished. Keep a strong ref and log."""
+    task = asyncio.create_task(coro)
+    _BACKGROUND_TASKS.add(task)
+
+    def _done(t: asyncio.Task) -> None:
+        _BACKGROUND_TASKS.discard(t)
+        if not t.cancelled() and t.exception() is not None:
+            logger.error("pipeline.background_task_failed", task=label, error=str(t.exception()))
+
+    task.add_done_callback(_done)
+
+
 def _get_brand_id(request: Request) -> str:
     auth = getattr(request.state, "auth", None)
     if not auth or not auth.brand_id:
@@ -330,7 +347,7 @@ async def chat(req: ChatRequest, request: Request):
     # Idle musings are the character talking to itself — they must not
     # create memories or earn relationship points.
     if req.end_user_id and not req.idle_mode:
-        asyncio.create_task(
+        _spawn(
             memory_service.extract_and_store(
                 end_user_id=req.end_user_id,
                 character_id=req.character_id,
@@ -339,7 +356,7 @@ async def chat(req: ChatRequest, request: Request):
                 ai_response=ai_text,
             )
         )
-        asyncio.create_task(
+        _spawn(
             _post_turn_processing(
                 end_user_id=req.end_user_id,
                 character_id=req.character_id,
@@ -540,7 +557,10 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
         _retrieve_memories(),
     )
 
-    # 3c. Resolve touch context (may override a neutral mood)
+    # 3c. Resolve touch context (may override a neutral mood).
+    # Idle musings must not consume the pending touch or reset trackers.
+    if req.idle_mode:
+        touch_ctx = {}
     touch_prompt = ""
     touch_gesture = None
     touch_affinity_bonus = 0
@@ -562,19 +582,20 @@ async def _prepare_context(req: ChatRequest, brand_id: str):
             silence_seconds = max(0.0, _now_ts - float(_last_seen_raw))
         except (TypeError, ValueError):
             silence_seconds = 0.0
-    await asyncio.gather(
-        cache.set(f"last_user_seen:{req.session_id}", str(_now_ts), ttl=3600),
-        cache.set(f"prev_user_mood:{req.session_id}", user_mood or "neutral", ttl=3600),
-    )
+    if not req.idle_mode:  # idle musings must not reset silence/mood trackers
+        await asyncio.gather(
+            cache.set(f"last_user_seen:{req.session_id}", str(_now_ts), ttl=3600),
+            cache.set(f"prev_user_mood:{req.session_id}", user_mood or "neutral", ttl=3600),
+        )
 
     # 4. Limit memories by relationship depth
     if req.end_user_id:
         depth = rel_engine.get_memory_depth(rel_state["stage"])
         memories = memories[:depth]
 
-    # 5. Proactive trigger (needs memories + relationship)
+    # 5. Proactive trigger (needs memories + relationship; never during idle musings)
     proactive_line = None
-    if req.end_user_id:
+    if req.end_user_id and not req.idle_mode:
         trigger_svc = get_proactive_trigger()
         proactive_line = await trigger_svc.maybe_generate_trigger(
             end_user_id=req.end_user_id,
@@ -694,12 +715,35 @@ async def chat_stream(req: ChatRequest, request: Request):
         from ai_core.services.vision import build_vision_turn, describe_image
 
         t_vlm = time.monotonic()
-        description = await describe_image(req.image_data)
+        try:
+            description = await describe_image(req.image_data)
+        except Exception:  # degrade to an honest 看不清 turn — never a 500
+            logger.exception("pipeline.vision_failed")
+            description = None
         ctx["timings"]["vlm"] = (time.monotonic() - t_vlm) * 1000
         llm_input = build_vision_turn(user_text, description)
 
     async def event_generator():
+        # F2 (audit): headers are flushed before this runs — any exception here
+        # used to kill the stream silently and the device waited out its idle
+        # timeout. Errors now surface as an `error` event and `done` is
+        # guaranteed exactly once, in the finally block.
+        done_emitted = False
+        try:
+            async for sse in _event_body():
+                if '"type": "done"' in sse or '"type":"done"' in sse:
+                    done_emitted = True
+                yield sse
+        except Exception as exc:
+            logger.exception("pipeline.stream_failed")
+            yield _sse({"type": "error", "message": str(exc)[:200]})
+        finally:
+            if not done_emitted:
+                yield _sse({"type": "done", "full_text": "", "error": True})
+
+    async def _event_body():
         full_text = ""
+        filtered_sentences: list[str] = []
         buffer = ""
         sentence_idx = 0
         # Stage timings: asr/context from _prepare_context, the rest stamped
@@ -740,6 +784,7 @@ async def chat_stream(req: ChatRequest, request: Request):
                 sentence = content_filter.filter_output(sentence)
                 if not sentence:
                     continue
+                filtered_sentences.append(sentence)
 
                 async for sse in _emit_sentence(
                     tts=tts,
@@ -758,6 +803,7 @@ async def chat_stream(req: ChatRequest, request: Request):
         if remaining:
             remaining = content_filter.filter_output(remaining)
             if remaining:
+                filtered_sentences.append(remaining)
                 async for sse in _emit_sentence(
                     tts=tts,
                     sentence=remaining,
@@ -769,11 +815,13 @@ async def chat_stream(req: ChatRequest, request: Request):
                 ):
                     yield sse
 
-        # Clean full text for emotion detection
+        # F16 (audit): assemble the canonical text from the sentences that were
+        # actually sent — re-filtering full_text could redact text the user
+        # already heard, splitting what's spoken from what's remembered.
         from ai_core.services.emotion import extract_inline_emotion
 
-        ai_text, inline_emotion = extract_inline_emotion(full_text)
-        ai_text = content_filter.filter_output(ai_text)
+        _, inline_emotion = extract_inline_emotion(full_text)
+        ai_text = extract_inline_emotion(" ".join(filtered_sentences))[0]
 
         # Emotion update
         emotion_engine = get_emotion_engine()
@@ -850,10 +898,10 @@ async def chat_stream(req: ChatRequest, request: Request):
         }
         yield f"data: {json.dumps(done_event, ensure_ascii=False)}\n\n"
 
-        # Async post-processing
-        if req.end_user_id:
+        # Async post-processing (idle musings must not create memories)
+        if req.end_user_id and not req.idle_mode:
             memory_service = await get_memory_service()
-            asyncio.create_task(
+            _spawn(
                 memory_service.extract_and_store(
                     end_user_id=req.end_user_id,
                     character_id=req.character_id,
@@ -862,7 +910,7 @@ async def chat_stream(req: ChatRequest, request: Request):
                     ai_response=ai_text,
                 )
             )
-            asyncio.create_task(
+            _spawn(
                 _post_turn_processing(
                     end_user_id=req.end_user_id,
                     character_id=req.character_id,
