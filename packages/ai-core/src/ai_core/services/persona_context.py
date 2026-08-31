@@ -42,9 +42,12 @@ class PersonaContext:
         template = _TOUCH_TEMPLATES.get(gesture, "")
         return template.replace("{R}", self.user_ref)
 
-    def touch_zone(self, zone: str) -> str:
-        """Get touch zone modifier."""
-        template = _ZONE_TEMPLATES.get(zone, "")
+    def touch_zone(self, zone: str) -> str | None:
+        """Zone modifier. "" = intentionally silent; None = zone not in the table
+        (caller may fall back to a static line). (audit F12)"""
+        template = _ZONE_TEMPLATES.get(zone)
+        if template is None:
+            return None
         return template.replace("{R}", self.user_ref)
 
     def touch_silent_input(self) -> str:

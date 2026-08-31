@@ -124,10 +124,20 @@ class PADEngine:
         """
         current = await self.get_pad(session_id)
 
-        # Get or compute personality baseline
+        # Get or compute personality baseline. An explicit pad_baseline in
+        # personality (soul quiz's Mehrabian derivation, carried via
+        # emotion_config) wins over the trait-derived one. (audit F10)
         baseline = await self.get_baseline(session_id)
         if baseline is None and personality:
-            baseline = personality_to_baseline(personality)
+            explicit = personality.get("pad_baseline") if isinstance(personality, dict) else None
+            if isinstance(explicit, dict):
+                baseline = PADState(
+                    p=float(explicit.get("p", 0)),
+                    a=float(explicit.get("a", 0)),
+                    d=float(explicit.get("d", 0)),
+                ).clamp()
+            else:
+                baseline = personality_to_baseline(personality)
             await self.set_baseline(session_id, baseline)
 
         # Convert inputs

@@ -291,7 +291,10 @@ class TestTouchPromptInjection:
         )
 
         # Touch context should be in the prompt
-        assert "摸头杀" in prompt
+        # F12: head zone is intentionally silent — no generic 摸头杀 leak;
+        # the gesture line itself must still reach the prompt
+        assert "摸头杀" not in prompt
+        assert "摸" in prompt
         assert "触摸" in prompt
 
     @pytest.mark.asyncio

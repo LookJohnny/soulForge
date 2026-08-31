@@ -31,7 +31,9 @@ class TestTouchGestureProcessing:
         assert result["mood_hint"] == "happy"
         assert result["emotion_hint"] == "happy"
         assert result["affinity_bonus"] >= 3
-        assert "摸头杀" in result["prompt"]
+        # F12: head is intentionally silent in the archetype table — no generic 摸头杀 leak
+        assert "摸头杀" not in result["prompt"]
+        assert result["prompt"]  # gesture line still present
 
     @pytest.mark.asyncio
     async def test_stroke_gesture(self):
@@ -60,7 +62,9 @@ class TestTouchGestureProcessing:
         result = await self.engine.process_touch("sess-1", "poke", zone="belly")
         assert result["gesture"] == "poke"
         assert result["emotion_hint"] == "playful"
-        assert "肚肚" in result["prompt"]
+        # F12: belly is intentionally silent — no generic 肚肚 leak
+        assert "肚肚" not in result["prompt"]
+        assert result["prompt"]
 
     @pytest.mark.asyncio
     async def test_hold_gesture(self):
@@ -138,12 +142,15 @@ class TestTouchZones:
     @pytest.mark.asyncio
     async def test_head_zone(self):
         result = await self.engine.process_touch("sess-1", "pat", zone="head")
-        assert "摸头杀" in result["prompt"]
+        # F12: head is intentionally silent in the archetype table — no generic 摸头杀 leak
+        assert "摸头杀" not in result["prompt"]
+        assert result["prompt"]  # gesture line still present
 
     @pytest.mark.asyncio
     async def test_belly_zone(self):
         result = await self.engine.process_touch("sess-1", "stroke", zone="belly")
-        assert "痒痒" in result["prompt"]
+        assert "痒痒" not in result["prompt"]  # F12: intentionally silent zone
+        assert result["prompt"]
 
     @pytest.mark.asyncio
     async def test_cheek_zone(self):

@@ -14,6 +14,18 @@ from jinja2 import Environment, FileSystemLoader
 
 from ai_core.services.cache import CacheService
 
+
+def _parse_json(raw):
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw:
+        try:
+            return json.loads(raw)
+        except ValueError:
+            return None
+    return None
+
+
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
 
 # Pattern to strip Jinja2 syntax and control characters from user fields
@@ -371,9 +383,12 @@ class PromptBuilder:
             if voice:
                 # Prefer Fish Audio cloned voice, fallback to DashScope preset
                 voice_id = voice.get("fish_audio_id") or voice.get("dashscope_voice_id")
-        else:
-            # No voice assigned — auto-match based on character traits
-            from ai_core.services.voice_matcher import match_voice
+        if not voice_id:
+            # F2 (audit): a deleted/empty profile used to return voice_id="" and
+            # silently mute the character. Explicit assignment falls through to
+            # auto-match based on character traits.
+            from ai_core.config import settings as _settings
+            from ai_core.services.voice_matcher import edge_voice_for, match_voice
 
             matched = match_voice(
                 species=base.get("species", ""),
@@ -388,6 +403,10 @@ class PromptBuilder:
             ssml_pitch = matched.get("ssml_pitch", 1.0)
             ssml_rate = matched.get("ssml_rate", 1.0)
             ssml_effect = matched.get("ssml_effect", "")
+            if _settings.tts_provider == "edge" and not base.get("voice_clone_ref_id"):
+                # F1 (audit): under an edge deployment a DashScope id would route
+                # to paid Fish (key present) or edge's silent default. Translate.
+                voice_id = edge_voice_for(voice_id)
 
         return {
             "system_prompt": system_prompt,
@@ -398,7 +417,17 @@ class PromptBuilder:
             "ssml_pitch": ssml_pitch,
             "ssml_rate": ssml_rate,
             "ssml_effect": ssml_effect,
-            "personality": personality,
+            "personality": {
+                **personality,
+                # audit F10: the soul quiz's Mehrabian baseline rides along so
+                # PADEngine can honor it instead of re-deriving from traits
+                **(
+                    {"pad_baseline": _emotion_cfg["pad_baseline"]}
+                    if isinstance(_emotion_cfg := _parse_json(base.get("emotion_config")), dict)
+                    and isinstance(_emotion_cfg.get("pad_baseline"), dict)
+                    else {}
+                ),
+            },
             "_species": base.get("species", ""),  # for Fish Audio voice resolution
             "_language_mode": language_mode,
             "_voice_clone_ref_id": base.get("voice_clone_ref_id"),

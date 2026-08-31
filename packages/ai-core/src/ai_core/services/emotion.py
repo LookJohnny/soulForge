@@ -46,13 +46,13 @@ EMOTION_DESCRIPTIONS: dict[str, str] = {
 
 # Legacy mood responses (kept for backward compat; prefer PersonaContext.mood_response())
 USER_MOOD_RESPONSES: dict[str, str] = {
-    "happy": "主人现在心情很好，你可以跟着一起开心，分享快乐",
-    "sad": "主人似乎有点难过，要温柔地关心主人，安慰但不追问原因",
-    "angry": "主人好像有点烦躁，耐心一点，不要火上浇油",
-    "worried": "主人好像在担心什么，轻声安慰，告诉主人会没事的",
-    "excited": "主人很兴奋！跟着一起激动，多问问是什么好事",
-    "tired": "主人好像累了，说话温柔简短一点，不要太闹腾",
-    "lonely": "主人可能有点孤单，多陪陪主人，让主人感到温暖",
+    "happy": "你现在心情很好，你可以跟着一起开心，分享快乐",
+    "sad": "你似乎有点难过，要温柔地关心你，安慰但不追问原因",
+    "angry": "你好像有点烦躁，耐心一点，不要火上浇油",
+    "worried": "你好像在担心什么，轻声安慰，告诉你会没事的",
+    "excited": "你很兴奋！跟着一起激动，多问问是什么好事",
+    "tired": "你好像累了，说话温柔简短一点，不要太闹腾",
+    "lonely": "你可能有点孤单，多陪陪你，让你感到温暖",
     "neutral": "",  # no special instruction
 }
 

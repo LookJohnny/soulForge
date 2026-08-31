@@ -510,3 +510,19 @@ def match_voice(
         "speech_rate": 0,
         "reason": reason,
     }
+
+
+# ── Edge translation (audit F1) ─────────────────────
+# With TTS_PROVIDER=edge, DashScope ids from match_voice used to fall through
+# the router into paid Fish synthesis (or edge's silent DEFAULT_VOICE). When
+# the active provider is edge, translate the match to an edge voice by gender.
+_EDGE_BY_GENDER = {
+    "female": "zh-CN-XiaoxiaoNeural",
+    "male": "zh-CN-YunxiNeural",
+    "neutral": "zh-CN-XiaoxiaoNeural",
+}
+
+
+def edge_voice_for(matched_voice_id: str) -> str:
+    gender = (VOICES.get(matched_voice_id) or {}).get("gender", "neutral")
+    return _EDGE_BY_GENDER.get(gender, "zh-CN-XiaoxiaoNeural")

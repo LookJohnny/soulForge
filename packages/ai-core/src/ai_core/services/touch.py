@@ -25,43 +25,43 @@ TOUCH_ZONES = ("head", "back", "belly", "hand_left", "hand_right", "cheek")
 TOUCH_INTENT: dict[str, dict] = {
     "pat": {
         "intent": "安慰/鼓励",
-        "prompt": "主人在轻轻拍你，像是在安慰你或鼓励你",
+        "prompt": "你在轻轻拍你，像是在安慰你或鼓励你",
         "mood_hint": "happy",
         "affinity_bonus": 3,
     },
     "stroke": {
         "intent": "亲近/放松",
-        "prompt": "主人在温柔地摸你，很享受和你在一起的感觉",
+        "prompt": "你在温柔地摸你，很享受和你在一起的感觉",
         "mood_hint": "happy",
         "affinity_bonus": 4,
     },
     "hug": {
         "intent": "寻求安慰",
-        "prompt": "主人把你抱紧了，可能需要你的陪伴和安慰",
+        "prompt": "你把你抱紧了，可能需要你的陪伴和安慰",
         "mood_hint": "lonely",
         "affinity_bonus": 6,
     },
     "squeeze": {
         "intent": "焦虑/发泄",
-        "prompt": "主人用力捏着你，可能心情不太好，需要发泄一下",
+        "prompt": "你用力捏着你，可能心情不太好，需要发泄一下",
         "mood_hint": "angry",
         "affinity_bonus": 2,
     },
     "poke": {
         "intent": "引起注意/玩耍",
-        "prompt": "主人在戳你，想引起你的注意或者想逗你玩",
+        "prompt": "你在戳你，想引起你的注意或者想逗你玩",
         "mood_hint": "excited",
         "affinity_bonus": 2,
     },
     "hold": {
         "intent": "安静陪伴",
-        "prompt": "主人安静地握着你，享受默默的陪伴",
+        "prompt": "你安静地握着你，享受默默的陪伴",
         "mood_hint": "neutral",
         "affinity_bonus": 3,
     },
     "shake": {
         "intent": "玩耍/兴奋",
-        "prompt": "主人在摇晃你，很兴奋的样子",
+        "prompt": "你在摇晃你，很兴奋的样子",
         "mood_hint": "excited",
         "affinity_bonus": 2,
     },
@@ -76,10 +76,10 @@ TOUCH_INTENT: dict[str, dict] = {
 # Zone-specific response modifiers
 ZONE_MODIFIERS: dict[str, str] = {
     "head": "摸头杀！你感觉很舒服",
-    "back": "主人在摸你的背，很放松",
+    "back": "你在摸你的背，很放松",
     "belly": "肚肚被摸到了，有点痒痒的",
-    "hand_left": "主人牵住了你的小手",
-    "hand_right": "主人牵住了你的小手",
+    "hand_left": "你牵住了你的小手",
+    "hand_right": "你牵住了你的小手",
     "cheek": "脸蛋被揉了，有点害羞",
 }
 
@@ -159,10 +159,13 @@ class TouchEngine:
         elif touch_info["prompt"]:
             prompt_parts.append(touch_info["prompt"])  # fallback to static
         if zone:
+            # F12 (audit): "" from the archetype table means "intentionally
+            # silent" — falling back to the static line here reintroduced the
+            # generic wording the archetype system was written to replace.
             zone_prompt = pctx.touch_zone(zone)
             if zone_prompt:
                 prompt_parts.append(zone_prompt)
-            elif zone in ZONE_MODIFIERS:
+            elif zone_prompt is None and zone in ZONE_MODIFIERS:
                 prompt_parts.append(ZONE_MODIFIERS[zone])
         if intensity == "gentle":
             prompt_parts.append("力度很轻柔")

@@ -113,4 +113,5 @@ async def preview_tts_wav(req: TTSPreviewRequest, request: Request):
         voice=req.voice,
         speed=req.speed,
     )
-    return Response(content=wav_data, media_type="audio/wav")
+    # edge returns MP3 bytes; the old audio/wav label lied to <audio> consumers
+    return Response(content=wav_data, media_type="audio/mpeg")

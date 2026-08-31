@@ -72,18 +72,23 @@ async def _update_emotion(
     emotion_state: str | None,
     user_mood: str | None,
     full_text: str,
+    personality: dict | None = None,
 ) -> str | None:
     """Shared emotion update logic for both streaming and non-streaming."""
     if parsed.parsed_ok:
-        new_emotion = _pad_to_discrete(parsed.pad)
         if session_id:
-            from ai_core.services.pad_model import PADState
-
-            await emotion_engine.pad.set_pad(
-                session_id, PADState(p=parsed.pad.p, a=parsed.pad.a, d=parsed.pad.d)
+            # F3 (audit): this surface used raw set_pad — no personality
+            # baseline, no smoothing, no relationship weighting — so /chat and
+            # /pipeline ran two incompatible emotion engines on one session.
+            # Both now go through the same transition dynamics.
+            _, new_emotion = await emotion_engine.update_with_explicit_pad(
+                session_id=session_id,
+                pad_values={"p": parsed.pad.p, "a": parsed.pad.a, "d": parsed.pad.d},
+                user_mood=user_mood,
+                personality=personality,
             )
-            await emotion_engine.set_emotion(session_id, new_emotion)
-        return new_emotion
+            return new_emotion
+        return _pad_to_discrete(parsed.pad)
 
     # Fallback: legacy detection
     from ai_core.services.emotion import extract_inline_emotion
@@ -97,6 +102,7 @@ async def _update_emotion(
             session_id=session_id,
             text_emotion=text_emotion,
             user_mood=user_mood,
+            personality=personality,  # F11 (audit): baseline was never seeded here
         )
         return new_emotion
     return text_emotion
@@ -164,7 +170,13 @@ async def chat_preview(req: ChatPreviewRequest, request: Request):
     parsed = parse_llm_response(raw_text)
     dialogue = content_filter.filter_output(parsed.dialogue)
     new_emotion = await _update_emotion(
-        parsed, emotion_engine, req.session_id, emotion_state, user_mood, raw_text
+        parsed,
+        emotion_engine,
+        req.session_id,
+        emotion_state,
+        user_mood,
+        raw_text,
+        personality=prompt_result.get("personality"),
     )
 
     audio_b64, audio_fmt = None, None
@@ -270,7 +282,13 @@ async def chat_preview_stream(req: ChatPreviewRequest, request: Request):
 
             # ── Phase 4: Emotion update ──
             new_emotion = await _update_emotion(
-                parsed, emotion_engine, req.session_id, emotion_state, user_mood, raw_text
+                parsed,
+                emotion_engine,
+                req.session_id,
+                emotion_state,
+                user_mood,
+                raw_text,
+                personality=prompt_result.get("personality"),
             )
             yield _sse(
                 {
