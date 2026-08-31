@@ -192,6 +192,7 @@ class Harness:
             + [{"role": "user", "content": text}]
         )
         reply = self._llm(messages)
+        self._auto_remember(text)
         self.history += [
             {"role": "user", "content": text},
             {"role": "assistant", "content": reply},
@@ -214,6 +215,33 @@ class Harness:
             relationship_stage=self.relationship.get("stage"),
         )
         return reply
+
+    _MEMORY_CUES = (
+        "我叫",
+        "叫我",
+        "我喜欢",
+        "我最喜欢",
+        "我讨厌",
+        "我不喜欢",
+        "我最讨厌",
+        "记住",
+        "我住在",
+        "我的生日",
+        "我在做",
+        "我的工作",
+    )
+
+    def _auto_remember(self, text: str) -> None:
+        """Naive declaration capture — the SDK's built-in floor. Hosts with a
+        real memory service (ai-core's five layers) replace this loop entirely;
+        the facade keeps self-declarations so a bare Harness passes 30-turn
+        recall probes without any backend."""
+        for sentence in text.replace("，", "。").split("。"):
+            sentence = sentence.strip()
+            if sentence and any(cue in sentence for cue in self._MEMORY_CUES):
+                if sentence not in self.memories:
+                    self.memories.append(sentence)
+        del self.memories[:-32]
 
     def remember(self, fact: str) -> None:
         """Explicit long-term memory (the SDK keeps extraction to the host)."""

@@ -62,3 +62,15 @@ def test_life_runtime_boots_from_soul():
     )
     actions = rt.tick(15 * 60)
     assert set(actions) == {soul.studio["id"]}
+
+
+def test_auto_memory_survives_beyond_the_history_window():
+    soul = make_soul()
+    seen = []
+    h = Harness(soul, llm=lambda m: (seen.append(m), "好。")[1], history_turns=3)
+    h.chat("对了，你可以叫我小乔。我最喜欢抹茶拿铁，讨厌香菜")
+    for i in range(8):  # push the declaration far out of the rolling window
+        h.chat(f"随便聊点什么 {i}")
+    h.chat("你还记得我喜欢喝什么吗？")
+    system = seen[-1][0]["content"]
+    assert "抹茶拿铁" in system and "小乔" in system
