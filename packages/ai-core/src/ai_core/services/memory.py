@@ -1128,10 +1128,39 @@ class MemoryService:
                 end_user_id=end_user_id,
                 character_id=character_id,
             )
+            await self._maybe_auto_reflect(end_user_id, character_id, memories)
         except TimeoutError:
             logger.warning("memory.extraction_timeout")
         except Exception:
             logger.exception("memory.extraction_error")
+
+    async def _maybe_auto_reflect(
+        self, end_user_id: str, character_id: str, memories: list[dict]
+    ) -> None:
+        """S6 (audit): the reflection loop (memories → insights → behavior rules)
+        had a fully built consumer and a producer nobody ever called. Importance
+        accumulates per bond; crossing the threshold triggers one auto
+        reflection — the Generative-Agents design, off the critical path."""
+        try:
+            key = f"reflect_acc:{end_user_id}:{character_id}"
+            gained = sum(
+                self.policy.score_importance(m.get("content", ""), m.get("type", "EPISODIC"))
+                for m in memories
+            )
+            raw = await self.cache.get(key)
+            total = (int(raw) if raw else 0) + gained
+            if total >= 12:
+                await self.cache.delete(key)
+                task = asyncio.get_event_loop().create_task(
+                    self.reflect_memory(end_user_id, character_id, trigger="auto")
+                )
+                self._usage_tasks.add(task)
+                task.add_done_callback(self._usage_tasks.discard)
+                logger.info("memory.auto_reflect_triggered", importance_sum=total)
+            else:
+                await self.cache.set(key, str(total), ttl=7 * 24 * 3600)
+        except Exception:
+            logger.warning("memory.auto_reflect_failed", exc_info=True)
 
     async def _extract_memories(self, user_input: str, ai_response: str) -> list[dict]:
         prompt = _EXTRACTION_PROMPT.format(user_input=user_input, ai_response=ai_response)

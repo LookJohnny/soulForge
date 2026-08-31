@@ -141,14 +141,33 @@ class PersonalityDriftService:
             import json
 
             async with self.pool.acquire() as conn:
-                await conn.execute(
-                    """UPDATE user_customizations
-                       SET personality_drift = $3, updated_at = now()
-                       WHERE end_user_id = $1 AND character_id = $2 AND is_active = true""",
+                # S1 (audit): this table was UPDATE-only with zero INSERTs anywhere,
+                # so drift computed every day and persisted nothing. NULL device_id
+                # rows don't collide on the unique index, so select-then-write.
+                row = await conn.fetchrow(
+                    """SELECT id FROM user_customizations
+                       WHERE end_user_id = $1 AND character_id = $2 AND is_active = true
+                       ORDER BY updated_at DESC LIMIT 1""",
                     end_user_id,
                     character_id,
-                    json.dumps(new_drift),
                 )
+                if row:
+                    await conn.execute(
+                        """UPDATE user_customizations
+                           SET personality_drift = $2, updated_at = now() WHERE id = $1""",
+                        row["id"],
+                        json.dumps(new_drift),
+                    )
+                else:
+                    await conn.execute(
+                        """INSERT INTO user_customizations
+                               (id, end_user_id, character_id, personality_drift,
+                                is_active, created_at, updated_at)
+                           VALUES (gen_random_uuid(), $1, $2, $3, true, now(), now())""",
+                        end_user_id,
+                        character_id,
+                        json.dumps(new_drift),
+                    )
 
             # Invalidate caches
             await self.cache.delete(f"drift:{end_user_id}:{character_id}")
