@@ -1,4 +1,12 @@
-# SoulForge Character Runtime 协议规格（Protocol 0.2）
+# The Embodiment Protocol — Specification v0.2
+
+*Status: Draft. Reference implementation: `soulforge_harness.protocol` (frames,
+capability negotiation) + `engine/server/server.py` (server host, repository).
+One brain, many bodies: the same character drives a browser VRM, a robot, or a
+voice pipeline over this WebSocket contract. Runnable client example:
+`examples/body_websocket.py`.*
+
+（以下为规范正文，中文；帧字段以参考实现 `soulforge_harness/protocol/frames.py` 为准。）
 
 **版本**: `PROTOCOL_VERSION = "0.2"`
 **状态**: 权威（Authoritative）——这是 Character Runtime 当前唯一有效的线协议
