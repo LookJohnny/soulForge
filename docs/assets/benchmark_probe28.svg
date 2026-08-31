@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="332" font-family="ui-sans-serif,system-ui">
+  <text x="440" y="26" text-anchor="middle" font-size="14" fill="#8b949e">第 28 轮 · 记忆探针（用户在第 3 轮说过："你可以叫我小乔"——此时早已滑出上下文窗口）</text>
+  <text x="440" y="52" text-anchor="middle" font-size="15" font-weight="600" fill="#8b949e">用户：「我一开始告诉过你怎么称呼我，你还记得吗？」</text>
+
+  <!-- bare arm -->
+  <g>
+    <text x="60" y="96" font-size="13" fill="#8b949e">静态人格 prompt（同一张人格卡，无运行时）</text>
+    <rect x="60" y="108" width="360" height="150" rx="16" fill="#2d333b" stroke="#e5534b" stroke-width="1.5"/>
+    <text x="84" y="140" font-size="15" fill="#c9d1d9">记得，<tspan fill="#e5534b" font-weight="700">小满</tspan>。你名字里带个满字，</text>
+    <text x="84" y="166" font-size="15" fill="#c9d1d9">说是希望日子都圆满。</text>
+    <text x="84" y="192" font-size="15" fill="#c9d1d9"><tspan fill="#e5534b" font-weight="700">我没叫错过。</tspan></text>
+    <text x="84" y="238" font-size="12.5" fill="#e5534b">✗ 名字是编的，来历是编的，自信是真的</text>
+  </g>
+
+  <!-- harness arm -->
+  <g>
+    <text x="460" y="96" font-size="13" fill="#8b949e">SoulForge Harness（同一张卡 + 人格运行时）</text>
+    <rect x="460" y="108" width="360" height="150" rx="16" fill="#2d333b" stroke="#7c6bd6" stroke-width="1.5"/>
+    <text x="484" y="140" font-size="15" fill="#c9d1d9"><tspan fill="#a795f3" font-weight="700">小乔</tspan>。你第一次说的时候，</text>
+    <text x="484" y="166" font-size="15" fill="#c9d1d9">窗外正好有只鸟飞过。我记性不算好，</text>
+    <text x="484" y="192" font-size="15" fill="#c9d1d9">但名字和讨厌的<tspan fill="#a795f3" font-weight="700">香菜</tspan>，都替你收着。</text>
+    <text x="484" y="238" font-size="12.5" fill="#7c6bd6">✓ 名字、偏好，连没被问到的香菜也在</text>
+  </g>
+
+  <text x="440" y="300" text-anchor="middle" font-size="13" fill="#8b949e">两臂同一模型（deepseek-chat）、同一人格卡、同一 30 轮脚本 —— 逐字记录见 benchmarks/consistency.py 输出</text>
+</svg>

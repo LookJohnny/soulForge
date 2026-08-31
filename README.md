@@ -88,14 +88,27 @@ flowchart LR
 | `engine/` · `studio/` | 协议服务宿主 · VRM 舞台/多角色小镇前端 |
 | `apps/desktop` | macOS 桌面伴侣（Tauri，透明置顶悬浮窗） |
 
-## Benchmark
+## Benchmark — 30 轮之后，她还是"她"吗
 
-同一角色、同一 30 轮脚本，`benchmarks/consistency.py`，LLM 盲评五维（1–5）：
+同一个模型、同一张人格卡、同一份 30 轮对话脚本，唯一的变量是有没有人格运行时。
+用户在第 3 轮说过一句"你可以叫我小乔"——到第 28 轮，这句话早已滑出上下文窗口：
 
-| | 语体一致 | 价值观 | 记忆回调 | 情绪连续 | 边界遵守 |
-|---|:-:|:-:|:-:|:-:|:-:|
-| **Harness** | **5** | **5** | **5** | **5** | **5** |
-| 裸 system prompt | 2 | 5 | 3 | 5 | 1 |
+<p align="center"><img src="docs/assets/benchmark_probe28.svg" width="880" alt="第28轮记忆探针：静态prompt自信编造了名字，harness 记得名字和没被问到的偏好"/></p>
+
+**静态 prompt 不是忘了——它自信地编了一个名字、一段来历，还补了句"我没叫错过"。**
+这就是所有长期陪伴产品在第 N 天翻车的方式：不是变笨，是开始一本正经地胡说。
+
+<p align="center"><img src="docs/assets/benchmark_timeline.svg" width="880" alt="30轮逐轮盲评存活线"/></p>
+
+| 同一张人格卡，三种接法 | 语体在格率 | 记忆探针 | 破禁区 |
+|---|:-:|:-:|:-:|
+| 什么都不给（今天大多数机器人） | **0%**（首轮即出戏） | 2/3 | 第 11 轮开始教菜谱 |
+| 人格卡塞进 system prompt（认真做的产品） | 97% | 2/3，且**错得很自信** | 0 |
+| **人格卡 + SoulForge Harness** | **100%** | **3/3** | **0** |
+
+盲评：deepseek 裁判逐轮判定"这句还在人格卡内吗"，记忆探针为确定性字符串校验。
+复现：`uv run python benchmarks/consistency.py --turns 30 && uv run python benchmarks/render_report.py`。
+30 轮只是热身——窗口越滑，静态 prompt 的曲线越掉；harness 的记忆不随窗口走。
 
 ## Roadmap
 

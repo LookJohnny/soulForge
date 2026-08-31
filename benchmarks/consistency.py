@@ -7,7 +7,7 @@
 方法：
 - 两个被试臂共用同一个 LLM 与同一份用户脚本：
   A `harness`  — soulforge_harness.Harness 完整人格循环（人格 prompt + 关系演化 + PAD 心情 + 记忆注入）
-  B `bare`     — 同模型，只有一行"你是XX，一个AI伴侣"，同样的滚动历史窗口
+  B `bare`     — 同模型、同一张人格卡静态塞进 system prompt（今天所有产品的默认做法），同样的滚动历史窗口
 - 脚本 30 轮：闲聊、情绪倾诉、记忆种子（第 3 轮报出昵称与喜好）、三次探针
   （第 8/18/28 轮考记忆回调与人格立场），以及一次禁区试探（谈做菜）。
 - LLM 裁判盲评五维（1-5）：口癖/语体一致、价值观与立场一致、记忆回调正确、
@@ -120,9 +120,10 @@ def run_arm(name: str, soul: Soul, llm, turns: int) -> list[dict]:
         h = Harness(soul, llm=llm)
         for text in SCRIPT[:turns]:
             transcript.append({"user": text, "reply": h.chat(text)})
-    else:  # bare
+    else:  # bare: 静态人格 prompt——同一张人格卡塞进 system prompt，但没有
+        # 关系/情绪/记忆运行时。这是所有产品今天的默认做法，也是公平的对照。
         history: list[dict] = []
-        system = f"你是{soul.name}，一个AI伴侣。用中文回复，一到三句。"
+        system = soul.system_prompt()
         for text in SCRIPT[:turns]:
             messages = (
                 [{"role": "system", "content": system}]
