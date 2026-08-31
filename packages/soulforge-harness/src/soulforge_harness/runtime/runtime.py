@@ -16,11 +16,11 @@ from collections import deque
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable
 
-from engine.planner.day_planner import generate_day_plan
-from engine.planner.hour_planner import expand_hour
-from engine.planner.llm_interface import BehaviorDecision, build_llm
-from engine.planner.minute_planner import plan_minute
-from engine.planner.models import (
+from soulforge_harness.runtime.day_planner import generate_day_plan
+from soulforge_harness.runtime.hour_planner import expand_hour
+from soulforge_harness.runtime.llm_interface import BehaviorDecision, build_llm
+from soulforge_harness.runtime.minute_planner import plan_minute
+from soulforge_harness.runtime.models import (
     EventKind,
     DayPlan,
     Event,
@@ -33,7 +33,7 @@ from engine.planner.models import (
     VISION_EVENT_KINDS,
     WorldState,
 )
-from engine.planner.replanner import Replanner
+from soulforge_harness.runtime.replanner import Replanner
 
 Adapter = Callable[[str, MicroAction], None]
 
@@ -161,7 +161,7 @@ def _trusted_confirmed_hazard(event: Event) -> bool:
         or hits < required
     ):
         return False
-    from engine.perception.attestation import verify_hazard_claim
+    from soulforge_harness.runtime.attestation import verify_hazard_claim
 
     return verify_hazard_claim(payload, event.source, event.target_agent)
 
@@ -217,7 +217,7 @@ class CompanionRuntime:
     ):
         if not personas:
             raise ValueError("CompanionRuntime needs at least one persona")
-        from engine.planner.memory_store import InMemoryMemoryStore
+        from soulforge_harness.runtime.memory_store import InMemoryMemoryStore
 
         self.personas = {p.agent_id: p for p in personas}
         self.world = world or WorldState()
@@ -243,11 +243,11 @@ class CompanionRuntime:
             for agent_id, persona in self.personas.items()
         }
         self.hour_plans: dict[str, HourPlan] = {}
-        from engine.planner.conversation import ConversationManager
+        from soulforge_harness.runtime.conversation import ConversationManager
 
         self.conversations = ConversationManager(self, social_policy)
         # everyone starts somewhere (the sofa) so co-presence is well defined from tick 0
-        from engine.planner.space import DEFAULT_PLACE
+        from soulforge_harness.runtime.space import DEFAULT_PLACE
 
         for agent_id in self.personas:
             self.world.space.agent_place.setdefault(agent_id, DEFAULT_PLACE)
@@ -315,7 +315,7 @@ class CompanionRuntime:
         self, agent_id: str, template_id: str | None, minute: float
     ) -> None:
         """Activities happen somewhere: walk there first. Anywhere-activities stay put."""
-        from engine.planner.space import template_location
+        from soulforge_harness.runtime.space import template_location
 
         target = template_location(template_id)
         if target is None or target == self.where(agent_id):
@@ -337,7 +337,7 @@ class CompanionRuntime:
     def move_to(
         self, agent_id: str, place: str, minute: float, reason: str = ""
     ) -> None:
-        from engine.planner.space import walk_seconds
+        from soulforge_harness.runtime.space import walk_seconds
 
         space = self.world.space
         origin = self.where(agent_id)
@@ -386,7 +386,7 @@ class CompanionRuntime:
     # -- reflection --------------------------------------------------------------
     def reflect(self, agent_id: str, minute: float, day: int | None = None) -> list:
         """End-of-day reflection: memories → insights → tomorrow's goals/prompt."""
-        from engine.planner.reflection import apply_reflections, reflect_day
+        from soulforge_harness.runtime.reflection import apply_reflections, reflect_day
 
         persona = self.personas[agent_id]
         names = {a: p.name for a, p in self.personas.items()}

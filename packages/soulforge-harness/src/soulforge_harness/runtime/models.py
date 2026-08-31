@@ -104,7 +104,7 @@ class WorldState:
 
     def __post_init__(self) -> None:
         if self.space is None:
-            from engine.planner.space import SpaceState
+            from soulforge_harness.runtime.space import SpaceState
 
             self.space = SpaceState()
 

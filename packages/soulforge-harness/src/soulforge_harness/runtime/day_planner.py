@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.planner.templates import TEMPLATE_REGISTRY
-from engine.planner.models import DayBlock, DayPlan, Persona, WorldState
+from soulforge_harness.runtime.templates import TEMPLATE_REGISTRY
+from soulforge_harness.runtime.models import DayBlock, DayPlan, Persona, WorldState
 
 
 def generate_day_plan(
@@ -20,7 +20,9 @@ def generate_day_plan(
     """Archetype profiles come from configs/characters.json; unknown archetypes
     fall back to `default`, so a new character never crashes planning."""
     if archetypes is None:
-        from engine.planner.characters import load_archetypes  # lazy: avoid cycle
+        from soulforge_harness.runtime.characters import (
+            load_archetypes,
+        )  # lazy: avoid cycle
 
         archetypes = load_archetypes()
     profile = archetypes.get(persona.archetype) or archetypes["default"]
@@ -82,7 +84,9 @@ def generate_day_plan(
         why = persona.daily_goals[0] if persona.daily_goals else prefer
         blocks.insert(
             idx,
-            DayBlock(17 * 60, 17 * 60 + 30, prefer, f"昨天的想法：{why}", persona.agent_id),
+            DayBlock(
+                17 * 60, 17 * 60 + 30, prefer, f"昨天的想法：{why}", persona.agent_id
+            ),
         )
 
     rationale = (

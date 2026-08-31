@@ -8,8 +8,8 @@ critical -> rewrite the remaining DayPlan
 
 from __future__ import annotations
 
-from engine.planner.llm_interface import BehaviorDecision
-from engine.planner.models import (
+from soulforge_harness.runtime.llm_interface import BehaviorDecision
+from soulforge_harness.runtime.models import (
     DayBlock,
     DayPlan,
     Event,
@@ -20,7 +20,7 @@ from engine.planner.models import (
     PlanDelta,
     PlannedActivity,
 )
-from engine.planner.templates import resolve_template
+from soulforge_harness.runtime.templates import resolve_template
 
 
 def _gaze_for(event: Event) -> str:

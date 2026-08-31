@@ -104,6 +104,8 @@ const bodyFor = (agentId) => stage.get(agentId) ?? (agentId === primaryAgent || 
 const STAGE_SLOTS = { 1: [0], 2: [-0.62, 0.62], 3: [-1.15, 0, 1.15], 4: [-1.6, -0.55, 0.55, 1.6] };
 // 家的地图（与 engine/planner/space.py HOME 一致）：walk_to 的目的地；同一地点多人时错开站位
 const PLACES = { sofa: { label: '客厅沙发', x: 0, z: 0.3 }, kitchen: { label: '厨房', x: -1.7, z: -0.4 }, desk: { label: '书桌', x: 1.5, z: 0 }, plants: { label: '阳台花架', x: 1.9, z: -1.3 } };
+// 与 engine/planner/space.py template_location 一致：活动发生在哪个地点
+const TEMPLATE_PLACE = { cooking: 'kitchen', drawing: 'desk', study: 'desk', plant_care: 'plants', rest: 'sofa' };
 const slotOffset = (agentId) => { const ids = [...stage.keys()]; const i = ids.indexOf(agentId); return ids.length > 1 ? (i - (ids.length - 1) / 2) * 0.8 : 0; };
 let home = null;
 function ensureHome() {
@@ -527,6 +529,23 @@ async function connectBody() {
     log(`▶ ${cmd.agent_id} ${cmd.name} → ${prim.kind}${prim.clip ? ':' + prim.clip : ''}`, 'sys');
   });
   bodyClient.addEventListener('welcome', (e) => { $('body-status').textContent = `身体已注册 ${e.detail.body_id} · ${(e.detail.accepted_agents ?? agentIds).join('+') || '全部'} · ${e.detail.supported_steps.length} 步`; log('runtime 已接入（web 身体）', 'sys'); });
+  // 迟到的身体会错过启动时的 walk_to：用第一帧 plan_state 快照把人放到当前活动的地点。
+  // 只做一次——之后位置归实时 walk_to 管，避免与"对话期间原地不动"打架。
+  const placeSynced = new Set();
+  bodyClient.addEventListener('plan_state', (e) => {
+    const ps = e.detail; const b = bodyFor(ps.agent_id);
+    if (!b || b.walking || placeSynced.has(ps.agent_id)) return;
+    placeSynced.add(ps.agent_id);
+    const [hh, mm] = (ps.clock || '0:0').split(':').map(Number);
+    const minute = hh * 60 + mm;
+    const act = (ps.activities || []).find((a) => minute >= a.start_min % 1440 && minute < (a.start_min % 1440) + a.duration_min);
+    const place = TEMPLATE_PLACE[act?.template_id];
+    if (place && PLACES[place]) {
+      const dx = PLACES[place].x + slotOffset(ps.agent_id) - b.origin.x;
+      const dz = PLACES[place].z - b.origin.z;
+      if (Math.hypot(dx, dz) > 0.3) b.walkTo(PLACES[place].x, PLACES[place].z, 3, slotOffset(ps.agent_id));
+    }
+  });
   bodyClient.addEventListener('close', () => { $('body-status').textContent = '身体连接断开，5 秒后重连…'; clearTimeout(bodyReconnect); bodyReconnect = setTimeout(() => { if (bodyClient && !bodyClient.ws) connectBody(); }, 5000); });
   bodyClient.addEventListener('error', () => { $('body-status').textContent = '身体连接失败'; });
   try { await bodyClient.connect(); } catch { /* status shown */ }

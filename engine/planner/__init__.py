@@ -1,68 +1,21 @@
-"""Hierarchical companion planner: day -> hour -> minute with event-driven replanning."""
+"""Compatibility shim: `engine.planner` moved to `soulforge_harness.runtime`.
 
-from engine.planner.models import (
-    DayBlock,
-    DayPlan,
-    Event,
-    EventKind,
-    HourPlan,
-    ImpactLevel,
-    MinuteAction,
-    Persona,
-    PlanDelta,
-    PlannedActivity,
-    WorldState,
-)
-from engine.planner.templates import BehaviorTemplate, TEMPLATE_REGISTRY
-from engine.planner.characters import (
-    CharacterConfigError,
-    character_entry,
-    load_archetypes,
-    load_characters,
-    load_personas,
-)
-from engine.planner.llm_interface import (
-    BehaviorDecision,
-    MockBehaviorLLM,
-    RoutedBehaviorLLM,
-    build_llm,
-)
-from engine.planner.day_planner import generate_day_plan
-from engine.planner.hour_planner import expand_hour
-from engine.planner.minute_planner import plan_minute
-from engine.planner.replanner import Replanner
-from engine.planner.runtime import CompanionRuntime
-from engine.planner.conversation import Conversation, ConversationManager, SocialPolicy
+The life-simulation runtime is now the open harness SDK
+(packages/soulforge-harness). Every public name and every submodule path
+(`engine.planner.models`, `engine.planner.llm_interface`, …) keeps working;
+new code should import from `soulforge_harness.runtime` directly.
+"""
 
-__all__ = [
-    "BehaviorDecision",
-    "BehaviorTemplate",
-    "CharacterConfigError",
-    "character_entry",
-    "load_archetypes",
-    "load_characters",
-    "load_personas",
-    "CompanionRuntime",
-    "Conversation",
-    "ConversationManager",
-    "SocialPolicy",
-    "DayBlock",
-    "DayPlan",
-    "Event",
-    "EventKind",
-    "HourPlan",
-    "ImpactLevel",
-    "MinuteAction",
-    "MockBehaviorLLM",
-    "RoutedBehaviorLLM",
-    "Persona",
-    "PlanDelta",
-    "PlannedActivity",
-    "Replanner",
-    "TEMPLATE_REGISTRY",
-    "WorldState",
-    "build_llm",
-    "expand_hour",
-    "generate_day_plan",
-    "plan_minute",
-]
+import importlib
+import pkgutil
+import sys
+
+import soulforge_harness.runtime as _rt
+from soulforge_harness.runtime import *  # noqa: F401,F403
+from soulforge_harness.runtime import __all__  # noqa: F401
+
+# alias every runtime submodule under the old path so
+# `from engine.planner.space import HOME` style imports stay valid
+for _info in pkgutil.iter_modules(_rt.__path__):
+    _mod = importlib.import_module(f"{_rt.__name__}.{_info.name}")
+    sys.modules[f"{__name__}.{_info.name}"] = _mod

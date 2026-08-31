@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-from engine.planner.models import HourPlan, MicroAction, MinuteAction, Persona
-from engine.planner.templates import resolve_template
+from soulforge_harness.runtime.models import (
+    HourPlan,
+    MicroAction,
+    MinuteAction,
+    Persona,
+)
+from soulforge_harness.runtime.templates import resolve_template
 
 # micro-step name -> default adapter command payload
 _ADAPTER_HINTS = {

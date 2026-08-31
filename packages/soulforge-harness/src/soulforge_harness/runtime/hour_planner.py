@@ -11,14 +11,14 @@ second — non-top-of-hour boundaries are respected, not rounded away.
 
 from __future__ import annotations
 
-from engine.planner.models import (
+from soulforge_harness.runtime.models import (
     DayPlan,
     HourPlan,
     Persona,
     PlannedActivity,
     WorldState,
 )
-from engine.planner.templates import TEMPLATE_REGISTRY
+from soulforge_harness.runtime.templates import TEMPLATE_REGISTRY
 
 MINUTES_PER_DAY = 24 * 60
 

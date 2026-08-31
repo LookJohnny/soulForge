@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from engine.planner.templates import TEMPLATE_REGISTRY
+from soulforge_harness.runtime.templates import TEMPLATE_REGISTRY
 
 
 @dataclass(frozen=True)

@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from engine.planner.models import Persona
+from soulforge_harness.runtime.models import Persona
 
 MAX_REFLECTIONS = 5
 MAX_GOALS = 4

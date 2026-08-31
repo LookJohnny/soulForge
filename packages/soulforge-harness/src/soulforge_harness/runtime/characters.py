@@ -8,15 +8,28 @@ swapping a character never touches code.
 from __future__ import annotations
 
 import json
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from engine.planner.models import Persona
+from soulforge_harness.runtime.models import Persona
 
-_DEFAULT_PATH = (
-    Path(__file__).resolve().parent.parent.parent / "configs" / "characters.json"
-)
+
+def _default_path() -> Path:
+    """SDK 化后不再假设包内相对路径：环境变量优先，其次从 CWD 向上找 configs/characters.json。"""
+    env = os.environ.get("SOULFORGE_CHARACTERS")
+    if env:
+        return Path(env)
+    cur = Path.cwd()
+    for parent in (cur, *cur.parents):
+        candidate = parent / "configs" / "characters.json"
+        if candidate.exists():
+            return candidate
+    return cur / "configs" / "characters.json"
+
+
+_DEFAULT_PATH = _default_path()
 
 
 class CharacterConfigError(ValueError):

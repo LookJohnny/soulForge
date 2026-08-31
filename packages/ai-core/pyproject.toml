@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "SoulForge AI Core - Prompt Builder, RAG Engine, AI Pipeline"
 requires-python = ">=3.12"
 dependencies = [
+    "soulforge-harness",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.34",
     "asyncpg>=0.30",
@@ -47,3 +48,6 @@ select = ["E", "W", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.uv.sources]
+soulforge-harness = { workspace = true }

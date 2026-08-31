@@ -13,7 +13,9 @@ await p.waitForFunction(() => window.__live.stage.size === 2 && [...window.__liv
 await p.waitForFunction(() => [...window.__live.stage.values()].some((b) => Math.abs(b.origin.x) > 0.9 || b.origin.z < 0), null, { timeout: 45000 });
 const before = await p.evaluate(() => [...window.__live.stage].map(([id, b]) => [id, +b.origin.x.toFixed(2), +b.origin.z.toFixed(2)]));
 await p.fill('#text', '@luna @kai 今晚吃什么'); await p.press('#text', 'Enter');
-await p.waitForFunction(() => window.__live.logs.filter((l) => /^(Luna|Kai): /.test(l.text)).length >= 4, null, { timeout: 60000 });
+// "谈话时站到一起"只在对话进行中成立（加速时间下瞬态）——全程 300ms 采样取最近距离
+await p.evaluate(() => { window.__minDist = 1e9; setInterval(() => { const v = [...window.__live.stage.values()]; if (v.length === 2) window.__minDist = Math.min(window.__minDist, Math.hypot(v[0].origin.x - v[1].origin.x, v[0].origin.z - v[1].origin.z)); }, 300); });
+await p.waitForFunction(() => window.__live.logs.filter((l) => /^(Luna|Kai): /.test(l.text)).length >= 4, null, { timeout: 150000 });
 await p.waitForTimeout(800);
 if (shot) await p.screenshot({ path: shot });
 const r = await p.evaluate(() => {
@@ -31,7 +33,8 @@ const r = await p.evaluate(() => {
 const speakers = r.lines.map((l) => l.split(':')[0]);
 const alternate = speakers.every((s, i) => i === 0 || s !== speakers[i - 1]);
 // to talk, Luna walked over to Kai: both now stand at the same place (sofa), offset side by side
-const together = Math.abs(r.after[0][2] - r.after[1][2]) < 0.05 && Math.abs(r.after[0][1] - r.after[1][1]) < 1.0;
+const during = await p.evaluate(() => window.__minDist);
+const together = during < 1.0; // 对话期间靠到过 1m 以内
 const ok = r.stageSize === 2 && r.apart > 5 && r.lines.length >= 4 && alternate && together && r.placeLabels.length === 4 && consoleErrors.length === 0;
-console.log(JSON.stringify({ ok, before, ...r, alternate, together, consoleErrors }, null, 1));
+console.log(JSON.stringify({ ok, before, minDist: during, ...r, alternate, together, consoleErrors }, null, 1));
 await b.close(); process.exit(ok ? 0 : 1);

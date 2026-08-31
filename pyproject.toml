@@ -8,15 +8,18 @@ requires-python = ">=3.12"
 dependencies = [
     "ai-core",
     "gateway",
+    "soulforge-harness",
 ]
 
 [tool.uv.workspace]
 members = [
     "packages/ai-core",
     "packages/gateway",
+    "packages/soulforge-harness",
 ]
 
 [tool.uv.sources]
+soulforge-harness = { workspace = true }
 ai-core = { workspace = true }
 gateway = { workspace = true }
 

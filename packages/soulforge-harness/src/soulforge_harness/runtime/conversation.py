@@ -27,11 +27,11 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from engine.planner.models import Event, EventKind
+from soulforge_harness.runtime.models import Event, EventKind
 
 if TYPE_CHECKING:  # pragma: no cover
-    from engine.planner.llm_interface import BehaviorDecision
-    from engine.planner.runtime import CompanionRuntime
+    from soulforge_harness.runtime.llm_interface import BehaviorDecision
+    from soulforge_harness.runtime.runtime import CompanionRuntime
 
 ACTIVITY_ZH = {
     "cooking": "做饭",
@@ -390,7 +390,11 @@ class ConversationManager:
             seeds.append(
                 f"用户提过想要「{recent['last_user_request']}」，商量一下怎么办到"
             )
-        if doing and act and act.template_id not in ("cooking", "idle", "rest", "chatting"):
+        if (
+            doing
+            and act
+            and act.template_id not in ("cooking", "idle", "rest", "chatting")
+        ):
             seeds.append(
                 f"{other.name}正在{doing}：问一个具体的细节，然后接一个自己的看法"
             )

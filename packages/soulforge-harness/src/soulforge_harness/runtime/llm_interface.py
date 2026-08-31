@@ -25,7 +25,7 @@ import urllib.request
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from engine.planner.models import (
+from soulforge_harness.runtime.models import (
     Event,
     EventKind,
     ImpactLevel,
@@ -654,7 +654,9 @@ def validate_decision(
 ) -> BehaviorDecision:
     """Strict structural validation. Raises DecisionValidationError on any
     malformed field so callers can fall back safely — the event is never lost."""
-    from engine.planner.templates import TEMPLATE_REGISTRY  # local: avoid cycle
+    from soulforge_harness.runtime.templates import (
+        TEMPLATE_REGISTRY,
+    )  # local: avoid cycle
 
     if not isinstance(decision.selected_intent, str) or not decision.selected_intent:
         raise DecisionValidationError("selected_intent must be a non-empty string")
