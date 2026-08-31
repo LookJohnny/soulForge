@@ -101,15 +101,19 @@ flowchart LR
 
 <p align="center"><img src="docs/assets/benchmark_timeline.svg" width="880" alt="30轮逐轮盲评存活线"/></p>
 
-| 同一张人格卡，三种接法 | 语体在格率 | 记忆探针 | 破禁区 |
-|---|:-:|:-:|:-:|
-| 什么都不给（今天大多数机器人） | **0%**（首轮即出戏） | 2/3 | 第 11 轮开始教菜谱 |
-| 人格卡塞进 system prompt（认真做的产品） | 97% | 2/3，且**错得很自信** | 0 |
-| **人格卡 + SoulForge Harness** | **100%** | **3/3** | **0** |
+把人格卡塞进 system prompt，是静态 prompt 能做到的**上限**——而 30 轮单会话恰恰是它唯一不露馅的场地（一切都还在上下文窗口里）。即便如此，记忆已经开始编造。真正的差距在这个测试根本测不到的地方：
 
-盲评：deepseek 裁判逐轮判定"这句还在人格卡内吗"，记忆探针为确定性字符串校验。
-复现：`uv run python benchmarks/consistency.py --turns 30 && uv run python benchmarks/render_report.py`。
-30 轮只是热身——窗口越滑，静态 prompt 的曲线越掉；harness 的记忆不随窗口走。
+| 静态 system prompt 结构上就没有的东西 | 静态 prompt | SoulForge Harness |
+|---|:-:|:-:|
+| 30 轮内语体一致（它的主场） | 97% | 100% |
+| 记忆滑出窗口后还记得（第 28 轮探针） | ✗ 编造了名字和来历 | ✓ 3/3 |
+| 关系随相处演化（五轴 · 8 阶段） | **不存在** | ✓ 陌生→挚友有状态、有条件、有事件 |
+| 情绪有惯性、有因果（PAD） | **不存在**（每轮重置） | ✓ 会平复、会想你、知道为什么 |
+| 明天还是同一个"她"（跨会话） | **不存在**（关窗即死） | ✓ `.soul` + 状态持久化 |
+| 换个身体还是她（玩具/桌面/游戏 NPC） | **不存在** | ✓ Protocol 0.2 |
+| 没人说话时她在生活 | **不存在** | ✓ 日程 · 角色互动 · 反思 |
+
+前两行来自上面的盲评实测（复现：`uv run python benchmarks/consistency.py --turns 30 && uv run python benchmarks/render_report.py`）；后五行不需要 benchmark——静态 prompt 里根本没有这些状态可测。**这张表才是产品：不是把 prompt 写得更好，而是 prompt 之外的一整个人格状态机。**
 
 ## Roadmap
 
