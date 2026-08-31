@@ -97,7 +97,12 @@ flowchart LR
 <p align="center"><img src="docs/assets/benchmark_probe28.svg" width="880" alt="第28轮记忆探针：静态prompt自信编造了名字，harness 记得名字和没被问到的偏好"/></p>
 
 **静态 prompt 不是忘了——它自信地编了一个名字、一段来历，还补了句"我没叫错过"。**
-这就是长期陪伴产品在第 N 天翻车的方式：不是变笨，是开始一本正经地胡说。而这只是 30 轮、单会话、单设备——对静态 prompt **最有利**的场地。它真正的问题是下面这张表：
+这就是长期陪伴产品在第 N 天翻车的方式：不是变笨，是开始一本正经地胡说。把对话拉长到 100 轮，衰减是这样的：
+
+<p align="center"><img src="docs/assets/memory_decay.svg" width="980" alt="100轮记忆探针命中率：静态prompt在事实滑出窗口后从100%跌至0%并反复编造，harness七个检查点全100%"/></p>
+
+第 45 轮起，"小乔"的一切开始从窗口里消失；到第 60 轮她被叫成了**"夜航星"**，第 100 轮又变成**"小橘灯，因为总在暗处亮着。我记着呢"**——每次编造都不重样，每次都言之凿凿。同一场对话里，harness 的七个检查点全部 100%。这不是 prompt 工程能修的，是架构问题：
+
 
 | 人格的组成部分 | 静态 system prompt | SoulForge Harness |
 |---|:-:|:-:|
@@ -109,7 +114,7 @@ flowchart LR
 | 没人说话时她在生活 | **没有这个状态** | ✓ 日程 · 角色互动 · 每日反思 |
 
 **这就是产品：不是把 prompt 写得更好，而是 prompt 根本装不下的那台人格状态机。**
-实测复现：`uv run python benchmarks/consistency.py --turns 30 && uv run python benchmarks/render_report.py`（LLM 盲评 + 确定性记忆探针，逐字记录随结果落盘）。
+实测复现：`benchmarks/consistency.py --turns 30`（30 轮盲评）与 `benchmarks/memory_decay.py`（100 轮衰减曲线）；记忆探针为确定性关键词判分，逐字记录随结果落盘。
 
 ## Roadmap
 
