@@ -118,3 +118,24 @@ def test_companion_never_cold_even_for_blunt_users():
     ai = sq.derive_ai_personality(blunt)
     assert ai["A"] >= 0.35
     assert sq.five_traits(ai, blunt)["warmth"] > 30  # 不触发 prompt 的"低温"人格描述
+
+
+def test_neutral_options_score_half():
+    p = sq.score(fill(0, q13=2, q14=2, q15=2, q16=2, q17=2, q18=2))
+    assert (
+        p["DOM"] == 0.5
+        and p["ANX"] == pytest.approx(0.5, abs=0.2)
+        and p["AVO"] == pytest.approx(0.5, abs=0.2)
+    )
+
+
+def test_auto_voice_follows_personality_and_sets_gender():
+    quiet = sq.score(fill(1, q21=4))  # 内向低支配 + 让TA自己决定
+    v = sq.derive_voice(quiet, sq.derive_ai_personality(quiet))["edge"]
+    assert v["voice"] in ("zh-CN-XiaoxiaoNeural", "zh-CN-YunxiNeural")
+    assert quiet["prefs"]["voice"] != "auto"  # 性别已定，名字/模型不会错配
+    lively = sq.score(fill(0, q21=4))
+    assert (
+        sq.derive_voice(lively, sq.derive_ai_personality(lively))["edge"]["voice"]
+        == "zh-CN-XiaoyiNeural"
+    )

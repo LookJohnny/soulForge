@@ -14,7 +14,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from ai_core.api.soul_packs import _get_brand_id, upsert_character_row
+from ai_core.api.soul_packs import _get_brand_id, ensure_edge_voice, upsert_character_row
 from ai_core.db import get_pool
 from ai_core.services import soul_quiz
 from ai_core.services.soul_pack_builder import SoulPackBuilder
@@ -94,6 +94,16 @@ async def submit_quiz(req: SubmitRequest, request: Request):
     except Exception as e:
         logger.exception("soul_quiz.upsert_failed")
         raise HTTPException(status_code=500, detail="Failed to create character") from e
+
+    try:
+        await ensure_edge_voice(
+            pool,
+            character_id,
+            bundle["voice"]["edge"]["voice"],
+            f"{bundle['identity']['name']} · 问卷音色",
+        )
+    except Exception:
+        logger.warning("soul_quiz.voice_profile_failed", exc_info=True)
 
     if req.end_user_id:
         await _store_profile(pool, req.end_user_id, character_id, profile, bundle)

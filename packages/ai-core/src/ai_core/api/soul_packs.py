@@ -223,6 +223,41 @@ async def upsert_character_row(
     return new_id, bool(existing)
 
 
+async def ensure_edge_voice(pool, character_id: str, edge_voice: str, label: str = "") -> None:
+    """Persist a picked edge voice as a voice_profile and point the character at it.
+
+    Without this, prompt_builder auto-matches a DashScope voice by species/personality —
+    which is how a gentle female pick ends up sounding like longqiang_v3 (male). The edge
+    provider accepts *Neural names directly, so we store it in dashscope_voice_id.
+    """
+    if not edge_voice or not edge_voice.endswith("Neural"):
+        return
+    row = await pool.fetchrow(
+        "SELECT id FROM voice_profiles WHERE dashscope_voice_id = $1 AND name = $2 LIMIT 1",
+        edge_voice,
+        label or edge_voice,
+    )
+    if row:
+        vid = str(row["id"])
+    else:
+        vid = str(uuid.uuid4())
+        await pool.execute(
+            """INSERT INTO voice_profiles
+                   (id, name, reference_audio, description, dashscope_voice_id,
+                    created_at, updated_at)
+               VALUES ($1, $2, '', $3, $4, now(), now())""",
+            vid,
+            label or edge_voice,
+            "soul quiz / .soul edge voice",
+            edge_voice,
+        )
+    await pool.execute(
+        "UPDATE characters SET voice_id = $1, updated_at = now() WHERE id = $2",
+        vid,
+        character_id,
+    )
+
+
 @router.post("/import")
 async def import_soul(req: ImportRequest, request: Request):
     """Import a `.soul` (v2, optional passphrase) or legacy `.soulpack` (v1, brand key)."""
@@ -274,6 +309,13 @@ async def import_soul(req: ImportRequest, request: Request):
     except Exception as e:
         logger.exception("soul.import_character_failed")
         raise HTTPException(status_code=500, detail="Failed to import character") from e
+
+    edge = (data.get("voice_profile") or {}).get("edge") or {}
+    if edge.get("voice"):
+        try:
+            await ensure_edge_voice(pool, new_id, edge["voice"], f"{character['name']} · edge")
+        except Exception:
+            logger.warning("soul.voice_profile_failed", exc_info=True)
 
     await _record(
         pool, brand_id, new_id, blob, "import", character["name"], manifest.get("version", "1.0")

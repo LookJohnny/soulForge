@@ -129,6 +129,7 @@ QUESTIONS: list[dict[str, Any]] = [
         "options": [
             {"label": "“我来点吧”，利落定完", "scores": {"DOM": 1.0}},
             {"label": "“都行呀”，看大家想吃什么", "scores": {"DOM": 0.0}},
+            {"label": "看场合，有想吃的就说，没有就随大家", "scores": {"DOM": 0.5}},
         ],
     },
     {
@@ -137,6 +138,7 @@ QUESTIONS: list[dict[str, Any]] = [
         "options": [
             {"label": "站出来分工推进", "scores": {"DOM": 1.0}},
             {"label": "等有人牵头再全力配合", "scores": {"DOM": 0.0}},
+            {"label": "说不准，看那件事我熟不熟", "scores": {"DOM": 0.5}},
         ],
     },
     # ── 依恋 4 ──
@@ -146,6 +148,7 @@ QUESTIONS: list[dict[str, Any]] = [
         "options": [
             {"label": "忍不住想是不是自己说错了什么", "scores": {"ANX": 1.0}},
             {"label": "该干嘛干嘛，他忙完会回的", "scores": {"ANX": 0.0}},
+            {"label": "会惦记一下，但不至于胡思乱想", "scores": {"ANX": 0.5}},
         ],
     },
     {
@@ -154,6 +157,7 @@ QUESTIONS: list[dict[str, Any]] = [
         "options": [
             {"label": "被在意的人忽略", "scores": {"ANX": 1.0}},
             {"label": "被管得太紧", "scores": {"ANX": 0.0, "AVO": 0.6}},
+            {"label": "两种都还好，说不上怕", "scores": {"ANX": 0.5}},
         ],
     },
     {
@@ -162,6 +166,7 @@ QUESTIONS: list[dict[str, Any]] = [
         "options": [
             {"label": "希望有人立刻发现并问我怎么了", "scores": {"ANX": 0.6, "AVO": 0.0}},
             {"label": "更想自己消化，缓过来再说", "scores": {"AVO": 1.0}},
+            {"label": "看心情，有时想说说，有时想自己待着", "scores": {"AVO": 0.5}},
         ],
     },
     {
@@ -170,6 +175,7 @@ QUESTIONS: list[dict[str, Any]] = [
         "options": [
             {"label": "有点不自在，想留点自己的空间", "scores": {"AVO": 1.0}},
             {"label": "很安心，越近越好", "scores": {"AVO": 0.0}},
+            {"label": "说不准，因人而异", "scores": {"AVO": 0.5}},
         ],
     },
     # ── 陪伴期望 2 ──
@@ -198,6 +204,7 @@ QUESTIONS: list[dict[str, Any]] = [
             {"label": "明亮的女声", "pref": {"voice": "female_bright"}},
             {"label": "沉稳的男声", "pref": {"voice": "male_calm"}},
             {"label": "清朗的少年音", "pref": {"voice": "male_young"}},
+            {"label": "说不准，让 TA 自己决定", "pref": {"voice": "auto"}},
         ],
     },
     {
@@ -312,8 +319,20 @@ VOICE_POOLS = {
 
 
 def derive_voice(profile: dict[str, Any], ai: dict[str, float]) -> dict[str, Any]:
-    """偏好定音色，AI 外向度定语速（内向慢而轻，外向快而亮）。"""
-    pool = VOICE_POOLS.get(profile["prefs"]["voice"], VOICE_POOLS["female_warm"])
+    """偏好定音色，AI 外向度定语速（内向慢而轻，外向快而亮）。
+
+    选"让 TA 自己决定"时按 AI 人格挑：安静温和→温柔女声，明快→明亮女声，
+    低唤醒高支配（深夜电台那挂）→沉稳男声。"""
+    pick = profile["prefs"]["voice"]
+    if pick == "auto":
+        if ai["DOM"] >= 0.6 and ai["E"] < 0.5:
+            pick = "male_calm"
+        elif ai["E"] >= 0.55:
+            pick = "female_bright"
+        else:
+            pick = "female_warm"
+        profile["prefs"]["voice"] = pick  # 名字/模型的性别跟着定下来的音色走
+    pool = VOICE_POOLS.get(pick, VOICE_POOLS["female_warm"])
     rate = round(pool["base_rate"] - 12 + ai["E"] * 30)  # E 0→-12, 1→+18
     return {"edge": {"voice": pool["voice"], "rate": rate, "pitch": pool["pitch"]}}
 
