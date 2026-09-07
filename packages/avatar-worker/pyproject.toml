@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "soulforge-avatar-worker"
+version = "0.1.0"
+description = "Single GPU FlashHead worker for SoulForge's existing cognition and media body"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi==0.115.12",
+    "uvicorn==0.34.2",
+    "numpy>=1.26,<3",
+    "pillow==11.3.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<9", "pytest-asyncio>=0.25,<1", "httpx==0.28.1"]
+
+[project.scripts]
+soulforge-avatar-worker = "avatar_worker.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

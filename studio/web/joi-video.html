@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Joi · 真人面对面</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #080a0b; color: #ebe6de; }
+    button,a { -webkit-tap-highlight-color: transparent; }
+    button { font: inherit; border: 1px solid #ffffff30; background: #ffffff0a; color: inherit;
+      padding: 12px 22px; border-radius: 30px; cursor: pointer; }
+    button:hover { background: #ffffff1c; } button:disabled { opacity: .4; cursor: default; }
+    button:focus-visible,a:focus-visible { outline: 2px solid #cfb398; outline-offset: 4px; }
+    [hidden] { display: none !important; }
+    main { height: 100dvh; min-height: 580px; position: relative; display: flex; flex-direction: column; }
+    header { position: absolute; z-index: 2; top: 28px; left: 32px; }
+    .name { font-size: 18px; letter-spacing: .35em; } .label { color: #aaa6a1; font-size: 12px; margin-top: 7px; }
+    .stage { flex: 1; position: relative; min-height: 0; overflow: hidden; }
+    video { width: 100%; height: 100%; object-fit: contain; background: #080a0b; }
+    .welcome { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; padding: 32px; }
+    h1 { font-weight: 300; letter-spacing: .08em; font-size: clamp(28px,5vw,48px); margin: 0 0 18px; }
+    h1 span { display: inline-block; }
+    .welcome p { color: #aaa6a1; line-height: 1.9; font-size: 14px; margin: 0; }
+    #caption { position: absolute; bottom: 24px; left: 12%; right: 12%; text-align: center; white-space: pre-wrap;
+      font-size: clamp(16px,2.5vw,21px); line-height: 1.6; text-shadow: 0 2px 8px #000,0 0 18px #000; }
+    footer { z-index: 2; padding: 12px 24px 26px; text-align: center; background: #080a0b; }
+    #status { font-size: 13px; color: #c4b7a8; min-height: 20px; margin-bottom: 17px; }
+    .controls { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+    #connect { background: #d7c0a7; color: #1b1713; border: 0; min-width: 126px; }
+    #end { border-color: #b8786860; }
+    .note { margin: 16px auto 0; font-size: 11px; color: #858380; line-height: 1.8; max-width: 520px; }
+    .note a { color: #b5aea5; text-decoration: none; }
+    details { margin-top: 10px; font-size: 11px; color: #858380; }
+    summary { cursor: pointer; } #measure { margin: 8px; }
+    @media(max-width:600px) { header { top: 20px; left: 22px; } footer { padding: 12px 16px 24px; }
+      .controls button { padding: 11px 17px; } #caption { left: 6%; right: 6%; } }
+  </style>
+</head>
+<body>
+<main>
+  <header><div class="name">JOI</div><div class="label">真人视频 · AI 角色</div></header>
+  <section class="stage" aria-label="Joi 真人视频">
+    <video id="face" autoplay playsinline aria-label="Joi 的实时画面"></video>
+    <div class="welcome" id="welcome"><h1><span>留一点时间，</span><span>面对面。</span></h1>
+      <p>你的声音，她的回应。<br>接通后，真人视频会出现在这里。</p></div>
+    <div id="caption" aria-live="polite"></div>
+  </section>
+  <footer>
+    <div id="status" role="status">正在检查视频服务…</div>
+    <div class="controls">
+      <button id="connect" disabled>接通</button>
+      <button id="play" hidden>播放声音与画面</button>
+      <button id="mic" hidden aria-pressed="false">麦克风已开启</button>
+      <button id="interrupt" hidden>等一下</button>
+      <button id="end" hidden>挂断</button>
+    </div>
+    <p class="note">接通会开启麦克风，声音由 Tavus 处理；你的摄像头保持关闭。<br>
+      本轮最多 5 分钟，按现有 Tavus 账户计费。戴耳机交谈效果更好。<br>
+      <a href="/joi?body=vrm">三维身体</a></p>
+    <details><summary>连接详情</summary><div id="measure">尚未观测到本轮视频或音频。</div></details>
+  </footer>
+</main>
+<script src="/node_modules/@daily-co/daily-js/dist/daily.js"></script>
+<script type="module" src="/studio/joi-video.js"></script>
+<script type="module" src="/studio/lib/provider_status.js"></script>
+</body>
+</html>

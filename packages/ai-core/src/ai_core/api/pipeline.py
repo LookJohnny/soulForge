@@ -303,7 +303,7 @@ async def chat(req: ChatRequest, request: Request):
 
     # 11. TTS with PAD-computed parameters (more nuanced than discrete lookup)
     audio_b64 = None
-    if prompt_result.get("voice_id"):
+    if prompt_result.get("voice_id") and not req.text_only:
         ssml_pitch = prompt_result.get("ssml_pitch", 1.0)
         ssml_rate = prompt_result.get("ssml_rate", 1.0)
         ssml_pitch, ssml_rate = emotion_engine.apply_tts_offsets_pad(

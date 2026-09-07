@@ -1443,6 +1443,14 @@ class MemoryService:
             ),
         )
         observed_at = payload.get("observed_at") or datetime.now(UTC)
+        if isinstance(observed_at, str):
+            observed_at = datetime.fromisoformat(observed_at)
+        if not isinstance(observed_at, datetime):
+            raise ValueError("observed_at must be a datetime or ISO timestamp")
+        # The existing raw_event_logs schema stores UTC in TIMESTAMP(3),
+        # without a timezone. asyncpg rejects offset-aware datetime arguments.
+        if observed_at.tzinfo is not None:
+            observed_at = observed_at.astimezone(UTC).replace(tzinfo=None)
 
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
@@ -1517,7 +1525,7 @@ class MemoryService:
 
         async with self.pool.acquire() as conn:
             if layer == "PROFILE":
-                await self._upsert_profile_memory(
+                memory_id = await self._upsert_profile_memory(
                     conn,
                     user_id,
                     character_id,
@@ -1529,7 +1537,7 @@ class MemoryService:
                 )
                 table = "profile_memories"
             elif layer == "RELATIONAL":
-                await self._insert_relational_memory(
+                memory_id = await self._insert_relational_memory(
                     conn,
                     user_id,
                     character_id,

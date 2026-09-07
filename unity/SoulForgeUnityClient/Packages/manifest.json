@@ -1,5 +1,8 @@
 {
   "dependencies": {
+    "com.vrmc.gltf": "https://github.com/vrm-c/UniVRM.git?path=/Packages/UniGLTF#v0.131.2",
+    "com.vrmc.univrm": "https://github.com/vrm-c/UniVRM.git?path=/Packages/VRM#v0.131.2",
+    "com.vrmc.vrm": "https://github.com/vrm-c/UniVRM.git?path=/Packages/VRM10#v0.131.2",
     "com.unity.render-pipelines.universal": "17.5.0",
     "com.unity.test-framework": "1.7.0",
     "com.unity.textmeshpro": "5.0.0",

@@ -4,22 +4,34 @@ WORKDIR /app
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-COPY packages/gateway/pyproject.toml packages/gateway/uv.lock* ./
+COPY pyproject.toml uv.lock ./
+COPY packages/ai-core/pyproject.toml packages/ai-core/pyproject.toml
+COPY packages/gateway/pyproject.toml packages/gateway/pyproject.toml
+COPY packages/soulforge-harness/pyproject.toml packages/soulforge-harness/pyproject.toml
+COPY packages/soulforge-harness/README.md packages/soulforge-harness/LICENSE packages/soulforge-harness/
+COPY packages/soulforge-harness/src packages/soulforge-harness/src
+COPY packages/gateway/src packages/gateway/src
 
-RUN uv sync --no-dev --frozen 2>/dev/null || uv sync --no-dev
-
-COPY packages/gateway/src ./src
+# Gateway's unified Runtime bridge imports Harness too; install it explicitly.
+RUN uv sync --frozen --no-dev --no-editable --package gateway --package soulforge-harness
 
 # ─── Stage 2: Production ─────────────────────────
 FROM python:3.12-slim AS runner
 WORKDIR /app
 
+# opuslib loads libopus at import; speech conversion invokes the ffmpeg binary.
+RUN apt-get update && apt-get install -y --no-install-recommends libopus0 ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /app/src /app/src
+COPY --from=builder /app/packages/gateway/src /app/src
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/app/src"
 ENV PYTHONUNBUFFERED=1
+
+# Import only: do not start websocket listeners or call providers during build.
+RUN python -c "import gateway.main; import soulforge_harness"
 
 EXPOSE 8080
 

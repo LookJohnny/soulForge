@@ -29,10 +29,14 @@ namespace SoulForge.UnityClient
         private Quaternion leftForearmBaseRotation;
         private Quaternion rightForearmBaseRotation;
         private bool basePoseCached;
+        private Animator hostAnimator;
+        private bool hostAnimatorSearched;
+        private float phaseOffset;  // desync sway between characters
 
         private void Awake()
         {
             CacheBasePose();
+            phaseOffset = UnityEngine.Random.Range(0f, 100f);
         }
 
         public void PreviewAction(string actionTemplateId, float elapsed)
@@ -80,16 +84,46 @@ namespace SoulForge.UnityClient
             }
         }
 
-        private void Update()
+        private void LateUpdate()
         {
+            // runs after the Animator so mocap idle and procedural offsets stack
             CacheBasePose();
+            RefreshAnimatedBase();
             ApplyPose(Time.time - actionStartedAt);
+        }
+
+        private void RefreshAnimatedBase()
+        {
+            // With a mocap Animator driving the bones, this frame's animated
+            // pose is the base the offsets ride on. Without one, reading back
+            // would feed our own output into the base, so keep the bind pose.
+            if (!hostAnimatorSearched)
+            {
+                // the animator may live on the model child (two-layer rig) or on
+                // a parent — search both directions
+                hostAnimator = GetComponentInChildren<Animator>();
+                if (hostAnimator == null) hostAnimator = GetComponentInParent<Animator>();
+                hostAnimatorSearched = true;
+            }
+            if (hostAnimator == null || hostAnimator.runtimeAnimatorController == null
+                || !hostAnimator.isActiveAndEnabled)
+            {
+                return;
+            }
+            if (head != null) headBaseRotation = head.localRotation;
+            if (leftUpperArm != null) leftUpperBaseRotation = leftUpperArm.localRotation;
+            if (rightUpperArm != null) rightUpperBaseRotation = rightUpperArm.localRotation;
+            if (leftForearm != null) leftForearmBaseRotation = leftForearm.localRotation;
+            if (rightForearm != null) rightForearmBaseRotation = rightForearm.localRotation;
         }
 
         private void ApplyPose(float t)
         {
-            var pulse = Mathf.Sin(t * 5.5f) * motionScale;
-            var slow = Mathf.Sin(t * 1.7f) * motionScale;
+            // sway runs on a per-character phase so characters never breathe in
+            // sync; t itself stays the true elapsed time of the current action
+            var sway = t + phaseOffset;
+            var pulse = Mathf.Sin(sway * 5.5f) * motionScale;
+            var slow = Mathf.Sin(sway * 1.7f) * motionScale;
 
             bodyRoot.localPosition = bodyBasePosition + new Vector3(0, Mathf.Abs(slow) * 0.012f, 0);
             bodyRoot.localRotation = Quaternion.identity;
@@ -161,7 +195,40 @@ namespace SoulForge.UnityClient
                 SetRotation(rightForearm, rightForearmBaseRotation, new Vector3(-58, 0, 0));
                 Pulse(activityLight, 1.0f + Mathf.Abs(pulse) * 0.08f);
             }
-            else if (IsAction("talk"))
+            else if (IsAction("wave") || IsAction("greet"))
+            {
+                SetRotation(rightUpperArm, rightUpperBaseRotation, new Vector3(18, -14, -108 + slow * 2f));
+                SetRotation(rightForearm, rightForearmBaseRotation, new Vector3(-12, 0, -22 + Mathf.Sin(t * 6.5f) * 18f));
+                SetRotation(head, headBaseRotation, new Vector3(2, -8, 5));
+            }
+            else if (IsAction("think"))
+            {
+                SetRotation(head, headBaseRotation, new Vector3(8, 0, 9 + slow));
+                SetRotation(rightUpperArm, rightUpperBaseRotation, new Vector3(52, -30, -8));
+                SetRotation(rightForearm, rightForearmBaseRotation, new Vector3(-118, 0, 0));
+            }
+            else if (IsAction("celebrate") || IsAction("clap"))
+            {
+                SetRotation(leftUpperArm, leftUpperBaseRotation, new Vector3(96 + pulse * 6, 0, 34));
+                SetRotation(rightUpperArm, rightUpperBaseRotation, new Vector3(96 - pulse * 6, 0, -34));
+                SetRotation(leftForearm, leftForearmBaseRotation, new Vector3(-46 + pulse * 10, 0, 0));
+                SetRotation(rightForearm, rightForearmBaseRotation, new Vector3(-46 - pulse * 10, 0, 0));
+                Pulse(activityLight, 1.0f + Mathf.Abs(pulse) * 0.10f);
+            }
+            else if (IsAction("jump"))
+            {
+                bodyRoot.localPosition = bodyBasePosition + new Vector3(0, Mathf.Abs(Mathf.Sin(t * 4.2f)) * 0.09f, 0);
+                SetRotation(leftUpperArm, leftUpperBaseRotation, new Vector3(40, 0, 30));
+                SetRotation(rightUpperArm, rightUpperBaseRotation, new Vector3(40, 0, -30));
+            }
+            else if (IsAction("stretch"))
+            {
+                SetRotation(leftUpperArm, leftUpperBaseRotation, new Vector3(150, 0, 18));
+                SetRotation(rightUpperArm, rightUpperBaseRotation, new Vector3(150, 0, -18));
+                SetRotation(head, headBaseRotation, new Vector3(-12 + slow * 2, 0, 0));
+                bodyRoot.localRotation = Quaternion.Euler(0, 0, slow * 2);
+            }
+            else if (IsAction("talk") || IsAction("chat"))
             {
                 SetRotation(head, headBaseRotation, new Vector3(slow * 2, pulse * 3, 0));
                 SetRotation(rightUpperArm, rightUpperBaseRotation, new Vector3(26 + pulse * 5, -12, -10));
@@ -184,23 +251,44 @@ namespace SoulForge.UnityClient
                 return;
             }
 
-            activeAction = string.IsNullOrWhiteSpace(behaviorEvent.actionTemplateId) ? "idle" : behaviorEvent.actionTemplateId;
+            var next = string.IsNullOrWhiteSpace(behaviorEvent.actionTemplateId)
+                ? "idle" : behaviorEvent.actionTemplateId;
+            if (next == activeAction)
+            {
+                return;  // same activity continuing: keep sway phase, no visible snap
+            }
+            activeAction = next;
             actionStartedAt = Time.time;
         }
 
         private bool IsAction(string action)
         {
-            return string.Equals(activeAction, action, StringComparison.OrdinalIgnoreCase);
+            // live ActionCommands arrive as "template:step" (e.g. cooking:stir_pan),
+            // replay events as bare names — substring match covers both
+            return activeAction != null
+                && activeAction.IndexOf(action, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        private static void SetRotation(Transform target, Quaternion baseRotation, Vector3 localEulerOffset)
+        private readonly System.Collections.Generic.Dictionary<Transform, Vector3> smoothedOffsets = new();
+
+        private void SetRotation(Transform target, Quaternion baseRotation, Vector3 localEulerOffset)
         {
             if (target == null)
             {
                 return;
             }
 
-            target.localRotation = baseRotation * Quaternion.Euler(localEulerOffset);
+            // damp the OFFSET, not the final rotation: the base is re-anchored
+            // to the mocap pose every frame, so damping the result would cap a
+            // gesture at a fraction of its amplitude. Offsets easing toward
+            // their target gives smooth entry/release at full range.
+            var blend = Application.isPlaying && Time.deltaTime > 0f
+                ? 1f - Mathf.Exp(-12f * Time.deltaTime)
+                : 1f;
+            smoothedOffsets.TryGetValue(target, out var current);
+            current = Vector3.Lerp(current, localEulerOffset, blend);
+            smoothedOffsets[target] = current;
+            target.localRotation = baseRotation * Quaternion.Euler(current);
         }
 
         private static void SetActive(Transform target, bool active)

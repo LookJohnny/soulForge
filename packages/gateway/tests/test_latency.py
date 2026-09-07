@@ -55,3 +55,33 @@ def test_rolling_window():
     snap = tracker.snapshot()
     assert snap["voice_turn"]["turns"] == 5
     assert snap["voice_turn"]["last_turn"]["respond"] == 11.0
+
+
+def test_unified_aliases_keep_missing_audio_distinct_from_measured_zero():
+    tracker = LatencyTracker()
+    assert tracker.snapshot() == {}  # No voice turn is not a zero-latency turn.
+    tracker.record_turn("voice_turn", {"core_decision_ms": 120, "core_first_audio_ms": 0})
+    tracker.record_turn("voice_turn", {"core_decision_ms": 180, "core_first_audio_ms": None})
+    snapshot = tracker.snapshot()["voice_turn"]
+    assert snapshot["stages_ms"]["decision_ms"]["count"] == 2
+    assert snapshot["stages_ms"]["first_audio_ms"] == {
+        "avg": 0.0,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0,
+        "count": 1,
+        "missing_count": 1,
+    }
+    assert "first_audio_ms" not in snapshot["last_turn"]
+    assert snapshot["stages_ms"]["core_first_audio_ms"] == snapshot["stages_ms"]["first_audio_ms"]
+
+
+def test_invalid_measurements_do_not_pollute_percentiles():
+    tracker = LatencyTracker()
+    for bad in (True, False, float("nan"), float("inf"), -1, "12", None):
+        tracker.record_turn("voice_turn", {"core_first_audio_ms": bad})
+    tracker.record_turn("voice_turn", {"core_first_audio_ms": 75})
+    stage = tracker.snapshot()["voice_turn"]["stages_ms"]["first_audio_ms"]
+    assert stage["count"] == 1 and stage["missing_count"] == 7
+    assert stage["p95"] == 75

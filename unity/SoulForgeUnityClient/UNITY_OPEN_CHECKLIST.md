@@ -12,7 +12,7 @@ Verified local editor:
 once through batchmode. Re-run `SoulForge -> Create Apartment Demo Scene` only
 when you want to rebuild the blockout scene from the editor script.
 
-1. Open `/Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient` as a
+1. Open `unity/SoulForgeUnityClient` under your checkout as a
    Unity project.
 2. Let Package Manager restore packages from `Packages/manifest.json`.
 3. Install UniVRM from the official UniVRM release or UPM instructions.
@@ -47,9 +47,9 @@ Optional command-line rebuild:
 ```bash
 "/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/MacOS/Unity" \
   -batchmode -quit \
-  -projectPath "/Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient" \
+  -projectPath "$PWD/unity/SoulForgeUnityClient" \
   -executeMethod SoulForge.UnityClient.Editor.SoulForgeSceneBuilder.CreateApartmentDemoScene \
-  -logFile "/Users/lovelyjoy/Desktop/soulForge/outputs/unity/unity_create_scene_richer_v4.log"
+  -logFile "$PWD/outputs/unity/unity_create_scene_richer_v4.log"
 ```
 
 Optional command-line preview capture:
@@ -57,9 +57,9 @@ Optional command-line preview capture:
 ```bash
 "/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/MacOS/Unity" \
   -batchmode -quit \
-  -projectPath "/Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient" \
+  -projectPath "$PWD/unity/SoulForgeUnityClient" \
   -executeMethod SoulForge.UnityClient.Editor.SoulForgeSceneBuilder.CaptureApartmentPreview \
-  -logFile "/Users/lovelyjoy/Desktop/soulForge/outputs/unity/unity_capture_preview_richer_v3.log"
+  -logFile "$PWD/outputs/unity/unity_capture_preview_richer_v3.log"
 ```
 
 Optional Recorder-free demo frame capture:
@@ -67,9 +67,9 @@ Optional Recorder-free demo frame capture:
 ```bash
 "/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/MacOS/Unity" \
   -batchmode -quit \
-  -projectPath "/Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient" \
+  -projectPath "$PWD/unity/SoulForgeUnityClient" \
   -executeMethod SoulForge.UnityClient.Editor.SoulForgeSceneBuilder.CaptureApartmentDemoFrames \
-  -logFile "/Users/lovelyjoy/Desktop/soulForge/outputs/unity/unity_capture_demo_frames_v3.log"
+  -logFile "$PWD/outputs/unity/unity_capture_demo_frames_v3.log"
 
 ffmpeg -y -framerate 12 \
   -i outputs/unity/apartment_demo_frames/frame_%04d.png \

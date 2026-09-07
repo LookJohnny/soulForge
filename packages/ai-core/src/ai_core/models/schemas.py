@@ -82,6 +82,8 @@ class ChatRequest(BaseModel):
     # writes, no relationship points, no touch consumption.
     idle_mode: bool = False
     idle_state: str = "bored"  # bored | sleepy
+    # external-face bodies (Tavus etc.) do their own TTS — skip ours
+    text_only: bool = False
     # Caller can decode chunked audio (audio_chunk/audio_end SSE events) for
     # lower time-to-first-audio. Defaults off so non-streaming consumers keep
     # receiving whole-clip-per-sentence audio.

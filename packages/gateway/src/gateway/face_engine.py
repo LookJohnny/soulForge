@@ -178,6 +178,7 @@ class PadFaceEngine:
         # 说完话，脸回到当前情绪该有的样子（同样不能阻塞调用方）
         self._last_key = None
         threading.Thread(target=self._express, kwargs={"force": True}, daemon=True).start()
+
     def feed_audio(self, secs):
         """网关刚向设备排入 secs 秒真实音频——嘴部窗口精确延长这么多。
 

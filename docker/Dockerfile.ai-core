@@ -5,14 +5,18 @@ WORKDIR /app
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Copy dependency files
-COPY packages/ai-core/pyproject.toml packages/ai-core/uv.lock* ./
+# Preserve the workspace graph: ai-core depends on the local Harness package.
+COPY pyproject.toml uv.lock ./
+COPY packages/ai-core/pyproject.toml packages/ai-core/pyproject.toml
+COPY packages/gateway/pyproject.toml packages/gateway/pyproject.toml
+COPY packages/soulforge-harness/pyproject.toml packages/soulforge-harness/pyproject.toml
+COPY packages/soulforge-harness/README.md packages/soulforge-harness/LICENSE packages/soulforge-harness/
+COPY packages/soulforge-harness/src packages/soulforge-harness/src
+COPY packages/ai-core/src packages/ai-core/src
 
-# Install dependencies
-RUN uv sync --no-dev --frozen 2>/dev/null || uv sync --no-dev
-
-# Copy source
-COPY packages/ai-core/src ./src
+# Non-editable wheels keep Harness usable after the builder source is discarded.
+# Never fall back to resolving fresh versions when the committed lock is missing.
+RUN uv sync --frozen --no-dev --no-editable --package ai-core --package soulforge-harness
 
 # ─── Stage 2: Production ─────────────────────────
 FROM python:3.12-slim AS runner
@@ -20,14 +24,14 @@ WORKDIR /app
 
 # Copy virtual env and source from builder
 COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /app/src /app/src
-
-# Copy templates
-COPY packages/ai-core/src/ai_core/templates /app/src/ai_core/templates
+COPY --from=builder /app/packages/ai-core/src /app/src
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/app/src"
 ENV PYTHONUNBUFFERED=1
+
+# Import only: no ASGI lifespan, database connection or provider call.
+RUN python -c "import ai_core.main; import soulforge_harness"
 
 EXPOSE 8100
 

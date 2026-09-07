@@ -19,16 +19,21 @@ class Settings(BaseSettings):
     # Production DB character ids are UUIDs, while Runtime agent ids are names
     # such as "kai". Pin unsolicited perception speech to its physical device.
     character_runtime_voice_device_id: str = ""
-    character_runtime_timeout_s: float = 12.0
+    character_runtime_timeout_s: float = 35.0
 
     # Service token for ai-core authentication
     service_token: str = ""
+    soulforge_brand_id: str = ""
+    soulforge_user_id: str = ""
 
     # DashScope (for streaming ASR in gateway)
     dashscope_api_key: str = ""
 
     # Gateway
     gateway_port: int = 8080
+    # Server-to-server HTTP access (external faces and the local Studio proxy).
+    # Empty disables protected endpoints, including in development.
+    gateway_api_token: str = ""
     output_audio_gain: float = 1.0
     # ESP8266 servo face driven from the gateway (host/IP; empty disables).
     # Used when the network topology lets the gateway reach the face but the

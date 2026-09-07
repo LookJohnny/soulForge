@@ -1,6 +1,6 @@
 # SoulForge Unity Visual QA
 
-Source visual: `/Users/lovelyjoy/Desktop/ig_0aaa0f42f4538644016a4870f7c2f48191a34205b9139ae4aa.png`
+Source visual: a local reference image from the original review; not distributed with this repository.
 
 Latest implementation:
 - Preview: `outputs/unity/soulforge_unity_apartment_preview.png`

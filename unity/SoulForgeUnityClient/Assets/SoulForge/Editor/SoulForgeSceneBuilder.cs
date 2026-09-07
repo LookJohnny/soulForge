@@ -62,6 +62,754 @@ namespace SoulForge.UnityClient.Editor
             Selection.activeObject = bridge.gameObject;
         }
 
+        /// <summary>
+        /// Wires SoulForgeProtocolClient into the apartment scene for a LIVE
+        /// run against the Runtime Server (ws://127.0.0.1:8765/body) and clears
+        /// the replay asset so the bridge only carries live events. Re-run
+        /// CreateApartmentDemoScene to get the offline replay demo back.
+        /// </summary>
+        [MenuItem("SoulForge/Wire Protocol Client (Live Mode)")]
+        public static void WireProtocolClientLive()
+        {
+            var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            var bridge = Object.FindFirstObjectByType<SoulForgeBridge>();
+            var hud = Object.FindFirstObjectByType<SoulForgeDialogueHud>();
+            if (bridge == null)
+            {
+                Debug.LogError("[SoulForge] no SoulForgeBridge in scene — run Create Apartment Demo Scene first");
+                return;
+            }
+
+            var client = Object.FindFirstObjectByType<SoulForgeProtocolClient>();
+            if (client == null)
+            {
+                client = new GameObject("SoulForgeProtocolClient").AddComponent<SoulForgeProtocolClient>();
+            }
+            SetObject(client, "bridge", bridge);
+            SetObject(client, "dialogueHud", hud);
+            SetObject(bridge, "replayJson", null);
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[SoulForge] protocol client wired (live mode): bridge=yes, hud={(hud != null ? "yes" : "no")}, replay cleared");
+        }
+
+        /// <summary>
+        /// Replaces the blocky Kenney stand-ins with the project's VRM avatars
+        /// (Assets/SoulForge/Models/luna.vrm + kai.vrm) wired to the LIVE agent
+        /// ids the runtime server actually drives. Body motion reuses the
+        /// procedural animator on humanoid bones; SoulForgeVrmPresence adds
+        /// blinking, expressions and speech mouth. Requires UniVRM (fetched via
+        /// Packages/manifest.json) to have finished importing the .vrm files.
+        /// </summary>
+        [MenuItem("SoulForge/Upgrade Characters To VRM (Live)")]
+        public static void UpgradeCharactersToVrmLive()
+        {
+            var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+
+            foreach (var legacy in new[] { "Astra-F", "Mason-M", "Hex-01" })
+            {
+                var stale = GameObject.Find(legacy);
+                if (stale != null) stale.SetActive(false);
+            }
+
+            var bridge = Object.FindFirstObjectByType<SoulForgeBridge>();
+            if (bridge == null)
+            {
+                Debug.LogError("[SoulForge] no SoulForgeBridge in scene — run Create Apartment Demo Scene first");
+                return;
+            }
+
+            var placements = new (string agentId, string model, Vector3 position, float yaw)[]
+            {
+                // orientation-normalized mocap makes body forward == root forward;
+                // camera sits at -Z, so point the roots toward it
+                ("luna", "Assets/SoulForge/Models/luna", new Vector3(0.35f, 0f, 0.30f), 196f),
+                ("kai", "Assets/SoulForge/Models/kai", new Vector3(-1.55f, 0f, -0.35f), 168f),
+            };
+
+            foreach (var (agentId, modelPath, position, yaw) in placements)
+            {
+                BuildVrmCharacter(agentId, modelPath, position, yaw, bridge);
+            }
+
+            SetAgentIds(new[] { "luna", "kai", "pipo" });
+            PolishLighting();
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            AssetDatabase.SaveAssets();
+            Debug.Log("[SoulForge] VRM digital humans wired for live agents luna + kai (Kenney stand-ins disabled)");
+        }
+
+        private static GameObject BuildVrmCharacter(
+            string agentId, string modelPath, Vector3 position, float yaw, SoulForgeBridge bridge)
+        {
+            // UniVRM's VRM0 postprocessor materializes <name>.prefab next to
+            // the .vrm; a .vrm imported before the package compiled never got
+            // one, so force a reimport to run the postprocessor now.
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath + ".prefab");
+            if (prefab == null)
+            {
+                AssetDatabase.ImportAsset(modelPath + ".vrm", ImportAssetOptions.ForceUpdate);
+                prefab = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath + ".prefab");
+            }
+            if (prefab == null)
+            {
+                Debug.LogError($"[SoulForge] {modelPath}.prefab still missing after reimport — check the Console for UniVRM import errors");
+                return null;
+            }
+
+            var rootName = char.ToUpperInvariant(agentId[0]) + agentId.Substring(1);
+            var existing = GameObject.Find(rootName);
+            if (existing != null) Object.DestroyImmediate(existing);
+
+            // two layers: the root owns facing (scene yaw + facing corrector),
+            // the child owns procedural body sway — the animator used to zero
+            // the root's rotation every frame, erasing any facing we set
+            var root = new GameObject(rootName);
+            root.transform.SetPositionAndRotation(position, Quaternion.Euler(0f, yaw, 0f));
+            var avatar = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            avatar.name = rootName + "_Model";
+            avatar.transform.SetParent(root.transform, false);
+
+            var animator = avatar.GetComponentInChildren<Animator>();
+            var controller = root.AddComponent<SoulForgeAgentController>();
+            SetString(controller, "agentId", agentId);
+            SetObject(controller, "bridge", bridge);
+            SetObject(controller, "animator", animator);
+
+            var procedural = root.AddComponent<SoulForgeProceduralAgentAnimator>();
+            SetString(procedural, "agentId", agentId);
+            SetObject(procedural, "bridge", bridge);
+            SetObject(procedural, "bodyRoot", avatar.transform);
+            if (animator != null && animator.isHuman)
+            {
+                SetObject(procedural, "head", animator.GetBoneTransform(HumanBodyBones.Head));
+                SetObject(procedural, "leftUpperArm", animator.GetBoneTransform(HumanBodyBones.LeftUpperArm));
+                SetObject(procedural, "rightUpperArm", animator.GetBoneTransform(HumanBodyBones.RightUpperArm));
+                SetObject(procedural, "leftForearm", animator.GetBoneTransform(HumanBodyBones.LeftLowerArm));
+                SetObject(procedural, "rightForearm", animator.GetBoneTransform(HumanBodyBones.RightLowerArm));
+            }
+            SetObject(controller, "proceduralAnimator", procedural);
+
+            var presence = root.AddComponent<SoulForgeVrmPresence>();
+            SetString(presence, "agentId", agentId);
+            SetObject(presence, "bridge", bridge);
+
+            var gestures = root.AddComponent<SoulForgeGesturePlayer>();
+            SetString(gestures, "agentId", agentId);
+            SetObject(gestures, "bridge", bridge);
+            return root;
+        }
+
+        // Mixamo file name → step name (loose contains matching, lower-case).
+        // Order matters: more specific needles first.
+        private static readonly (string needle, string step, bool loop)[] GestureMap =
+        {
+            ("crouching to standing", "stand_up", false),
+            ("crouch", "crouch", true),
+            ("pointing", "point_at", false),
+            ("bashful", "flirt", false),
+            ("bellydance", "dance_belly", true),
+            ("blow", "blow_kiss", false),
+            ("thinking", "think_pose", false),
+            ("looking around", "look_around_big", false),
+            ("excited", "excited", false),
+            ("rumba", "dance_rumba", true),
+            ("samba", "dance", true),
+            ("sad idle", "sad_idle", true),
+            ("turning", "walk_turn", false),
+            ("walking", "walk_loop", true),
+            ("greeting", "greeting", false),
+            ("floating", "idle_alt", true),
+        };
+
+        /// <summary>
+        /// Imports every FBX in Animations/Mixamo as humanoid, names/loops the
+        /// clips per GestureMap, builds SoulForgeGestures.controller (idle base
+        /// + one state per gesture) and assigns it to every character in the
+        /// scene. Run after dropping Mixamo downloads into the folder; safe to
+        /// re-run when more clips arrive.
+        /// </summary>
+        [MenuItem("SoulForge/Build Gesture Library (Mixamo)")]
+        public static void BuildGestureLibrary()
+        {
+            var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            var folder = "Assets/SoulForge/Animations/Mixamo";
+            var guids = AssetDatabase.FindAssets("t:Model", new[] { folder });
+            if (guids.Length == 0)
+            {
+                Debug.LogError($"[SoulForge] no FBX files in {folder} — download the Mixamo pack first");
+                return;
+            }
+
+            var idleClip = AssetDatabase.LoadAssetAtPath<AnimationClip>(
+                "Assets/SoulForge/Animations/SoulForgeIdleLoop.anim");
+            var controllerPath = "Assets/SoulForge/Animations/SoulForgeGestures.controller";
+            AssetDatabase.DeleteAsset(controllerPath);
+            var controller = UnityEditor.Animations.AnimatorController.CreateAnimatorControllerAtPath(controllerPath);
+            var stateMachine = controller.layers[0].stateMachine;
+            var idleState = stateMachine.AddState("idle");
+            idleState.motion = idleClip;
+            stateMachine.defaultState = idleState;
+
+            var built = 0;
+            foreach (var guid in guids)
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                var lower = System.IO.Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
+                var step = lower.Replace(" ", "_");
+                var loop = false;
+                foreach (var (needle, mapped, looped) in GestureMap)
+                {
+                    if (lower.Contains(needle)) { step = mapped; loop = looped; break; }
+                }
+
+                var importer = AssetImporter.GetAtPath(path) as ModelImporter;
+                if (importer == null) continue;
+                if (importer.animationType != ModelImporterAnimationType.Human)
+                {
+                    importer.animationType = ModelImporterAnimationType.Human;
+                }
+                var clips = importer.defaultClipAnimations;
+                for (var i = 0; i < clips.Length; i++)
+                {
+                    clips[i].name = step;
+                    clips[i].loopTime = loop;
+                    clips[i].lockRootRotation = true;
+                    clips[i].lockRootPositionXZ = true;
+                    clips[i].keepOriginalOrientation = false;
+                    clips[i].keepOriginalPositionXZ = false;
+                }
+                importer.clipAnimations = clips;
+                importer.SaveAndReimport();
+
+                AnimationClip gestureClip = null;
+                foreach (var asset in AssetDatabase.LoadAllAssetsAtPath(path))
+                {
+                    if (asset is AnimationClip clip && !clip.name.StartsWith("__preview")) { gestureClip = clip; break; }
+                }
+                if (gestureClip == null) { Debug.LogWarning($"[SoulForge] no clip in {path}"); continue; }
+                var state = stateMachine.AddState(step);
+                state.motion = gestureClip;
+                built++;
+                Debug.Log($"[SoulForge] gesture '{step}' ← {System.IO.Path.GetFileName(path)}");
+            }
+
+            foreach (var rootName in new[] { "Joi", "Luna", "Kai" })
+            {
+                var avatar = GameObject.Find(rootName);
+                var animator = avatar != null ? avatar.GetComponentInChildren<Animator>() : null;
+                if (animator != null)
+                {
+                    animator.runtimeAnimatorController = controller;
+                    animator.applyRootMotion = false;
+                }
+            }
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[SoulForge] gesture library built: {built} gestures + idle base, controller assigned");
+        }
+
+        private static void SetAgentIds(string[] agentIds)
+        {
+            var client = Object.FindFirstObjectByType<SoulForgeProtocolClient>();
+            if (client == null) return;
+            var serialized = new SerializedObject(client);
+            var property = serialized.FindProperty("agentIds");
+            property.arraySize = agentIds.Length;
+            for (var i = 0; i < agentIds.Length; i++)
+            {
+                property.GetArrayElementAtIndex(i).stringValue = agentIds[i];
+            }
+            serialized.ApplyModifiedProperties();
+        }
+
+        /// <summary>
+        /// Joi mode: one holographic companion, alone with you. Hides the trio,
+        /// builds Joi near the camera in hologram form, dims the room into a
+        /// neon dusk, and points the runtime at the `joi` persona.
+        /// </summary>
+        [MenuItem("SoulForge/Build Joi Mode")]
+        public static void BuildJoiMode()
+        {
+            var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            var bridge = Object.FindFirstObjectByType<SoulForgeBridge>();
+            if (bridge == null)
+            {
+                Debug.LogError("[SoulForge] no SoulForgeBridge in scene — run Create Apartment Demo Scene first");
+                return;
+            }
+
+            foreach (var other in new[] { "Astra-F", "Mason-M", "Hex-01", "Luna", "Kai" })
+            {
+                var stale = GameObject.Find(other);
+                if (stale != null) stale.SetActive(false);
+            }
+
+            var root = BuildVrmCharacter(
+                "joi", "Assets/SoulForge/Models/joi", new Vector3(-0.35f, 0f, -0.9f), 190f, bridge);
+            if (root == null) return;
+
+            var hologram = root.AddComponent<SoulForgeHologramLook>();
+            SetBool(hologram, "startActive", true);
+
+            SetAgentIds(new[] { "joi" });
+            JoiLighting();
+            ApplyCinematicGrade();
+            ApplyMocapAndLookAt(new[] { "Joi" });
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            AssetDatabase.SaveAssets();
+            Debug.Log("[SoulForge] Joi mode built: one hologram companion, agent 'joi', neon dusk. Re-run Upgrade Characters To VRM (Live) to get the trio back.");
+        }
+
+        /// <summary>
+        /// Film-grade pass on the existing Cinematic Post Volume: ACES, shallow
+        /// depth of field on Joi's mark, light film grain, bloom pushed into a
+        /// glow, magenta-teal balance. Re-runnable.
+        /// </summary>
+        [MenuItem("SoulForge/Cinematic Grade (Joi)")]
+        public static void CinematicGradeMenu()
+        {
+            var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            ApplyCinematicGrade();
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            AssetDatabase.SaveAssets();
+        }
+
+        private static void ApplyCinematicGrade()
+        {
+            var volumeObject = GameObject.Find("Cinematic Post Volume");
+            if (volumeObject == null || !volumeObject.TryGetComponent<Volume>(out var volume)
+                || volume.profile == null)
+            {
+                Debug.LogError("[SoulForge] Cinematic Post Volume missing — run Create Apartment Demo Scene first");
+                return;
+            }
+            var profile = volume.profile;
+
+            T GetOrAdd<T>() where T : VolumeComponent
+            {
+                if (!profile.TryGet<T>(out var component)) component = profile.Add<T>(true);
+                return component;
+            }
+
+            var bloom = GetOrAdd<Bloom>();
+            bloom.threshold.Override(0.55f);
+            bloom.intensity.Override(1.15f);
+            bloom.scatter.Override(0.72f);
+
+            var tonemapping = GetOrAdd<Tonemapping>();
+            tonemapping.mode.Override(TonemappingMode.ACES);
+
+            var depthOfField = GetOrAdd<DepthOfField>();
+            depthOfField.mode.Override(DepthOfFieldMode.Bokeh);
+            depthOfField.focusDistance.Override(2.8f);
+            depthOfField.aperture.Override(5.6f);
+            depthOfField.focalLength.Override(50f);
+
+            var grain = GetOrAdd<FilmGrain>();
+            grain.type.Override(FilmGrainLookup.Thin1);
+            grain.intensity.Override(0.22f);
+
+            var colorAdjust = GetOrAdd<ColorAdjustments>();
+            colorAdjust.postExposure.Override(0.15f);
+            colorAdjust.contrast.Override(20f);
+            colorAdjust.saturation.Override(6f);
+            colorAdjust.colorFilter.Override(new Color(0.98f, 0.92f, 1.0f));
+
+            var whiteBalance = GetOrAdd<WhiteBalance>();
+            whiteBalance.temperature.Override(-6f);
+            whiteBalance.tint.Override(10f);
+
+            Debug.Log("[SoulForge] cinematic grade applied: ACES + DoF + grain + glow bloom");
+        }
+
+        /// <summary>
+        /// The movie set: a rainy neon night city outside the window — building
+        /// silhouettes with lit window panels, magenta/cyan neon signs, a rain
+        /// curtain, exponential night fog, warm domestic lights killed so the
+        /// city glow and Joi's own light own the room. Deterministic (seeded),
+        /// safe to re-run.
+        /// </summary>
+        [MenuItem("SoulForge/Build Night City (Joi)")]
+        public static void BuildNightCity()
+        {
+            var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            var previous = GameObject.Find("NightCity");
+            if (previous != null) Object.DestroyImmediate(previous);
+            var city = new GameObject("NightCity").transform;
+
+            // -- night atmosphere
+            RenderSettings.skybox = null;
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+            RenderSettings.ambientLight = new Color(0.07f, 0.09f, 0.15f);
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.Exponential;
+            RenderSettings.fogColor = new Color(0.03f, 0.045f, 0.09f);
+            RenderSettings.fogDensity = 0.04f;
+
+            // -- relight: kill the warm domestic mood, let the city spill in
+            foreach (var light in Object.FindObjectsByType<Light>(FindObjectsSortMode.None))
+            {
+                if (light.name.Contains("Warm") || light.name.Contains("Candle"))
+                    light.intensity *= 0.12f;
+                else if (light.name == "Window Cool Fill")
+                {
+                    light.intensity = 2.8f;
+                    light.color = new Color(0.45f, 0.60f, 1.0f);
+                }
+                else if (light.name == "Directional Light")
+                    light.intensity = 0.18f;
+            }
+
+            Material Unlit(Color color, float boost)
+            {
+                var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                material.SetColor("_BaseColor", Color.black);
+                material.EnableKeyword("_EMISSION");
+                material.SetColor("_EmissionColor", color * boost);
+                return material;
+            }
+            var darkTower = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            darkTower.SetColor("_BaseColor", new Color(0.02f, 0.025f, 0.04f));
+            darkTower.SetFloat("_Smoothness", 0.35f);
+
+            GameObject Box(string name, Vector3 position, Vector3 size, Material material, Transform parent)
+            {
+                var box = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                box.name = name;
+                Object.DestroyImmediate(box.GetComponent<Collider>());
+                box.transform.SetParent(parent, false);
+                box.transform.localPosition = position;
+                box.transform.localScale = size;
+                box.GetComponent<Renderer>().sharedMaterial = material;
+                return box;
+            }
+
+            // -- skyline silhouettes with lit panels
+            Random.InitState(2049);
+            var panelColors = new[]
+            {
+                new Color(0.9f, 0.6f, 0.25f),   // sodium
+                new Color(0.35f, 0.55f, 1.0f),  // office blue
+                new Color(0.75f, 0.85f, 1.0f),  // cold white
+            };
+            for (var i = 0; i < 46; i++)
+            {
+                var x = Random.Range(-7f, 10f);
+                var z = Random.Range(4.5f, 9.5f);
+                var height = Random.Range(1.8f, 7.5f);
+                var width = Random.Range(0.5f, 1.7f);
+                Box($"Tower {i}", new Vector3(x, height / 2f - 0.4f, z),
+                    new Vector3(width, height, width * 0.8f), darkTower, city);
+                var panel = Box($"Tower {i} Windows",
+                    new Vector3(x, height * Random.Range(0.35f, 0.6f), z - width * 0.41f),
+                    new Vector3(width * 0.82f, height * Random.Range(0.5f, 0.8f), 0.02f),
+                    Unlit(panelColors[Random.Range(0, panelColors.Length)],
+                        Random.Range(0.35f, 0.9f)), city);
+                panel.name = $"Tower {i} Windows";
+            }
+
+            // -- neon signs (the pink glow that owns the shot)
+            var neonColors = new[]
+            {
+                new Color(1.0f, 0.18f, 0.57f), new Color(0.16f, 0.84f, 1.0f),
+                new Color(0.86f, 0.35f, 1.0f), new Color(1.0f, 0.42f, 0.30f),
+            };
+            for (var i = 0; i < 7; i++)
+            {
+                Box($"Neon {i}",
+                    new Vector3(Random.Range(-2.5f, 8f), Random.Range(1.0f, 4.6f), Random.Range(4.2f, 7.5f)),
+                    new Vector3(Random.Range(0.5f, 2.4f), Random.Range(0.22f, 0.8f), 0.03f),
+                    Unlit(neonColors[i % neonColors.Length], Random.Range(2.5f, 5f)), city);
+            }
+            // sky glow backdrop
+            Box("Sky Glow", new Vector3(1.5f, 4.5f, 10.5f), new Vector3(30f, 12f, 0.05f),
+                Unlit(new Color(0.10f, 0.08f, 0.22f), 0.5f), city);
+
+            // -- rain curtain outside the window
+            var rainObject = new GameObject("Rain");
+            rainObject.transform.SetParent(city, false);
+            rainObject.transform.localPosition = new Vector3(1.55f, 5.5f, 3.6f);
+            var rain = rainObject.AddComponent<ParticleSystem>();
+            var main = rain.main;
+            main.startLifetime = 1.1f;
+            main.startSpeed = 0f;
+            main.startSize = 0.02f;
+            main.startColor = new Color(0.62f, 0.72f, 0.92f, 0.32f);
+            main.maxParticles = 3000;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            var emission = rain.emission;
+            emission.rateOverTime = 700f;
+            var shape = rain.shape;
+            shape.shapeType = ParticleSystemShapeType.Box;
+            shape.scale = new Vector3(9f, 0.1f, 3.5f);
+            var velocity = rain.velocityOverLifetime;
+            velocity.enabled = true;
+            velocity.y = new ParticleSystem.MinMaxCurve(-13f, -16f);
+            var renderer = rainObject.GetComponent<ParticleSystemRenderer>();
+            renderer.renderMode = ParticleSystemRenderMode.Stretch;
+            renderer.velocityScale = 0.045f;
+            var rainMaterial = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
+            rainMaterial.SetColor("_BaseColor", new Color(0.62f, 0.72f, 0.92f, 0.32f));
+            rainMaterial.SetFloat("_Surface", 1f);
+            rainMaterial.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            rainMaterial.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            renderer.sharedMaterial = rainMaterial;
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            AssetDatabase.SaveAssets();
+            Debug.Log("[SoulForge] night city built: skyline + neon + rain + night fog, warm lights dimmed");
+        }
+
+        private static void JoiLighting()
+        {
+            var key = GameObject.Find("Directional Light");
+            if (key != null && key.TryGetComponent<Light>(out var keyLight))
+            {
+                keyLight.color = new Color(0.62f, 0.72f, 1.0f);
+                keyLight.intensity = 0.55f;
+                keyLight.shadows = LightShadows.Soft;
+            }
+            var fill = GameObject.Find("SoulForge Fill Light");
+            if (fill != null && fill.TryGetComponent<Light>(out var fillLight))
+            {
+                fillLight.color = new Color(1.0f, 0.45f, 0.75f);  // neon magenta bounce
+                fillLight.intensity = 0.30f;
+            }
+        }
+
+        private static void SetBool(Object target, string property, bool value)
+        {
+            var serialized = new SerializedObject(target);
+            serialized.FindProperty(property).boolValue = value;
+            serialized.ApplyModifiedProperties();
+        }
+
+        /// <summary>
+        /// Second polish pass: loop the repo's mocap idle (.vrma via UniVRM 10)
+        /// on both avatars — the procedural animator layers gestures on top —
+        /// and point VRM eye look-at at the main camera. Safe to re-run.
+        /// </summary>
+        [MenuItem("SoulForge/Polish: Mocap Idle + Look-At")]
+        public static void PolishMocapIdleAndLookAt()
+        {
+            var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            ApplyMocapAndLookAt(new[] { "Luna", "Kai" });
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            AssetDatabase.SaveAssets();
+        }
+
+        private static void ApplyMocapAndLookAt(string[] rootNames)
+        {
+            // reuse an already-baked controller so cross-mode runs never orphan
+            // another character's reference
+            var existingController = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(
+                "Assets/SoulForge/Animations/SoulForgeIdle.controller");
+            if (existingController != null)
+            {
+                AssignMocapAndLookAt(rootNames, existingController);
+                return;
+            }
+
+            // a .vrma imported before the VRM10 package compiled sits on the
+            // DefaultImporter with no clip — force a reimport to hand it to
+            // VrmaScriptedImporter first
+            var idle = LoadVrmaClip("Assets/SoulForge/Animations/idle.vrma");
+            if (idle == null)
+            {
+                AssetDatabase.ImportAsset("Assets/SoulForge/Animations/idle.vrma", ImportAssetOptions.ForceUpdate);
+                idle = LoadVrmaClip("Assets/SoulForge/Animations/idle.vrma");
+            }
+
+            RuntimeAnimatorController controller = null;
+            if (idle == null)
+            {
+                Debug.LogError("[SoulForge] idle.vrma has no AnimationClip yet — wait for the VRM10 package import, then run this again");
+            }
+            else
+            {
+                // the .vrma clip animates its own skeleton with generic curves;
+                // bake it through HumanPoseHandler into muscle curves so it
+                // retargets onto any humanoid avatar (our VRM0 models included)
+                var loop = idle.isHumanMotion
+                    ? Object.Instantiate(idle)
+                    : BakeHumanoidClip("Assets/SoulForge/Animations/idle.vrma", idle);
+                if (loop == null)
+                {
+                    Debug.LogWarning("[SoulForge] could not bake idle.vrma to humanoid — keeping procedural idle");
+                }
+                else
+                {
+                    loop.name = "SoulForgeIdleLoop";
+                    var settings = AnimationUtility.GetAnimationClipSettings(loop);
+                    settings.loopTime = true;
+                    // normalize the mocap's authored facing/position into the pose,
+                    // so the character faces exactly where its scene root points —
+                    // web-recorded VRMAs otherwise spin the avatar to their own axis
+                    settings.loopBlendOrientation = true;
+                    settings.keepOriginalOrientation = false;
+                    settings.loopBlendPositionXZ = true;
+                    settings.loopBlendPositionY = true;
+                    AnimationUtility.SetAnimationClipSettings(loop, settings);
+                    AssetDatabase.DeleteAsset("Assets/SoulForge/Animations/SoulForgeIdleLoop.anim");
+                    AssetDatabase.DeleteAsset("Assets/SoulForge/Animations/SoulForgeIdle.controller");
+                    AssetDatabase.CreateAsset(loop, "Assets/SoulForge/Animations/SoulForgeIdleLoop.anim");
+                    controller = UnityEditor.Animations.AnimatorController
+                        .CreateAnimatorControllerAtPathWithClip(
+                            "Assets/SoulForge/Animations/SoulForgeIdle.controller", loop);
+                }
+            }
+
+            AssignMocapAndLookAt(rootNames, controller);
+        }
+
+        private static void AssignMocapAndLookAt(string[] rootNames, RuntimeAnimatorController controller)
+        {
+            var camera = Camera.main != null ? Camera.main.transform : null;
+            foreach (var rootName in rootNames)
+            {
+                var avatar = GameObject.Find(rootName);
+                if (avatar == null)
+                {
+                    Debug.LogError($"[SoulForge] {rootName} not in scene — build the character first");
+                    continue;
+                }
+                var animator = avatar.GetComponentInChildren<Animator>();
+                if (controller != null && animator != null)
+                {
+                    animator.runtimeAnimatorController = controller;
+                    animator.applyRootMotion = false;
+                }
+                var lookAt = avatar.GetComponentInChildren<VRM.VRMLookAtHead>();
+                if (lookAt != null && camera != null)
+                {
+                    lookAt.Target = camera;
+                }
+            }
+            Debug.Log($"[SoulForge] polish pass done: mocap idle={(controller != null ? "on" : "skipped")}, look-at=camera");
+        }
+
+        private static AnimationClip LoadVrmaClip(string path)
+        {
+            foreach (var asset in AssetDatabase.LoadAllAssetsAtPath(path))
+            {
+                if (asset is AnimationClip clip) return clip;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Samples a generic .vrma clip on its own imported rig (which UniVRM
+        /// gives a humanoid Avatar) and rewrites it as muscle + root curves —
+        /// a true humanoid clip that retargets onto any humanoid character.
+        /// </summary>
+        private static AnimationClip BakeHumanoidClip(string vrmaPath, AnimationClip source)
+        {
+            var mainAsset = AssetDatabase.LoadMainAssetAtPath(vrmaPath) as GameObject;
+            if (mainAsset == null) return null;
+            var rig = (GameObject)Object.Instantiate(mainAsset);
+            try
+            {
+                var animator = rig.GetComponent<Animator>();
+                if (animator == null || animator.avatar == null || !animator.avatar.isHuman)
+                {
+                    return null;
+                }
+                var handler = new HumanPoseHandler(animator.avatar, rig.transform);
+                var pose = new HumanPose();
+                var muscleCount = HumanTrait.MuscleCount;
+                var muscles = new AnimationCurve[muscleCount];
+                for (var i = 0; i < muscleCount; i++) muscles[i] = new AnimationCurve();
+                var rootT = new[] { new AnimationCurve(), new AnimationCurve(), new AnimationCurve() };
+                var rootQ = new[] { new AnimationCurve(), new AnimationCurve(), new AnimationCurve(), new AnimationCurve() };
+
+                const float fps = 30f;
+                for (var t = 0f; t <= source.length + 0.0001f; t += 1f / fps)
+                {
+                    source.SampleAnimation(rig, t);
+                    handler.GetHumanPose(ref pose);
+                    for (var i = 0; i < muscleCount; i++) muscles[i].AddKey(t, pose.muscles[i]);
+                    rootT[0].AddKey(t, pose.bodyPosition.x);
+                    rootT[1].AddKey(t, pose.bodyPosition.y);
+                    rootT[2].AddKey(t, pose.bodyPosition.z);
+                    rootQ[0].AddKey(t, pose.bodyRotation.x);
+                    rootQ[1].AddKey(t, pose.bodyRotation.y);
+                    rootQ[2].AddKey(t, pose.bodyRotation.z);
+                    rootQ[3].AddKey(t, pose.bodyRotation.w);
+                }
+
+                var baked = new AnimationClip { frameRate = fps };
+                for (var i = 0; i < muscleCount; i++)
+                {
+                    baked.SetCurve("", typeof(Animator), MuscleProperty(i), muscles[i]);
+                }
+                var axes = new[] { "x", "y", "z", "w" };
+                for (var i = 0; i < 3; i++) baked.SetCurve("", typeof(Animator), $"RootT.{axes[i]}", rootT[i]);
+                for (var i = 0; i < 4; i++) baked.SetCurve("", typeof(Animator), $"RootQ.{axes[i]}", rootQ[i]);
+                return baked;
+            }
+            finally
+            {
+                Object.DestroyImmediate(rig);
+            }
+        }
+
+        /// <summary>Finger muscles serialize under a different property naming
+        /// than HumanTrait.MuscleName reports ("Left Thumb 1 Stretched" is the
+        /// curve "LeftHand.Thumb.1 Stretched").</summary>
+        private static string MuscleProperty(int index)
+        {
+            var name = HumanTrait.MuscleName[index];
+            foreach (var side in new[] { "Left", "Right" })
+            {
+                foreach (var finger in new[] { "Thumb", "Index", "Middle", "Ring", "Little" })
+                {
+                    for (var segment = 1; segment <= 3; segment++)
+                    {
+                        if (name == $"{side} {finger} {segment} Stretched")
+                            return $"{side}Hand.{finger}.{segment} Stretched";
+                    }
+                    if (name == $"{side} {finger} Spread")
+                        return $"{side}Hand.{finger}.Spread";
+                }
+            }
+            return name;
+        }
+
+        private static void PolishLighting()
+        {
+            var key = GameObject.Find("Directional Light");
+            if (key != null && key.TryGetComponent<Light>(out var keyLight))
+            {
+                keyLight.color = new Color(1.0f, 0.945f, 0.878f);
+                keyLight.intensity = 1.25f;
+                keyLight.shadows = LightShadows.Soft;
+                keyLight.shadowStrength = 0.72f;
+            }
+
+            if (GameObject.Find("SoulForge Fill Light") == null)
+            {
+                var fillObject = new GameObject("SoulForge Fill Light");
+                fillObject.transform.rotation = Quaternion.Euler(28f, 210f, 0f);
+                var fill = fillObject.AddComponent<Light>();
+                fill.type = LightType.Directional;
+                fill.color = new Color(0.62f, 0.70f, 0.86f);
+                fill.intensity = 0.35f;
+                fill.shadows = LightShadows.None;
+            }
+        }
+
         [MenuItem("SoulForge/Capture Apartment Preview")]
         public static void CaptureApartmentPreview()
         {

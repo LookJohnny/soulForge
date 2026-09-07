@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "soulforge-media-body"
+version = "0.1.0"
+description = "Self-hosted WebRTC body for the SoulForge unified brain"
+requires-python = ">=3.12,<3.14"
+dependencies = ["aiohttp>=3.12,<4", "aiortc>=1.14,<2", "numpy>=2,<3", "pillow>=11,<13", "python-dotenv>=1,<2"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10", "pytest-asyncio>=1,<2"]
+
+[project.scripts]
+soulforge-media-body = "media_body.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/media_body"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.uv.workspace]
+members = []

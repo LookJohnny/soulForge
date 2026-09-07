@@ -89,6 +89,18 @@ def reflect_day(
                 ["critical_event"],
             )
         )
+    for key, value in memories.items():
+        if not key.startswith("action_failed_"):
+            continue
+        count = value.get("count", 0) if isinstance(value, dict) else 0
+        if count >= 2:
+            step = key[len("action_failed_") :]
+            out.append(
+                Reflection(
+                    f"「{step}」这个动作我最近总做不好（{count}次），明天先换个方式。",
+                    [key],
+                )
+            )
     return out[:MAX_REFLECTIONS]
 
 

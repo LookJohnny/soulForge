@@ -168,6 +168,30 @@ class Welcome:
     type: str = "welcome"
 
 
+@dataclass
+class ProviderHealth:
+    """Observed request health, never an assertion of untested availability."""
+
+    status: str = "unknown"
+    fallback_active: bool = False
+    fallback_count: int = 0
+    providers: list[dict[str, Any]] = field(default_factory=list)
+    memory: dict[str, Any] = field(default_factory=dict)
+    service: str = "runtime"
+    type: str = "provider_health"
+
+
+@dataclass
+class DecisionComplete:
+    """All immediate commands for a correlated event have been dispatched."""
+
+    correlation_id: str
+    agent_id: str
+    error: str = ""
+    provider_health: dict[str, Any] = field(default_factory=dict)
+    type: str = "decision_complete"
+
+
 _TYPES = {
     "hello": BodyHello,
     "action": ActionCommand,
@@ -176,6 +200,8 @@ _TYPES = {
     "plan_state": PlanState,
     "tick": Tick,
     "welcome": Welcome,
+    "provider_health": ProviderHealth,
+    "decision_complete": DecisionComplete,
 }
 
 

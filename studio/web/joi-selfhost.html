@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Joi · 自建真人视频</title>
+  <style>
+    :root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+    *{box-sizing:border-box}body{margin:0;background:#080b0e;color:#eae6e0}button,input{font:inherit}
+    main{min-height:100dvh;display:flex;flex-direction:column}header{padding:24px 30px;display:flex;justify-content:space-between;align-items:center}
+    .name{letter-spacing:.32em;font-size:18px}.label{font-size:12px;color:#a2aeb7}a{color:#b1bdc6;text-decoration:none}
+    .stage{position:relative;flex:1;min-height:42vh;display:grid;place-items:center;background:#080b0e}
+    video{width:100%;height:100%;max-height:65dvh;object-fit:contain}.welcome{position:absolute;padding:30px;text-align:center;pointer-events:none}
+    h1{font-weight:300;font-size:clamp(27px,4vw,42px);letter-spacing:.06em}.welcome p{color:#9ca6af;font-size:14px;line-height:1.9}
+    #caption{position:absolute;bottom:24px;left:10%;right:10%;text-align:center;white-space:pre-wrap;line-height:1.6;font-size:20px;text-shadow:0 2px 10px #000}
+    footer{padding:20px 24px 28px;text-align:center}#status{min-height:24px;color:#c9c2b8;font-size:14px;margin-bottom:14px}
+    .controls{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}button{padding:11px 20px;border-radius:25px;border:1px solid #ffffff30;background:#ffffff09;color:inherit;cursor:pointer}
+    button:hover{background:#ffffff18}button:disabled{opacity:.4;cursor:default}#connect{background:#d6c7b2;color:#171b1e;border:0;min-width:120px}
+    button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid #d6c7b2;outline-offset:3px}[hidden]{display:none!important}
+    form{display:flex;gap:9px;max-width:620px;margin:18px auto 0}input{flex:1;min-width:0;border:1px solid #ffffff25;border-radius:24px;padding:11px 16px;background:#ffffff06;color:inherit}
+    .note,details{font-size:11px;color:#89939d;line-height:1.8;margin:14px auto 0;max-width:670px}summary{cursor:pointer}#measure{padding:8px}
+    @media(max-width:560px){header{padding:20px}.label{max-width:150px;text-align:right}.controls button{padding:10px 15px}footer{padding:16px}#caption{font-size:17px}}
+  </style>
+</head>
+<body>
+<main>
+  <header><div class="name">JOI</div><div class="label">自建真人视频 · AI 角色</div></header>
+  <section class="stage" aria-label="Joi 的实时视频">
+    <video id="face" playsinline aria-label="Joi 的真人视频与声音"></video>
+    <div id="welcome" class="welcome"><h1>等她出现在这里。</h1><p>接通后，由你配置的 GPU 服务生成实时画面。<br>服务未就绪时，这里会保持空白。</p></div>
+    <div id="caption" aria-live="polite"></div>
+  </section>
+  <footer>
+    <div id="status" role="status">正在检查 GPU 服务…</div>
+    <div class="controls">
+      <button id="connect" disabled>接通</button><button id="refresh">检查服务</button>
+      <button id="play" hidden>播放声音与画面</button>
+      <button id="mic" hidden aria-pressed="false">麦克风已开启</button>
+      <button id="interrupt" hidden>等一下</button><button id="end" hidden>挂断</button>
+    </div>
+    <form id="text-form" hidden><input id="text" maxlength="4000" autocomplete="off" placeholder="也可以打字和 Joi 说话…" aria-label="发送给 Joi 的文字"><button id="send" type="submit">发送</button></form>
+    <p class="note">点击接通才会开启麦克风；摄像头保持关闭。声音由自建服务识别，角色沿用 SoulForge 的记忆。<br>
+      “等一下”会先暂停本地声音与画面，再等待服务端确认取消。<a href="/joi">Tavus 页面</a> · <a href="/joi?body=vrm">三维身体</a></p>
+    <details><summary>连接详情</summary><div id="measure">尚未收到媒体轨道。</div></details>
+  </footer>
+</main>
+<script type="module" src="/studio/joi-selfhost.js"></script>
+</body>
+</html>

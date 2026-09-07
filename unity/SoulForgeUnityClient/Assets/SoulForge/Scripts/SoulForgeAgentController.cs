@@ -30,6 +30,19 @@ namespace SoulForge.UnityClient
             {
                 bridge.EventReceived += HandleEvent;
             }
+
+            // humanoid avatars keep their real facing pointed at the camera;
+            // added at runtime so existing scenes need no rewiring
+            if (animator != null && animator.avatar != null && animator.avatar.isHuman
+                && GetComponent<SoulForgeFacingCorrector>() == null)
+            {
+                gameObject.AddComponent<SoulForgeFacingCorrector>();
+            }
+            if (animator != null && animator.avatar != null && animator.avatar.isHuman
+                && GetComponent<SoulForgeHologramLook>() == null)
+            {
+                gameObject.AddComponent<SoulForgeHologramLook>();
+            }
         }
 
         private void OnDisable()
@@ -73,21 +86,58 @@ namespace SoulForge.UnityClient
                 hasDesiredPosition = true;
             }
 
+            // the Joi move: approach_user glides the character to a spot just
+            // in front of the camera — where the "user" stands in this scene
+            if (behaviorEvent.actionTemplateId != null
+                && behaviorEvent.actionTemplateId.Contains("approach_user")
+                && Camera.main != null)
+            {
+                var cameraTransform = Camera.main.transform;
+                var forward = cameraTransform.forward;
+                forward.y = 0f;
+                if (forward.sqrMagnitude > 0.001f)
+                {
+                    var spot = cameraTransform.position + forward.normalized * 1.4f;
+                    spot.y = 0f;
+                    desiredPosition = spot;
+                    hasDesiredPosition = true;
+                }
+            }
+
             if (SoulForgeAgentRegistry.TryGetAgent(behaviorEvent.lookAtAgentId, out var target))
             {
                 lookAtTarget = target;
             }
 
-            if (animator != null && !string.IsNullOrWhiteSpace(behaviorEvent.actionTemplateId))
+            // triggers/params only make sense on an Animator that is actually
+            // playing a controller — a VRM avatar driven by the mocap idle (or
+            // nothing) has no such parameters, and calling anyway floods the
+            // console with "Animator is not playing an AnimatorController"
+            var hasController = animator != null && animator.runtimeAnimatorController != null;
+            if (hasController && !string.IsNullOrWhiteSpace(behaviorEvent.actionTemplateId)
+                && HasParameter(behaviorEvent.actionTemplateId))
             {
-                animator.ResetTrigger("idle");
+                if (HasParameter("idle")) animator.ResetTrigger("idle");
                 animator.SetTrigger(behaviorEvent.actionTemplateId);
             }
 
-            if (animator != null && !string.IsNullOrWhiteSpace(behaviorEvent.emotion))
+            if (hasController && !string.IsNullOrWhiteSpace(behaviorEvent.emotion)
+                && HasParameter("emotion"))
             {
                 animator.SetFloat("emotion", EmotionToFloat(behaviorEvent.emotion));
             }
+        }
+
+        private bool HasParameter(string name)
+        {
+            foreach (var parameter in animator.parameters)
+            {
+                if (parameter.name == name)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static float EmotionToFloat(string emotion)

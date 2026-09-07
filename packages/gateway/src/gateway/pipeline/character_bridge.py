@@ -29,14 +29,20 @@ def _frame(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False)
 
 
+class RuntimeNoDialogueError(RuntimeError):
+    """The Runtime completed this decision without returning speech to this body."""
+
+
 @dataclass
 class CharacterBridge:
     url: str = ""
     agent_id: str = ""
     timeout_s: float = 12.0
     body_id: str = field(default_factory=lambda: f"gateway-voice-{uuid.uuid4().hex[:6]}")
+    autonomous_speech: bool = True
 
     _socket: Any = None
+    _closed: bool = False
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     _connect_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     _reader_task: asyncio.Task | None = None
@@ -57,6 +63,8 @@ class CharacterBridge:
     # ------------------------------------------------------------ connection
     async def _ensure_connected(self):
         async with self._connect_lock:
+            if self._closed:
+                raise ConnectionError("Runtime voice body has been retired")
             if (
                 self._socket is not None
                 and self._reader_task is not None
@@ -86,6 +94,7 @@ class CharacterBridge:
                             "features": {
                                 "speech": True,
                                 "speech_only": True,
+                                "autonomous_speech": self.autonomous_speech,
                                 "gaze": False,
                                 "nav": False,
                             },
@@ -97,6 +106,12 @@ class CharacterBridge:
             if welcome.get("type") != "welcome":
                 await socket.close()
                 raise ConnectionError(f"runtime server refused hello: {welcome}")
+            if self.agent_id not in welcome.get("accepted_agents", []):
+                await socket.close()
+                raise ConnectionError("runtime did not accept the configured character")
+            if self._closed:
+                await socket.close()
+                raise ConnectionError("Runtime voice body has been retired")
             self._socket = socket
             self._reader_task = asyncio.create_task(
                 self._reader_loop(socket),
@@ -116,6 +131,11 @@ class CharacterBridge:
                 except (json.JSONDecodeError, TypeError):
                     continue
                 if not isinstance(data, dict):
+                    continue
+                if data.get("type") == "decision_complete":
+                    waiter = self._waiters.get(data.get("correlation_id"))
+                    if waiter is not None:
+                        await waiter.put(data)
                     continue
                 if (
                     data.get("type") != "action"
@@ -160,6 +180,18 @@ class CharacterBridge:
         finally:
             if self._socket is socket:
                 self._socket = None
+            for correlation, waiter in list(self._waiters.items()):
+                await waiter.put(
+                    {
+                        "type": "decision_complete",
+                        "correlation_id": correlation,
+                        "error": "runtime_disconnected",
+                    }
+                )
+            # Wake an idle consumer so it can reconnect after a hot swap/restart.
+            while not self._unsolicited.empty():
+                self._unsolicited.get_nowait()
+            self._unsolicited.put_nowait(None)
 
     # ---------------------------------------------------------------- decide
     async def process_utterance(
@@ -173,6 +205,24 @@ class CharacterBridge:
         Returns {"text": str, "correlation_id": str|None, "commands": [...]} in a
         shape orchestrator can hand to the existing TTS stage unchanged.
         """
+        return await self.process_event(
+            "user_utterance",
+            source="user",
+            text=text,
+            payload=payload,
+            require_dialogue=True,
+        )
+
+    async def process_event(
+        self,
+        kind: str,
+        *,
+        source: str,
+        text: str = "",
+        payload: dict[str, Any] | None = None,
+        require_dialogue: bool = False,
+    ) -> dict[str, Any]:
+        """Send one typed event; a completed touch may legitimately be silent."""
         async with self._lock:  # one in-flight decision per body
             socket = await self._ensure_connected()
             event_payload = dict(payload or {})
@@ -184,6 +234,8 @@ class CharacterBridge:
             self._waiters[event_id] = inbox
             dialogue_parts: list[str] = []
             commands: list[dict[str, Any]] = []
+            provider_health: dict[str, Any] = {}
+            completed = False
             loop = asyncio.get_event_loop()
             deadline = loop.time() + self.timeout_s
             # collect until the decision's dialogue arrives (correlation closes
@@ -194,8 +246,8 @@ class CharacterBridge:
                     _frame(
                         {
                             "type": "event",
-                            "kind": "user_utterance",
-                            "source": "user",
+                            "kind": kind,
+                            "source": source,
                             "text": text,
                             "target_agent": self.agent_id,
                             "payload": event_payload,
@@ -210,23 +262,38 @@ class CharacterBridge:
                         data = await asyncio.wait_for(inbox.get(), timeout=budget)
                     except asyncio.TimeoutError:
                         break
+                    if data.get("type") == "decision_complete":
+                        if data.get("error"):
+                            raise RuntimeError("runtime decision failed: " + str(data["error"]))
+                        provider_health = data.get("provider_health", {})
+                        completed = True
+                        break
                     commands.append(data)
                     dialogue_parts.append(data["dialogue"])
                     quiet_after = loop.time() + 0.6  # flush trailing speech
             finally:
                 self._waiters.pop(event_id, None)
+            if not dialogue_parts and completed and require_dialogue:
+                raise RuntimeNoDialogueError("runtime completed decision without dialogue")
+            if not dialogue_parts and not completed:
+                raise TimeoutError("runtime returned no dialogue before the deadline")
             return {
                 "text": "".join(dialogue_parts),
                 "correlation_id": event_id,
                 "commands": commands,
+                "provider_health": provider_health,
             }
 
     async def next_unsolicited(self, *, timeout_s: float | None = None) -> dict[str, Any]:
         """Wait for dialogue caused by perception/system events, not a voice turn."""
         await self._ensure_connected()
         if timeout_s is None:
-            return await self._unsolicited.get()
-        return await asyncio.wait_for(self._unsolicited.get(), timeout=timeout_s)
+            data = await self._unsolicited.get()
+        else:
+            data = await asyncio.wait_for(self._unsolicited.get(), timeout=timeout_s)
+        if data is None:
+            raise ConnectionError("runtime voice body disconnected")
+        return data
 
     async def confirm_spoken(
         self,
@@ -256,6 +323,7 @@ class CharacterBridge:
         )
 
     async def close(self) -> None:
+        self._closed = True
         await self._disconnect()
 
     async def _disconnect(self) -> None:
@@ -269,3 +337,5 @@ class CharacterBridge:
                 pass
         if socket is not None:
             await socket.close()
+        if not self._unsolicited.full():
+            self._unsolicited.put_nowait(None)

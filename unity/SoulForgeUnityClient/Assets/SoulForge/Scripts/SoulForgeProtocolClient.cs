@@ -50,6 +50,11 @@ namespace SoulForge.UnityClient
         private readonly ConcurrentQueue<string> outboundFrames = new();
         private readonly Dictionary<string, int> lastSequencePerAgent = new();
         private readonly List<PendingCompletion> pending = new();
+        // ACE-style beat sequencing: steps born from one decision share a
+        // correlation_id and must play one after another for their duration —
+        // last-writer-wins made a wave invisible under its own speak/resume.
+        private readonly Dictionary<string, Queue<ActionCommandMsg>> beatQueues = new();
+        private readonly Dictionary<string, float> beatBusyUntil = new();
         private volatile bool connected;
         private float lastTickSimMinute;
 
@@ -98,13 +103,42 @@ namespace SoulForge.UnityClient
             }
         }
 
+        /// <summary>
+        /// What this scene can visibly perform. Universal steps are always
+        /// accepted on top of this; gestures here surface in the server's
+        /// action catalog so the decision model may request them, and the
+        /// procedural animator has a pose branch for each gesture.
+        /// </summary>
+        private static readonly string[] SupportedSteps =
+        {
+            // speech / attention
+            "speak_line", "look_at_user", "look_at_target", "approach_user",
+            "wait_for_response", "listening_nod", "micro_nod", "chatting",
+            "invite_user", "walk_to",
+            // gestures (catalog-selectable; mocap states or pose branches exist)
+            "wave", "greet", "think", "celebrate", "clap", "jump", "stretch", "dance",
+            "crouch", "stand_up", "point_at", "flirt", "dance_belly", "blow_kiss",
+            "think_pose", "excited", "dance_rumba", "sad_idle", "look_around_big",
+            "greeting", "idle_alt",
+            // activity pantomime
+            "stir_pan", "prep_ingredients", "plate_up", "draw_stroke", "take_note",
+            "read_page", "study", "lean_back_review", "sit_desk", "sit_sofa",
+            "kneel_inspect", "scan_leaves", "probe_soil", "water_plant",
+            "wipe_surface", "pick_item", "place_item", "pack_tools", "test_part",
+            "turn_wrench", "cleaning", "adjust_pose", "rest",
+        };
+
         private async Task SendHello(CancellationToken token)
         {
             var hello = new BodyHelloMsg
             {
                 body_id = bodyId,
                 agent_ids = agentIds,
-                manifest = new EmbodimentManifestMsg { body_id = bodyId },
+                manifest = new EmbodimentManifestMsg
+                {
+                    body_id = bodyId,
+                    supported_steps = SupportedSteps,
+                },
             };
             await SendRaw(JsonUtility.ToJson(hello), token);
         }
@@ -170,11 +204,49 @@ namespace SoulForge.UnityClient
                                    WebSocketMessageType.Text, true, token);
         }
 
+        // ---------------------------------------------------- preset interactions
+        // number keys fire preset user events at the focused agent (Tab switches):
+        //   1 打招呼   2 挥挥手   3 跳个舞   4 我有点累(陪伴模式)   5 想一想
+        private static readonly (KeyCode key, string text)[] Presets =
+        {
+            (KeyCode.Alpha1, "你好呀，今天过得怎么样？"),
+            (KeyCode.Alpha2, "挥挥手"),
+            (KeyCode.Alpha3, "跳个舞"),
+            (KeyCode.Alpha4, "我今天有点累，什么都不想做。"),
+            (KeyCode.Alpha5, "想一想"),
+        };
+        private int focusedAgent;
+
+        private void HandlePresetKeys()
+        {
+            if (agentIds.Length == 0) return;
+            if (Input.GetKeyDown(KeyCode.Tab))
+            {
+                focusedAgent = (focusedAgent + 1) % agentIds.Length;
+                Debug.Log($"[SoulForge] preset target -> {agentIds[focusedAgent]}");
+            }
+            foreach (var (key, text) in Presets)
+            {
+                if (!Input.GetKeyDown(key)) continue;
+                var payload = "{\"type\":\"event\",\"kind\":\"user_utterance\",\"source\":\"user\""
+                    + $",\"text\":{JsonEscape(text)},\"target_agent\":\"{agentIds[focusedAgent]}\"}}";
+                EnqueueOutbound(payload);
+                Debug.Log($"[SoulForge] preset -> {agentIds[focusedAgent]}: {text}");
+            }
+        }
+
+        private static string JsonEscape(string value)
+        {
+            return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+        }
+
         // -------------------------------------------------------- main thread
         private void Update()
         {
+            HandlePresetKeys();
             while (inboundActions.TryDequeue(out var action))
                 ExecuteOnMainThread(action);
+            DrainBeatQueues();
 
             for (int i = pending.Count - 1; i >= 0; i--)
             {
@@ -200,6 +272,47 @@ namespace SoulForge.UnityClient
                 return;
             }
 
+            var isBeat = !string.IsNullOrEmpty(action.correlation_id);
+            if (isBeat)
+            {
+                if (!beatQueues.TryGetValue(action.agent_id, out var queue))
+                {
+                    beatQueues[action.agent_id] = queue = new Queue<ActionCommandMsg>();
+                }
+                if (queue.Count >= 8)
+                {
+                    SendObservation(queue.Dequeue(), "interrupted", "beat queue overflow");
+                }
+                queue.Enqueue(action);
+                return;
+            }
+            // ambient steps (minute-planner ticks) only show when no beat plays
+            if (Time.time < BusyUntil(action.agent_id))
+            {
+                SendObservation(action, "done", "skipped: beat active");
+                return;
+            }
+            PublishAction(action);
+        }
+
+        private float BusyUntil(string agentId)
+        {
+            return beatBusyUntil.TryGetValue(agentId, out var until) ? until : 0f;
+        }
+
+        private void DrainBeatQueues()
+        {
+            foreach (var pair in beatQueues)
+            {
+                if (pair.Value.Count == 0 || Time.time < BusyUntil(pair.Key)) continue;
+                var next = pair.Value.Dequeue();
+                beatBusyUntil[pair.Key] = Time.time + Mathf.Max(0.4f, next.duration_s);
+                PublishAction(next);
+            }
+        }
+
+        private void PublishAction(ActionCommandMsg action)
+        {
             try
             {
                 var behaviorEvent = new SoulForgeBehaviorEvent

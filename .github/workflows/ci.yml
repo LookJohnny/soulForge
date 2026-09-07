@@ -55,8 +55,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y libopus0 ffmpeg
       - run: uv sync --all-packages --dev
-      - run: uv run pytest packages/gateway/tests --tb=short
+      - run: uv run pytest --asyncio-mode=auto packages/gateway/tests --tb=short
 
   test-engine:
     name: Test Character Runtime (engine)
@@ -67,6 +68,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y libopus0 ffmpeg
       - run: uv sync --all-packages --dev
       - run: uv run pytest --tb=short
 

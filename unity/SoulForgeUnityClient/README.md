@@ -5,6 +5,17 @@ This project has been opened and compiled locally with Unity 6
 `6000.5.2f1`. The bootstrap apartment scene has been generated through
 Unity batchmode at `Assets/SoulForge/Scenes/SoulForgeApartment.unity`.
 
+The public checkout excludes local `Assets/SoulForge/Models/` imports and
+`Assets/SoulForge/Animations/Mixamo/` source files. Restore those directories
+with their `.meta` files from your own authorized copy, or import licensed
+replacements and rebuild the scene/gesture library. A fresh clone alone does
+not reproduce the locally imported characters and gestures. Machine migration
+steps are in [the MacBook/Windows guide](../../docs/macbook-windows-5080.md).
+
+The bundled `idle.vrma`, `vrma_LookAround.vrma`, `vrma_Relax.vrma`, and the
+humanoid idle clip baked from `idle.vrma` retain the upstream
+[animation attribution and MIT license](../../assets/animations/LICENSE-aikeya.txt).
+
 ## Target Role
 
 SoulForge remains the behavior engine:
@@ -46,7 +57,7 @@ Store assets under their license, or CC0 sources such as Poly Haven and Kenney.
 ## Import Steps
 
 1. Open this folder from Unity Hub:
-   `/Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient`
+   `unity/SoulForgeUnityClient` under your checkout
 2. Let Package Manager restore packages from `Packages/manifest.json`.
 3. Install UniVRM and import your VRM characters.
 4. Add an empty GameObject named `SoulForgeBridge`.
@@ -74,9 +85,9 @@ Verified batchmode bootstrap from the repo root:
 ```bash
 "/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/MacOS/Unity" \
   -batchmode -quit \
-  -projectPath "/Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient" \
+  -projectPath "$PWD/unity/SoulForgeUnityClient" \
   -executeMethod SoulForge.UnityClient.Editor.SoulForgeSceneBuilder.CreateApartmentDemoScene \
-  -logFile "/Users/lovelyjoy/Desktop/soulForge/outputs/unity/unity_create_scene_richer_v4.log"
+  -logFile "$PWD/outputs/unity/unity_create_scene_richer_v4.log"
 ```
 
 Verified preview capture:
@@ -84,9 +95,9 @@ Verified preview capture:
 ```bash
 "/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/MacOS/Unity" \
   -batchmode -quit \
-  -projectPath "/Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient" \
+  -projectPath "$PWD/unity/SoulForgeUnityClient" \
   -executeMethod SoulForge.UnityClient.Editor.SoulForgeSceneBuilder.CaptureApartmentPreview \
-  -logFile "/Users/lovelyjoy/Desktop/soulForge/outputs/unity/unity_capture_preview_richer_v3.log"
+  -logFile "$PWD/outputs/unity/unity_capture_preview_richer_v3.log"
 ```
 
 Recorder-free demo capture fallback:
@@ -94,9 +105,9 @@ Recorder-free demo capture fallback:
 ```bash
 "/Applications/Unity/Hub/Editor/6000.5.2f1/Unity.app/Contents/MacOS/Unity" \
   -batchmode -quit \
-  -projectPath "/Users/lovelyjoy/Desktop/soulForge/unity/SoulForgeUnityClient" \
+  -projectPath "$PWD/unity/SoulForgeUnityClient" \
   -executeMethod SoulForge.UnityClient.Editor.SoulForgeSceneBuilder.CaptureApartmentDemoFrames \
-  -logFile "/Users/lovelyjoy/Desktop/soulForge/outputs/unity/unity_capture_demo_frames_v3.log"
+  -logFile "$PWD/outputs/unity/unity_capture_demo_frames_v3.log"
 
 ffmpeg -y -framerate 12 \
   -i outputs/unity/apartment_demo_frames/frame_%04d.png \

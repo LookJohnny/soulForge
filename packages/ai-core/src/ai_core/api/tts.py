@@ -1,6 +1,7 @@
 """TTS preview and synthesis endpoints."""
 
 import base64
+import os
 
 import structlog
 from fastapi import APIRouter, Request
@@ -28,6 +29,9 @@ class TTSSynthesizeRequest(BaseModel):
     # With character_id, synthesize in that character's voice (clone or preset)
     character_id: str | None = None
     brand_id: str | None = None
+    # per-sentence emotion hint (decision dialogue emotion): providers that
+    # support expressive tags (fish s1) wrap the text with it
+    emotion: str | None = Field(default=None, max_length=32)
 
 
 @router.get("/voices")
@@ -82,7 +86,19 @@ async def synthesize_tts(req: TTSSynthesizeRequest, request: Request):
         speed=speed,
         pitch_rate=pitch_rate,
         speech_rate=speech_rate,
+        ssml_effect=req.emotion or "",
     )
+    dump_dir = os.environ.get("TTS_DUMP_DIR")
+    if dump_dir:  # demo-shoot mode: keep every spoken clip for the video edit
+        try:
+            import time as _time
+            from pathlib import Path
+
+            target = Path(dump_dir)
+            target.mkdir(parents=True, exist_ok=True)
+            (target / f"{_time.time():.3f}.mp3").write_bytes(audio)
+        except Exception:
+            logger.warning("tts.dump_failed", exc_info=True)
     return {"audio_data": base64.b64encode(audio).decode(), "format": "mp3"}
 
 

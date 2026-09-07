@@ -86,6 +86,7 @@ class Replanner:
         actions = [
             MicroAction(name="look_at_user", gaze_target=event.source, duration_s=1.2)
         ]
+        actions += self._requested_actions(decision)  # move/gesture first, then speak
         actions += self._speak_actions(decision, _gaze_for(event))
         actions.append(
             MicroAction(
@@ -123,6 +124,7 @@ class Replanner:
             ),
             MicroAction(name="look_at_user", gaze_target=event.source, duration_s=1.0),
         ]
+        actions += self._requested_actions(decision)  # move/gesture first, then speak
         actions += self._speak_actions(decision, _gaze_for(event))
         actions.append(
             MicroAction(
@@ -252,6 +254,17 @@ class Replanner:
             day_rewrite=new_blocks,
             memory_update=decision.memory_update,
         )
+
+    @staticmethod
+    def _requested_actions(decision: BehaviorDecision) -> list[MicroAction]:
+        """Catalog-validated body actions ride the same beat as the dialogue.
+
+        Only LOW/MEDIUM beats perform them — an hour/day rewrite is an
+        emergency or a mood shift, not the moment for a requested gesture."""
+        return [
+            MicroAction(name=action, params={"requested": True}, duration_s=2.5)
+            for action in decision.body_actions
+        ]
 
     @staticmethod
     def _speak_actions(

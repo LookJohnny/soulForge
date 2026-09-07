@@ -9,7 +9,31 @@ set +e  # Don't exit on failures — we track them manually
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 AI_CORE="http://127.0.0.1:8100"
 GATEWAY="http://127.0.0.1:8080"
-SERVICE_TOKEN="${SERVICE_TOKEN:-test-service-token-for-dev}"
+# Read credentials as data; never source .env or echo its value.
+SERVICE_TOKEN="$(python3 - "$ROOT/.env" <<'PYTOKEN'
+import os
+from pathlib import Path
+import shlex
+import sys
+
+value = os.environ.get("SERVICE_TOKEN", "").strip()
+if not value:
+    path = Path(sys.argv[1])
+    try:
+        lines = path.read_text().splitlines() if path.is_file() else []
+        for line in lines:
+            key, sep, raw = line.partition("=")
+            if sep and key.strip().removeprefix("export ") == "SERVICE_TOKEN":
+                parts = shlex.split(raw, comments=True)
+                value = parts[0].strip() if len(parts) == 1 else ""
+                break
+    except (OSError, ValueError):
+        raise SystemExit("SERVICE_TOKEN configuration cannot be read") from None
+if not value:
+    raise SystemExit("SERVICE_TOKEN is required in the environment or root .env")
+sys.stdout.write(value)
+PYTOKEN
+)" || exit 1
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 PASS=0; FAIL=0; WARN=0

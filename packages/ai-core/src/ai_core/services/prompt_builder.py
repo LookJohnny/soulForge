@@ -144,7 +144,7 @@ class PromptBuilder:
         touch_context: str | None = None,
         sensations: str | None = None,
         mid_session_thought: str | None = None,
-        structured_output: bool = True,
+        structured_output: bool | None = True,
     ) -> dict:
         """Build complete system prompt and voice config.
 
@@ -156,8 +156,9 @@ class PromptBuilder:
             relationship_state: Full five-axis state dict → rendered `<current_state>` block.
             proactive_trigger: Optional opening line for the character to say.
             time_context: Time-of-day + absence duration context.
-            structured_output: If True, prompt asks for JSON output. If False,
-                plain text dialogue only (for device/TTS pipelines).
+            structured_output: If True, prompt asks for chat JSON. If False,
+                plain text dialogue only (for device/TTS pipelines). None omits
+                the chat output contract so cognition can supply its own schema.
 
         Returns:
             {"system_prompt": str, "voice_id": str|None, "voice_speed": float, ...}
@@ -209,11 +210,22 @@ class PromptBuilder:
         # Sanitize user-controlled fields to prevent prompt injection
         raw_nickname = custom.get("nickname") or base["name"] if custom else base["name"]
         raw_user_title = custom.get("user_title", pctx.user_title) if custom else pctx.user_title
-        raw_interests = custom.get("interest_topics", []) if custom else base.get("topics", [])
+        # Character topics are the character's preferences, never evidence about
+        # the user. Only user customization may populate the user-interest block.
+        raw_interests = (custom.get("interest_topics") or []) if custom else []
+        raw_persona_interests = base.get("topics") or []
 
         safe_nickname = _sanitize_user_field(str(raw_nickname), max_length=50)
         safe_user_title = _sanitize_user_field(str(raw_user_title), max_length=20)
         safe_interests = [_sanitize_user_field(str(t), max_length=50) for t in raw_interests][:20]
+        safe_persona_interests = [
+            _sanitize_user_field(str(t), max_length=50) for t in raw_persona_interests
+        ][:20]
+        emotion_config = _parse_json(base.get("emotion_config")) or {}
+        transparent_ai = (
+            isinstance(emotion_config, dict)
+            and emotion_config.get("identity_disclosure") == "transparent_ai"
+        )
 
         # Format emotion for template
         current_emotion = bool(emotion_state and emotion_state != "calm")
@@ -355,6 +367,8 @@ class PromptBuilder:
             user_ref=pctx.user_ref,
             section_title=pctx.section_title,
             interests=safe_interests,
+            persona_interests=safe_persona_interests,
+            transparent_ai=transparent_ai,
             memory_context=memory_context,
             proactive_trigger=proactive_trigger,
             scene_prompt=scene_prompt,

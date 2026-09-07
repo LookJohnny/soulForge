@@ -24,6 +24,8 @@ import argparse
 import asyncio
 import json
 import os
+from pathlib import Path
+import shlex
 import struct
 import sys
 import time
@@ -34,7 +36,7 @@ import websockets
 # ─── Config ────────────────────────────────────
 DEFAULT_GATEWAY = "ws://127.0.0.1:8080/ws"
 AI_CORE = "http://127.0.0.1:8100"
-SERVICE_TOKEN = os.environ.get("SERVICE_TOKEN", "test-service-token-for-dev")
+SERVICE_TOKEN = ""
 
 # We'll discover these at runtime
 CHAR_ID = None
@@ -49,6 +51,27 @@ import urllib.request
 
 
 # ─── Helpers ───────────────────────────────────
+def load_service_token(env_path=None):
+    """Environment wins; parse only the needed .env entry without executing it."""
+    value = os.environ.get("SERVICE_TOKEN", "").strip()
+    if value:
+        return value
+    path = Path(env_path) if env_path else Path(__file__).resolve().parents[2] / ".env"
+    try:
+        lines = path.read_text().splitlines() if path.is_file() else []
+        for line in lines:
+            key, sep, raw = line.partition("=")
+            if sep and key.strip().removeprefix("export ") == "SERVICE_TOKEN":
+                parts = shlex.split(raw, comments=True)
+                value = parts[0].strip() if len(parts) == 1 else ""
+                break
+    except (OSError, ValueError):
+        raise SystemExit("SERVICE_TOKEN configuration cannot be read") from None
+    if not value:
+        raise SystemExit("SERVICE_TOKEN is required in the environment or root .env")
+    return value
+
+
 class C:
     G = "\033[92m"; R = "\033[91m"; Y = "\033[93m"; B = "\033[96m"; NC = "\033[0m"
 
@@ -616,4 +639,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     AI_CORE = args.ai_core
 
+    SERVICE_TOKEN = load_service_token()
     asyncio.run(main(args.gateway))

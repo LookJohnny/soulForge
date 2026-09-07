@@ -2,7 +2,9 @@
   "name": "SoulForge.UnityClient",
   "rootNamespace": "SoulForge.UnityClient",
   "references": [
-    "UnityEngine.UI"
+    "UnityEngine.UI",
+    "VRM",
+    "UniGLTF"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

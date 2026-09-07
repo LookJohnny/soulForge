@@ -78,6 +78,7 @@ class SoulForgeRuntimeServer:
         llm=None,
         llm_timeout_s: float = 6.0,
         social: bool = False,
+        memory_store=None,
     ):
         """time_scale: simulated minutes advanced per real second.
         social: characters strike up small talk with each other on their own."""
@@ -94,17 +95,21 @@ class SoulForgeRuntimeServer:
         from engine.planner.llm_interface import SafeDecisionLLM, build_llm
 
         self.llm = SafeDecisionLLM(llm or build_llm(), timeout_s=llm_timeout_s)
+        if memory_store is not None and hasattr(self.llm.inner, "character_map"):
+            self.llm.inner.character_map = memory_store.character_map
         self.runtime = CompanionRuntime(
             personas,
             WorldState(sim_minute=start_minute),
             llm=self.llm,
             adapter=self._on_planner_dispatch,
+            memory_store=memory_store,
             social_policy=SocialPolicy(auto_start=social, turn_gap_min=30.0),
         )
         self.sim_minute = start_minute
         self.bodies: dict[str, BodyConnection] = {}
         self.controls: set[Any] = set()
         self._pending_micro: list[tuple[str, MicroAction]] = []
+        self._dispatch_lock = asyncio.Lock()
         self._trace_cursor = 0
         self._last_plan_frame: dict[str, str] = {}
         self._stop = asyncio.Event()
@@ -112,11 +117,26 @@ class SoulForgeRuntimeServer:
         self.bound_port: int | None = None
         # events are handled on a worker so a slow LLM can never stall the tick
         self._event_queue: asyncio.Queue = asyncio.Queue(maxsize=256)
+        self._last_health_frame = ""
 
     # ------------------------------------------------------------------ core
     def _on_planner_dispatch(self, agent_id: str, action: MicroAction) -> None:
         """CompanionRuntime adapter hook: queue micro-actions for broadcast."""
         self._pending_micro.append((agent_id, action))
+
+    def _refresh_action_catalog(self) -> None:
+        """Publish what each agent's connected bodies can actually do into
+        WorldState.body_actions — the finite action set the decision model may
+        pick from. Rebuilt on every body arrival/departure so a disconnected
+        body's gestures are withdrawn immediately (fail-closed)."""
+        catalog: dict[str, set[str]] = {}
+        for body in self.bodies.values():
+            actions = body.manifest.selectable_actions()
+            for agent_id in body.agent_ids:
+                catalog.setdefault(agent_id, set()).update(actions)
+        self.runtime.world.body_actions = {
+            agent_id: sorted(actions) for agent_id, actions in catalog.items()
+        }
 
     def _drain_runtime_events(self) -> None:
         """Events the runtime queued for itself (conversation turns, deferred
@@ -140,6 +160,7 @@ class SoulForgeRuntimeServer:
                 self._drain_runtime_events()
                 await self._flush_pending()
                 await self._broadcast_new_trace()
+                await self._broadcast_health()
                 await self._broadcast(
                     encode(
                         Tick(
@@ -158,23 +179,38 @@ class SoulForgeRuntimeServer:
                 await asyncio.wait_for(self._stop.wait(), timeout=delay or 0.001)
 
     async def _flush_pending(self) -> None:
-        pending, self._pending_micro = self._pending_micro, []
-        for agent_id, action in pending:
-            command = ActionCommand(
-                agent_id=agent_id,
-                name=action.name,
-                template_id=action.template_id,
-                params=action.params,
-                adapter_command=action.adapter_command,
-                dialogue=action.dialogue,
-                gaze_target=action.gaze_target,
-                duration_s=action.duration_s,
-                sim_minute=self.sim_minute,
-                correlation_id=action.correlation_id,
-            )
-            await self._send_to_embodying_bodies(command)
+        async with self._dispatch_lock:
+            pending, self._pending_micro = self._pending_micro, []
+            for agent_id, action in pending:
+                command = ActionCommand(
+                    agent_id=agent_id,
+                    name=action.name,
+                    template_id=action.template_id,
+                    params=action.params,
+                    adapter_command=action.adapter_command,
+                    dialogue=action.dialogue,
+                    gaze_target=action.gaze_target,
+                    duration_s=action.duration_s,
+                    sim_minute=self.sim_minute,
+                    correlation_id=action.correlation_id,
+                )
+                await self._send_to_embodying_bodies(command)
 
     async def _send_to_embodying_bodies(self, command: ActionCommand) -> None:
+        # One speech owner; other bodies may still render the same action intent.
+        owner = command.params.get("reply_body_id")
+        if command.dialogue and not owner:
+            candidates = [
+                b
+                for b in self.bodies.values()
+                if command.agent_id in b.agent_ids
+                and b.manifest.wants_dialogue()
+                and b.manifest.features.get("autonomous_speech", True)
+            ]
+            candidates.sort(
+                key=lambda b: not b.manifest.features.get("speech_only", False)
+            )
+            owner = candidates[0].manifest.body_id if candidates else None
         for body in list(self.bodies.values()):
             if command.agent_id not in body.agent_ids:
                 continue
@@ -185,8 +221,12 @@ class SoulForgeRuntimeServer:
                 continue  # capability negotiation: body never sees what it can't do
             outgoing = ActionCommand(**{**command.__dict__})
             outgoing.name = manifest.resolve_step(command.name)
-            if not manifest.wants_dialogue():
+            if not manifest.wants_dialogue() or (
+                command.dialogue and manifest.body_id != owner
+            ):
                 outgoing.dialogue = None
+                if manifest.features.get("speech_only", False):
+                    continue
             # canonical IR envelope
             outgoing.sequence = body.next_sequence
             body.next_sequence += 1
@@ -315,6 +355,11 @@ class SoulForgeRuntimeServer:
         # cross-agent receipt must never consume the legitimate command.
         if obs.status in {"done", "failed", "interrupted", "rejected"}:
             body.sent_commands.pop(obs.command_id, None)
+            # outcome feedback: what actually happened flows back into episodic
+            # memory so reflection can learn from repeated failures
+            self.runtime.record_action_outcome(
+                agent_id, command.name, obs.status, obs.detail, self.sim_minute
+            )
             if (
                 command.dialogue
             ):  # the line has been spoken (or won't be): partner may answer
@@ -342,7 +387,25 @@ class SoulForgeRuntimeServer:
                 self._pending_micro.append((agent_id, recovery))
                 await self._flush_pending()
 
-    def _ingest_event(self, wire: WireEvent) -> None:
+    def _ingest_event(self, wire: WireEvent, body_id: str = "control") -> None:
+        payload = dict(wire.payload) if isinstance(wire.payload, dict) else {}
+        payload = {k: v for k, v in payload.items() if not k.startswith("_deferred")}
+        # Transport identity owns routing; clients cannot steal another speaker.
+        payload["reply_body_id"] = body_id if body_id in self.bodies else None
+        identity_for = getattr(self.llm.inner, "identity_for", None)
+        if identity_for is not None and wire.target_agent:
+            try:
+                supplied = dict(payload.get("identity") or {})
+                supplied["body_id"] = body_id
+                payload["identity"] = identity_for(wire.target_agent, supplied)
+            except (ValueError, TypeError):
+                self.runtime.log(
+                    self.sim_minute,
+                    wire.target_agent,
+                    "event_dropped",
+                    {"reason": "identity_mismatch", "body_id": body_id},
+                )
+                return
         try:
             kind = EventKind(wire.kind)
         except ValueError:
@@ -358,7 +421,7 @@ class SoulForgeRuntimeServer:
             kind=kind,
             source=wire.source,
             text=wire.text,
-            payload=wire.payload if isinstance(wire.payload, dict) else {},
+            payload=payload,
             target_agent=wire.target_agent,
         )
         try:
@@ -385,13 +448,58 @@ class SoulForgeRuntimeServer:
                 )
                 await self._flush_pending()
                 await self._broadcast_new_trace()
+                await self._complete_event(event)
             except Exception as exc:  # decision failure must not kill the worker
                 self.runtime.log(
                     self.sim_minute,
                     event.target_agent or "*",
                     "event_error",
-                    {"error": str(exc)[:200]},
+                    {"error": type(exc).__name__},
                 )
+                await self._complete_event(event, error=type(exc).__name__)
+
+    async def _complete_event(self, event, error: str = "") -> None:
+        from soulforge_harness.protocol.frames import DecisionComplete
+
+        body = self.bodies.get(event.payload.get("reply_body_id"))
+        correlation = event.payload.get("event_id")
+        if body is not None and correlation:
+            await self._safe_send(
+                body.socket,
+                encode(
+                    DecisionComplete(
+                        correlation_id=correlation,
+                        agent_id=event.target_agent or "",
+                        error=error,
+                        provider_health=self.provider_health(),
+                    )
+                ),
+            )
+
+    def _reload_personas(self) -> list[str]:
+        """Project the authoritative file, then refresh definitions without erasing state."""
+        from soulforge_harness.runtime import characters
+
+        characters._load_raw.cache_clear()
+        entries = characters.load_characters()["characters"]
+        store = self.runtime.memory_store
+        if hasattr(store, "project_characters"):
+            store.project_characters(entries)
+            store.bootstrap([entry["id"] for entry in entries])
+        added = []
+        for persona in characters.load_personas():
+            existing = self.runtime.personas.get(persona.agent_id)
+            if existing is None:
+                if self.runtime.add_persona(persona):
+                    added.append(persona.agent_id)
+            else:
+                existing.name = persona.name
+                existing.archetype = persona.archetype
+                existing.traits = persona.traits
+                existing.voice = persona.voice
+                existing.daily_goals = persona.daily_goals
+                existing.meta.update(persona.meta)
+        return added
 
     # ------------------------------------------------------------ connections
     async def _handle_connection(self, socket) -> None:
@@ -422,6 +530,7 @@ class SoulForgeRuntimeServer:
             with contextlib.suppress(Exception):
                 await previous.socket.close(code=4002, reason="replaced by reconnect")
         self.bodies[hello.body_id] = body
+        self._refresh_action_catalog()
         await self._safe_send(
             socket,
             encode(
@@ -449,7 +558,12 @@ class SoulForgeRuntimeServer:
                 if isinstance(message, Observation):
                     await self._handle_observation(body, message)
                 elif isinstance(message, WireEvent):
-                    self._ingest_event(message)
+                    if (
+                        message.target_agent
+                        and message.target_agent not in body.agent_ids
+                    ):
+                        continue
+                    self._ingest_event(message, body.manifest.body_id)
         except websockets.ConnectionClosed:
             pass
         finally:
@@ -457,6 +571,7 @@ class SoulForgeRuntimeServer:
             # a reconnected body must not be evicted by the old connection's teardown
             if self.bodies.get(hello.body_id) is body:
                 self.bodies.pop(hello.body_id, None)
+                self._refresh_action_catalog()
 
     async def _serve_control(self, socket) -> None:
         self.controls.add(socket)
@@ -494,8 +609,46 @@ class SoulForgeRuntimeServer:
                         await self._safe_send(
                             socket, json.dumps({"type": "error", "error": str(exc)})
                         )
+                elif data.get("type") == "reload_personas":
+                    try:
+                        added = await asyncio.to_thread(self._reload_personas)
+                        self._refresh_action_catalog()
+                    except Exception as exc:
+                        self.runtime.log(
+                            self.sim_minute,
+                            "*",
+                            "roster_error",
+                            {"error_type": type(exc).__name__},
+                        )
+                        await self._safe_send(
+                            socket,
+                            json.dumps(
+                                {
+                                    "type": "error",
+                                    "error": "character_projection_failed",
+                                }
+                            ),
+                        )
+                        continue
+                    await self._safe_send(
+                        socket,
+                        json.dumps(
+                            {
+                                "type": "personas",
+                                "agents": list(self.runtime.personas),
+                                "added": added,
+                            }
+                        ),
+                    )
                 elif data.get("type") == "query":
-                    if data.get("what") == "trace":
+                    if data.get("what") == "providers":
+                        await self._safe_send(
+                            socket,
+                            json.dumps(
+                                {"type": "provider_health", **self.provider_health()}
+                            ),
+                        )
+                    elif data.get("what") == "trace":
                         await self._safe_send(socket, self.runtime.dump_trace_json())
                     else:
                         for agent_id in self.runtime.personas:
@@ -518,11 +671,52 @@ class SoulForgeRuntimeServer:
         with contextlib.suppress(Exception):
             await socket.send(frame)
 
+    def provider_health(self) -> dict:
+        health = self.llm.health_snapshot()
+        store = self.runtime.memory_store
+        health["memory"] = (
+            store.health()
+            if hasattr(store, "health")
+            else {"backend": "memory", "persistent": False, "status": "offline"}
+        )
+        if health["memory"].get("last_error"):
+            health["status"] = "degraded"
+        health["service"] = "runtime"
+        return health
+
+    async def _broadcast_health(self) -> None:
+        data = self.provider_health()
+        data.pop("observed_at", None)
+        frame = json.dumps({"type": "provider_health", **data}, sort_keys=True)
+        if frame != self._last_health_frame:
+            self._last_health_frame = frame
+            await self._broadcast(frame)
+
+    async def _process_http(self, connection, request):
+        from http import HTTPStatus
+        from urllib.parse import urlsplit
+
+        path = urlsplit(request.path).path
+        if path not in {"/health", "/health/providers"}:
+            return None
+        data = self.provider_health()
+        data["ready"] = self.ready.is_set()
+        response = connection.respond(HTTPStatus.OK, json.dumps(data))
+        del response.headers["Content-Type"]
+        response.headers["Content-Type"] = "application/json"
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     # ---------------------------------------------------------------- runners
     async def serve(self, host: str = "127.0.0.1", port: int = 8765) -> None:
         """Pass port=0 to bind an ephemeral port; read it from `bound_port`."""
         async with websockets.serve(
-            self._handle_connection, host, port, ping_interval=20, ping_timeout=90
+            self._handle_connection,
+            host,
+            port,
+            ping_interval=20,
+            ping_timeout=90,
+            process_request=self._process_http,
         ) as ws_server:
             self.bound_port = ws_server.sockets[0].getsockname()[1]
             self.ready.set()
@@ -542,6 +736,19 @@ class SoulForgeRuntimeServer:
                     await ticker
                 with contextlib.suppress(asyncio.CancelledError):
                     await event_worker
+                store = self.runtime.memory_store
+                if hasattr(store, "flush"):
+                    saved = await asyncio.to_thread(store.flush, 10.0)
+                    if not saved:
+                        self.runtime.log(
+                            self.sim_minute,
+                            "*",
+                            "persistence_error",
+                            {"reason": "shutdown_flush_failed"},
+                        )
+                if hasattr(store, "close"):
+                    await asyncio.to_thread(store.close)
+                self.llm.shutdown()
 
     def stop(self) -> None:
         self._stop.set()
@@ -578,6 +785,31 @@ def main() -> None:
     args = parser.parse_args()
     hours, minutes = args.start_clock.split(":")
     start_minute = int(hours) * 60 + int(minutes)
+    import os
+
+    store = None
+    if not args.mock_llm and os.environ.get("SOULFORGE_MEMORY_BACKEND") == "ai-core":
+        from soulforge_harness.runtime.identity import runtime_user_id
+        from soulforge_harness.runtime.memory_store import AICoreMemoryStore
+        from soulforge_harness.runtime.characters import load_characters
+
+        brand = os.environ.get("SOULFORGE_BRAND_ID", "")
+        user = os.environ.get("SOULFORGE_USER_ID") or runtime_user_id(brand)
+        from pathlib import Path
+
+        outbox = os.environ.get("SOULFORGE_MEMORY_OUTBOX") or str(
+            Path("outputs/runtime-memory") / brand / user / "outbox.sqlite3"
+        )
+        store = AICoreMemoryStore(
+            os.environ.get("AI_CORE_URL", "http://127.0.0.1:8100"),
+            service_token=os.environ.get("SERVICE_TOKEN", ""),
+            brand_id=brand,
+            user_id=user,
+            outbox_path=outbox,
+        )
+        entries = load_characters()["characters"]
+        store.project_characters(entries)
+        store.bootstrap([entry["id"] for entry in entries])
     server = SoulForgeRuntimeServer(
         default_personas(),
         start_minute=start_minute,
@@ -586,8 +818,16 @@ def main() -> None:
         social=args.social,
         llm_timeout_s=args.llm_timeout,
         llm=MockBehaviorLLM() if args.mock_llm else None,
+        memory_store=store,
     )
-    asyncio.run(server.serve(args.host, args.port))
+
+    async def run_server():
+        import signal
+
+        asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, server.stop)
+        await server.serve(args.host, args.port)
+
+    asyncio.run(run_server())
 
 
 if __name__ == "__main__":

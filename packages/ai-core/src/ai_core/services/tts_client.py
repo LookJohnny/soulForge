@@ -2,11 +2,13 @@
 
 import contextlib
 import re
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
 import structlog
 
+from ai_core.services import provider_health as observed
 from ai_core.services.tts.registry import create_tts_provider
 
 logger = structlog.get_logger()
@@ -60,6 +62,28 @@ def _coerce_float(value: Any, default: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, number))
 
 
+async def _observe_synthesis(provider, method: str, *args) -> bytes:
+    """Observe each attempted provider, including a separately routed fallback."""
+    start = time.monotonic()
+    name = provider.name
+    model = getattr(provider, "model", None) or observed.tts_model(name)
+    try:
+        audio = await getattr(provider, method)(*args)
+    except Exception as exc:
+        observed.provider_health.record_failure(
+            "tts", name, model, (time.monotonic() - start) * 1000, exc
+        )
+        raise
+    latency = (time.monotonic() - start) * 1000
+    if audio:
+        observed.provider_health.record_success("tts", name, model, latency)
+    else:
+        observed.provider_health.record_failure(
+            "tts", name, model, latency, observed.EmptyProviderResponse()
+        )
+    return audio
+
+
 class TTSClient:
     def __init__(self, provider: str | None = None):
         self._provider = create_tts_provider(provider=provider)
@@ -104,7 +128,9 @@ class TTSClient:
         ssml_rate = _coerce_float(ssml_rate, 1.0, 0.5, 2.0)
         primary, fallback = self._route(voice)
         try:
-            return await primary.synthesize(
+            return await _observe_synthesis(
+                primary,
+                "synthesize",
                 text,
                 voice,
                 speed,
@@ -116,8 +142,10 @@ class TTSClient:
             )
         except Exception as e:
             if fallback:
-                logger.warning("tts.primary_failed_using_fallback", error=str(e))
-                return await fallback.synthesize(
+                logger.warning("tts.primary_failed_using_fallback", error_type=type(e).__name__)
+                return await _observe_synthesis(
+                    fallback,
+                    "synthesize",
                     text,
                     voice,
                     speed,
@@ -146,7 +174,9 @@ class TTSClient:
         ssml_rate = _coerce_float(ssml_rate, 1.0, 0.5, 2.0)
         primary, fallback = self._route(voice)
         try:
-            return await primary.synthesize_to_wav(
+            return await _observe_synthesis(
+                primary,
+                "synthesize_to_wav",
                 text,
                 voice,
                 speed,
@@ -158,8 +188,10 @@ class TTSClient:
             )
         except Exception as e:
             if fallback:
-                logger.warning("tts.primary_failed_using_fallback", error=str(e))
-                return await fallback.synthesize_to_wav(
+                logger.warning("tts.primary_failed_using_fallback", error_type=type(e).__name__)
+                return await _observe_synthesis(
+                    fallback,
+                    "synthesize_to_wav",
                     text,
                     voice,
                     speed,
@@ -211,6 +243,8 @@ class TTSClient:
             return
 
         emitted = False
+        start = time.monotonic()
+        model = getattr(primary, "model", None) or observed.tts_model(primary.name)
         try:
             async for chunk in primary.synthesize_stream(
                 text=text,
@@ -224,18 +258,40 @@ class TTSClient:
                     emitted = True
                     yield chunk
         except Exception as e:
+            observed.provider_health.record_failure(
+                "tts", primary.name, model, (time.monotonic() - start) * 1000, e
+            )
             if emitted:
-                logger.warning("tts.stream_failed_midway", error=str(e))
+                logger.warning("tts.stream_failed_midway", error_type=type(e).__name__)
                 return
             if fallback:
-                logger.warning("tts.stream_primary_failed_using_fallback", error=str(e))
-                audio = await fallback.synthesize(
-                    text, voice, speed, pitch_rate, speech_rate, ssml_pitch, ssml_rate, ssml_effect
+                logger.warning(
+                    "tts.stream_primary_failed_using_fallback", error_type=type(e).__name__
+                )
+                audio = await _observe_synthesis(
+                    fallback,
+                    "synthesize",
+                    text,
+                    voice,
+                    speed,
+                    pitch_rate,
+                    speech_rate,
+                    ssml_pitch,
+                    ssml_rate,
+                    ssml_effect,
                 )
                 if audio:
                     yield audio
                 return
             raise
+
+        latency = (time.monotonic() - start) * 1000
+        if emitted:
+            observed.provider_health.record_success("tts", primary.name, model, latency)
+        else:
+            observed.provider_health.record_failure(
+                "tts", primary.name, model, latency, observed.EmptyProviderResponse()
+            )
 
     def get_preset_voices(self) -> dict[str, str]:
         return self._provider.get_voices()

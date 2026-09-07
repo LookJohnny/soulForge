@@ -13,6 +13,31 @@ from gateway.config import settings
 logger = logging.getLogger(__name__)
 
 
+class DeviceRegistryUnavailable(RuntimeError):
+    """Device ownership could not be checked against the authoritative registry."""
+
+
+def _runtime_owner() -> tuple[str, str] | None:
+    if not (settings.character_runtime_url and settings.soulforge_brand_id):
+        return None
+    from soulforge_harness.runtime.identity import runtime_user_id
+
+    brand = str(uuid.UUID(settings.soulforge_brand_id))
+    user = str(uuid.UUID(settings.soulforge_user_id or runtime_user_id(brand)))
+    return brand, user
+
+
+def _validate_runtime_owner(info: dict) -> None:
+    owner = _runtime_owner()
+    if owner is None:
+        return
+    brand, user = owner
+    if info.get("brand_id") and info["brand_id"] != brand:
+        raise PermissionError("Device belongs to a different runtime brand")
+    if info.get("end_user_id") and info["end_user_id"] != user:
+        raise PermissionError("Device belongs to a different runtime user")
+
+
 @dataclass
 class Session:
     session_id: str
@@ -66,76 +91,106 @@ class SessionManager:
                 "brand_id": str(row["brand_id"]) if row["brand_id"] else None,
                 "device_secret": row["device_secret"],
             }
-            # Backfill Redis cache
-            if self.redis:
-                await self.redis.setex(
-                    f"device:{device_id}",
-                    settings.session_ttl_seconds,
-                    json.dumps(info),
-                )
+            await self._cache_device_info(device_id, info)
             return info
         except Exception as e:
             logger.warning("session.db_lookup_failed: %s", e)
+            if _runtime_owner() is not None:
+                raise DeviceRegistryUnavailable("Device ownership registry is unavailable") from e
             return None
+
+    async def _cache_device_info(self, device_id: str, info: dict) -> None:
+        if self.redis:
+            try:
+                await self.redis.setex(
+                    f"device:{device_id}", settings.session_ttl_seconds, json.dumps(info)
+                )
+            except Exception as exc:
+                # A failed cache write must not turn a known DB owner into an
+                # apparently unknown device that is then auto-registered.
+                logger.warning("session.device_cache_failed: %s", type(exc).__name__)
 
     async def _auto_register_device(self, device_id: str) -> dict | None:
         """Auto-register an unknown device with a default character.
 
-        Picks the first PUBLISHED character in the DB as default.
+        Unified mode uses this installation's projected character and user.
+        Legacy mode picks the first PUBLISHED character in the DB as default.
         Only runs in non-production environments.
         """
         if settings.environment == "production":
             return None
         if not self._db_pool:
             return None
+        owner = _runtime_owner()
         try:
-            # Find a default character (first published one)
-            char_row = await self._db_pool.fetchrow(
-                """SELECT c.id AS character_id, c.brand_id
-                   FROM characters c
-                   WHERE c.status = 'PUBLISHED'
-                   ORDER BY c.created_at DESC
-                   LIMIT 1""",
-            )
+            if owner is not None:
+                brand, user = owner
+                rows = await self._db_pool.fetch(
+                    """SELECT c.id AS character_id, c.brand_id
+                       FROM characters c
+                       WHERE c.status = 'PUBLISHED' AND c.brand_id = $1
+                         AND c.emotion_config->'runtime_projection'->>'agent_id' = $2
+                         AND EXISTS (SELECT 1 FROM end_users WHERE id = $3)
+                       LIMIT 2""",
+                    uuid.UUID(brand),
+                    settings.character_runtime_agent,
+                    uuid.UUID(user),
+                )
+                if len(rows) != 1:
+                    raise DeviceRegistryUnavailable(
+                        "Runtime character or user projection is unavailable"
+                    )
+                char_row = rows[0]
+            else:
+                char_row = await self._db_pool.fetchrow(
+                    """SELECT c.id AS character_id, c.brand_id
+                       FROM characters c
+                       WHERE c.status = 'PUBLISHED'
+                       ORDER BY c.created_at DESC
+                       LIMIT 1""",
+                )
             if not char_row:
                 logger.warning("session.auto_register: no published characters found")
                 return None
 
-            character_id = str(char_row["character_id"])
-            brand_id = str(char_row["brand_id"])
-
-            # Insert device record
-            await self._db_pool.execute(
-                """INSERT INTO devices (id, device_type, character_id, status, created_at, updated_at)
-                   VALUES ($1, 'toy', $2, 'ACTIVE', now(), now())
-                   ON CONFLICT (id) DO NOTHING""",
-                device_id,
-                char_row["character_id"],
-            )
-
-            info = {
-                "character_id": character_id,
-                "end_user_id": None,
-                "brand_id": brand_id,
-                "device_secret": None,
-            }
-
-            # Cache in Redis
-            if self.redis:
-                await self.redis.setex(
-                    f"device:{device_id}",
-                    settings.session_ttl_seconds,
-                    json.dumps(info),
+            if owner is not None:
+                await self._db_pool.execute(
+                    """INSERT INTO devices
+                       (id, device_type, character_id, end_user_id, status, created_at, updated_at)
+                       VALUES ($1, 'toy', $2, $3, 'ACTIVE', now(), now())
+                       ON CONFLICT (id) DO NOTHING""",
+                    device_id,
+                    char_row["character_id"],
+                    uuid.UUID(owner[1]),
                 )
+            else:
+                await self._db_pool.execute(
+                    """INSERT INTO devices (id, device_type, character_id, status, created_at, updated_at)
+                       VALUES ($1, 'toy', $2, 'ACTIVE', now(), now())
+                       ON CONFLICT (id) DO NOTHING""",
+                    device_id,
+                    char_row["character_id"],
+                )
+
+            # A concurrent registration may have won ON CONFLICT. Always use
+            # its real owner; never cache the identity we merely attempted.
+            info = await self._load_device_from_db(device_id)
+            if not info:
+                raise DeviceRegistryUnavailable("Registered device could not be read back")
+            _validate_runtime_owner(info)
 
             logger.info(
                 "session.auto_registered device=%s character=%s",
                 device_id,
-                character_id,
+                info["character_id"],
             )
             return info
+        except (PermissionError, DeviceRegistryUnavailable):
+            raise
         except Exception as e:
-            logger.warning("session.auto_register_failed: %s", e)
+            logger.warning("session.auto_register_failed: %s", type(e).__name__)
+            if owner is not None:
+                raise DeviceRegistryUnavailable("Device registration is unavailable") from e
             return None
 
     async def load_device_info(self, device_id: str) -> dict | None:
@@ -143,6 +198,18 @@ class SessionManager:
 
         Used by both session creation and device authentication.
         """
+        if _runtime_owner() is not None:
+            # Ownership may have changed since an unowned Redis entry was
+            # cached. In unified mode the DB is authoritative at connection.
+            if self._db_pool is None:
+                raise DeviceRegistryUnavailable("Device ownership registry is unavailable")
+            info = await self._load_device_from_db(device_id)
+            if info is None:
+                info = await self._auto_register_device(device_id)
+            if info is not None:
+                _validate_runtime_owner(info)
+            return info
+
         # Try Redis first
         if self.redis:
             raw = await self.redis.get(f"device:{device_id}")
@@ -167,10 +234,19 @@ class SessionManager:
         )
 
         device_info = await self.load_device_info(device_id)
+        owner = _runtime_owner()
         if device_info:
+            _validate_runtime_owner(device_info)
             session.character_id = device_info.get("character_id")
             session.end_user_id = device_info.get("end_user_id")
             session.brand_id = device_info.get("brand_id")
+            if owner is not None:
+                # Existing unowned local devices share the installation user
+                # for this session. Their device row and old memories stay put.
+                session.brand_id = session.brand_id or owner[0]
+                session.end_user_id = session.end_user_id or owner[1]
+        elif owner is not None:
+            raise PermissionError("Device is not registered for this runtime")
 
         # Store session in Redis
         if self.redis:

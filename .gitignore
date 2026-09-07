@@ -78,3 +78,18 @@ assets/vtubers/samples/mixamo/
 
 # installed .soul model files
 assets/vtubers/souls/
+assets/souls/
+
+# Local character imports and licensed source motion. Preserve privately when
+# moving machines; see docs/macbook-windows-5080.md and the samples license.
+unity/SoulForgeUnityClient/Assets/SoulForge/Models/
+unity/SoulForgeUnityClient/Assets/SoulForge/Models.meta
+unity/SoulForgeUnityClient/Assets/SoulForge/Animations/Mixamo/
+unity/SoulForgeUnityClient/Assets/SoulForge/Animations/Mixamo.meta
+
+# Private database / memory backups and runtime state
+scripts/backup/*.sql
+scripts/backup/*.dump
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal

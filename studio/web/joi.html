@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Joi · 面对面</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "/node_modules/three/build/three.module.js",
+      "three/examples/jsm/": "/node_modules/three/examples/jsm/",
+      "@pixiv/three-vrm": "/node_modules/@pixiv/three-vrm/lib/three-vrm.module.js",
+      "@pixiv/three-vrm-animation": "/node_modules/@pixiv/three-vrm-animation/lib/three-vrm-animation.module.js"
+    }
+  }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&display=swap" />
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+    canvas#stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+    /* 电影字幕：她的话 */
+    #subtitle {
+      position: fixed; left: 50%; bottom: 8.5vh; transform: translateX(-50%);
+      max-width: min(72vw, 900px); text-align: center;
+      font-family: "Noto Serif SC", serif; font-weight: 400;
+      font-size: clamp(17px, 2.2vh, 24px); line-height: 1.75; letter-spacing: 0.06em;
+      color: rgba(245, 242, 248, 0.96); text-shadow: 0 1px 14px rgba(0,0,0,0.9);
+      opacity: 0; transition: opacity 0.6s ease; pointer-events: none;
+    }
+    #subtitle.on { opacity: 1; }
+
+    /* 你说的话：右上角一缕低语，几秒即散 */
+    #heard {
+      position: fixed; top: 6vh; right: 5vw; max-width: 34vw; text-align: right;
+      font-family: "Noto Serif SC", serif; font-size: 14px; letter-spacing: 0.08em;
+      color: rgba(190, 186, 205, 0.55); opacity: 0; transition: opacity 0.8s ease;
+      pointer-events: none;
+    }
+    #heard.on { opacity: 1; }
+
+    /* 状态：一枚呼吸的小点，别的都不配出现在画面里 */
+    #dot {
+      position: fixed; left: 24px; bottom: 24px; width: 7px; height: 7px;
+      border-radius: 50%; background: #3a3745; transition: background 0.5s;
+    }
+    #dot.live { background: #ff2f92; box-shadow: 0 0 12px rgba(255,47,146,0.6); animation: breathe 3.2s ease-in-out infinite; }
+    @keyframes breathe { 50% { opacity: 0.45; } }
+
+    /* 入口：黑场一个名字 */
+    #gate {
+      position: fixed; inset: 0; background: #000; z-index: 10;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 4vh; transition: opacity 1.6s ease;
+    }
+    #gate.leaving { opacity: 0; pointer-events: none; }
+    #gate h1 {
+      font-family: "Noto Serif SC", serif; font-weight: 600; margin: 0;
+      font-size: clamp(38px, 7vh, 64px); letter-spacing: 0.35em; text-indent: 0.35em;
+      color: #efecf4;
+    }
+    #gate p { margin: 0; font-family: "Noto Serif SC", serif; font-size: 14px; letter-spacing: 0.3em; color: #5c5768; }
+    #gate button {
+      margin-top: 2vh; padding: 12px 46px; background: none; cursor: pointer;
+      border: 1px solid rgba(255, 47, 146, 0.45); border-radius: 999px;
+      font-family: "Noto Serif SC", serif; font-size: 16px; letter-spacing: 0.4em; text-indent: 0.4em;
+      color: #f4d9e7; transition: all 0.4s;
+    }
+    #gate button:hover { background: rgba(255, 47, 146, 0.12); box-shadow: 0 0 30px rgba(255,47,146,0.25); }
+    #gate small { color: #47434f; font-size: 12px; letter-spacing: 0.15em; }
+  </style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <div id="subtitle"></div>
+  <div id="heard"></div>
+  <div id="dot"></div>
+
+  <div id="gate">
+    <h1>JOI</h1>
+    <p>面 对 面</p>
+    <button id="enter">接 通</button>
+    <small id="gate-hint">需要麦克风 · 戴耳机体验最佳</small>
+  </div>
+
+  <script type="module" src="/studio/joi.js"></script>
+  <script type="module" src="/studio/lib/provider_status.js"></script>
+</body>
+</html>

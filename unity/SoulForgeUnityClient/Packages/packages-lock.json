@@ -29,7 +29,7 @@
     },
     "com.unity.mathematics": {
       "version": "1.4.0",
-      "depth": 3,
+      "depth": 1,
       "source": "builtin",
       "dependencies": {}
     },
@@ -113,6 +113,18 @@
         "com.unity.ugui": "2.0.0"
       }
     },
+    "com.unity.timeline": {
+      "version": "1.8.12",
+      "depth": 1,
+      "source": "registry",
+      "dependencies": {
+        "com.unity.modules.audio": "1.0.0",
+        "com.unity.modules.director": "1.0.0",
+        "com.unity.modules.animation": "1.0.0",
+        "com.unity.modules.particlesystem": "1.0.0"
+      },
+      "url": "https://packages.unity.com"
+    },
     "com.unity.ugui": {
       "version": "2.5.0",
       "depth": 0,
@@ -124,6 +136,39 @@
         "com.unity.modules.physics2d": "1.0.0",
         "com.unity.modules.physics": "1.0.0"
       }
+    },
+    "com.vrmc.gltf": {
+      "version": "https://github.com/vrm-c/UniVRM.git?path=/Packages/UniGLTF#v0.131.2",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {
+        "com.unity.modules.animation": "1.0.0",
+        "com.unity.modules.imgui": "1.0.0",
+        "com.unity.modules.imageconversion": "1.0.0",
+        "com.unity.test-framework": "1.4.6",
+        "com.unity.mathematics": "1.2.6"
+      },
+      "hash": "a4711bbf8c4d10659d3e5568c2e3d7d595005e51"
+    },
+    "com.vrmc.univrm": {
+      "version": "https://github.com/vrm-c/UniVRM.git?path=/Packages/VRM#v0.131.2",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {
+        "com.vrmc.gltf": "0.131.2",
+        "com.unity.ugui": "1.0.0"
+      },
+      "hash": "a4711bbf8c4d10659d3e5568c2e3d7d595005e51"
+    },
+    "com.vrmc.vrm": {
+      "version": "https://github.com/vrm-c/UniVRM.git?path=/Packages/VRM10#v0.131.2",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {
+        "com.unity.timeline": "1.7.6",
+        "com.vrmc.gltf": "0.131.2"
+      },
+      "hash": "a4711bbf8c4d10659d3e5568c2e3d7d595005e51"
     },
     "com.unity.modules.ai": {
       "version": "1.0.0",

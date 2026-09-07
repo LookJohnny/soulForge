@@ -5,7 +5,8 @@
     "SoulForge.UnityClient",
     "UnityEngine.UI",
     "Unity.RenderPipelines.Core.Runtime",
-    "Unity.RenderPipelines.Universal.Runtime"
+    "Unity.RenderPipelines.Universal.Runtime",
+    "VRM"
   ],
   "includePlatforms": [
     "Editor"

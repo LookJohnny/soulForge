@@ -3,7 +3,11 @@
 import json
 from datetime import UTC, datetime
 
+import pytest
+
 from ai_core.services.memory import MemoryService
+
+pytestmark = pytest.mark.asyncio
 
 
 class _FakeAcquire:
@@ -71,11 +75,18 @@ class _FakeConn:
         ]
 
 
-async def test_record_raw_event_auto_scores_and_persists_payload():
+@pytest.mark.parametrize(
+    "observed_at",
+    [
+        datetime(2026, 6, 12, 9, tzinfo=UTC),
+        datetime(2026, 6, 12, 9),
+        "2026-06-12T17:00:00+08:00",
+    ],
+)
+async def test_record_raw_event_auto_scores_and_persists_payload(observed_at):
     conn = _FakeConn()
     service = MemoryService(_FakePool(conn), llm=None, cache=None)
     service._raw_event_schema_available = True
-    observed_at = datetime(2026, 6, 12, 9, tzinfo=UTC)
 
     row = await service.record_raw_event(
         {
@@ -94,7 +105,8 @@ async def test_record_raw_event_auto_scores_and_persists_payload():
     assert row["payload"] == {"turn": 3}
     assert row["context"] == {"mood": "nervous"}
     assert 1 <= conn.fetchrow_args[9] <= 10
-    assert conn.fetchrow_args[11] == observed_at
+    assert conn.fetchrow_args[11] == datetime(2026, 6, 12, 9)
+    assert conn.fetchrow_args[11].tzinfo is None  # raw_event_logs uses TIMESTAMP(3)
 
 
 async def test_list_raw_events_returns_stringified_datetimes():

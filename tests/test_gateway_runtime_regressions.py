@@ -63,6 +63,7 @@ async def test_ephemeral_runtime_voice_bridge_uses_two_phase_ack_and_rejects_for
         assert body.manifest.features == {
             "speech": True,
             "speech_only": True,
+            "autonomous_speech": True,
             "gaze": False,
             "nav": False,
         }
@@ -70,6 +71,12 @@ async def test_ephemeral_runtime_voice_bridge_uses_two_phase_ack_and_rejects_for
         command_id = decision["commands"][0]["command_id"]
         # CharacterBridge has sent accepted, but accepted is not completion.
         await _wait_until(lambda: command_id in body.sent_commands)
+        await _wait_until(
+            lambda: any(
+                item.kind == "observation" and item.detail.get("status") == "accepted"
+                for item in server.runtime.trace
+            )
+        )
         accepted = [
             item
             for item in server.runtime.trace
@@ -141,7 +148,13 @@ class _ExplodingLegacyClient:
         raise AssertionError("legacy /pipeline/chat/stream must not be called")
 
 
-def _orchestrator_with_fake_bridge(fake: _FakeBridge) -> PipelineOrchestrator:
+def _orchestrator_with_fake_bridge(
+    fake: _FakeBridge, monkeypatch
+) -> PipelineOrchestrator:
+    # Receipt/ASR tests use a legacy bridge fake, without an AI Core client.
+    # Keep a developer's root .env from enabling unrelated identity resolution.
+    monkeypatch.setattr(settings, "soulforge_brand_id", "")
+    monkeypatch.setattr(settings, "soulforge_user_id", "")
     orchestrator = PipelineOrchestrator.__new__(PipelineOrchestrator)
     orchestrator._character_bridge = fake
     orchestrator._pending_playback = {}
@@ -152,7 +165,7 @@ def _orchestrator_with_fake_bridge(fake: _FakeBridge) -> PipelineOrchestrator:
 @pytest.mark.asyncio
 async def test_tts_yield_never_confirms_before_explicit_playback_receipt(monkeypatch):
     fake = _FakeBridge()
-    orchestrator = _orchestrator_with_fake_bridge(fake)
+    orchestrator = _orchestrator_with_fake_bridge(fake, monkeypatch)
     session = Session("s1", "device-1", character_id="character-1")
 
     async def synthesize(*args, **kwargs):
@@ -180,7 +193,7 @@ async def test_tts_yield_never_confirms_before_explicit_playback_receipt(monkeyp
 @pytest.mark.asyncio
 async def test_tts_exception_marks_accepted_command_interrupted(monkeypatch):
     fake = _FakeBridge()
-    orchestrator = _orchestrator_with_fake_bridge(fake)
+    orchestrator = _orchestrator_with_fake_bridge(fake, monkeypatch)
     session = Session("s1", "device-1", character_id="character-1")
 
     async def synthesize(*args, **kwargs):
@@ -201,7 +214,7 @@ async def test_tts_exception_marks_accepted_command_interrupted(monkeypatch):
 @pytest.mark.asyncio
 async def test_audio_fallback_is_asr_only_then_character_runtime(monkeypatch):
     fake = _FakeBridge()
-    orchestrator = _orchestrator_with_fake_bridge(fake)
+    orchestrator = _orchestrator_with_fake_bridge(fake, monkeypatch)
     session = Session("s1", "device-1", character_id="character-1")
 
     async def transcribe(audio_data: bytes, audio_format: str = "pcm") -> str:
@@ -231,7 +244,7 @@ async def test_audio_fallback_is_asr_only_then_character_runtime(monkeypatch):
 @pytest.mark.asyncio
 async def test_asr_only_failure_drops_turn_without_legacy_llm(monkeypatch):
     fake = _FakeBridge()
-    orchestrator = _orchestrator_with_fake_bridge(fake)
+    orchestrator = _orchestrator_with_fake_bridge(fake, monkeypatch)
     session = Session("s1", "device-1", character_id="character-1")
 
     async def transcribe(audio_data: bytes, audio_format: str = "pcm") -> str:

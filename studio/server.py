@@ -35,6 +35,8 @@ from engine.planner import (  # noqa: E402
 )
 from engine.planner.llm_interface import SafeDecisionLLM, build_llm  # noqa: E402
 from engine.planner.memory_store import InMemoryMemoryStore  # noqa: E402
+from studio.tavus_session import register as register_tavus_session  # noqa: E402
+from studio.selfhost_proxy import register as register_selfhost_proxy  # noqa: E402
 
 STUDIO_WEB = Path(__file__).parent / "web"
 
@@ -802,25 +804,79 @@ async def api_core_proxy(request: web.Request) -> web.Response:
         return web.json_response({"error": f"ai-core unreachable: {e}"}, status=502)
 
 
+async def api_runtime_agent(request: web.Request) -> web.Response:
+    from studio.gateway_proxy import switch_agent
+    from urllib.parse import urlsplit
+
+    gateway = urlsplit(GATEWAY_WS_URL)
+    gateway_url = load_dotenv_key("GATEWAY_API_URL") or (
+        f"{'https' if gateway.scheme == 'wss' else 'http'}://{gateway.netloc}"
+    )
+    return await switch_agent(
+        request,
+        gateway_url=gateway_url,
+        token=load_dotenv_key("GATEWAY_API_TOKEN"),
+        runtime_url=RUNTIME_WS_URL or RUNTIME_URL or "ws://127.0.0.1:8765/body",
+        agent_ids={c["id"] for c in load_characters()["characters"]},
+    )
+
+
+async def api_provider_health(_request: web.Request) -> web.Response:
+    from studio.gateway_proxy import provider_health
+
+    data = await provider_health(
+        RUNTIME_WS_URL or RUNTIME_URL or "ws://127.0.0.1:8765/body",
+        ai_core_url=AI_CORE_URL,
+        service_token=AI_CORE_TOKEN,
+        brand_id=load_dotenv_key("SOULFORGE_BRAND_ID")
+        or load_dotenv_key("SOUL_BRAND_ID"),
+    )
+    return web.json_response(
+        data,
+        status=503 if data.get("status") == "unavailable" else 200,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 async def live(_request: web.Request) -> web.FileResponse:
     """VRM 作为 gateway 身体的实时页面（语音/记忆/PAD 全走 gateway 管道）。"""
     return web.FileResponse(STUDIO_WEB / "live.html")
+
+
+async def joi(request: web.Request) -> web.FileResponse:
+    """「面对面」——单角色电影化呈现层（新一代互动媒介的第一块试验田）。"""
+    page = {"vrm": "joi.html", "selfhost": "joi-selfhost.html"}.get(
+        request.query.get("body"), "joi-video.html"
+    )
+    return web.FileResponse(STUDIO_WEB / page)
 
 
 @web.middleware
 async def no_cache(request: web.Request, handler):
     """Page/lib assets change constantly; WKWebView (Tauri) caches them hard."""
     resp = await handler(request)
-    if request.path.startswith(("/studio/", "/live", "/api/")) or request.path == "/":
+    if (
+        request.path.startswith(("/studio/", "/live", "/joi", "/api/"))
+        or request.path == "/"
+    ):
         resp.headers["Cache-Control"] = "no-store, must-revalidate"
     return resp
 
 
 def build_app() -> web.Application:
     app = web.Application(client_max_size=256 * 1024 * 1024, middlewares=[no_cache])
+    register_tavus_session(
+        app,
+        setting=load_dotenv_key,
+        state_path=ROOT / "outputs" / "joi-session" / "owned-session.json",
+    )
+    register_selfhost_proxy(app, setting=load_dotenv_key)
     app.router.add_get("/", index)
     app.router.add_get("/live", live)
+    app.router.add_get("/joi", joi)
     app.router.add_route("*", "/api/core/{path:.*}", api_core_proxy)
+    app.router.add_post("/api/runtime/agent", api_runtime_agent)
+    app.router.add_get("/health/providers", api_provider_health)
     app.router.add_get("/api/status", api_status)
     app.router.add_get("/api/characters", api_characters)
     app.router.add_get("/api/models", api_models)

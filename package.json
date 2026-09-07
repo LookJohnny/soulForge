@@ -18,6 +18,7 @@
     "test:models": "node studio/tests/test_models_smoke.mjs && node studio/tests/test_humanoid_tables.mjs"
   },
   "devDependencies": {
+    "@daily-co/daily-js": "0.92.2",
     "@pixiv/three-vrm": "^3.5.4",
     "@pixiv/three-vrm-animation": "3.5.4",
     "playwright": "^1.61.1",

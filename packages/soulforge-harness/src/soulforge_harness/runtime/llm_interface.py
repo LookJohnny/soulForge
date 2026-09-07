@@ -4,17 +4,11 @@ The LLM never emits raw motion. It returns a structured decision that selects,
 parameterizes and chains behavior templates. A deterministic mock is always
 available so the whole engine runs and tests without any API key.
 
-DELIBERATE BOUNDARY — this client is separate from ai-core's LLM layer
-(packages/ai-core/src/ai_core/services/llm/) on purpose, not by accident:
+Live deployments send one cognition request to AI Core, which owns the rich
+persona prompt, persistent memory and relationship loop. This module retains
+stdlib-only embedding and an explicit offline/mock mode. SafeDecisionLLM owns
+all fallback decisions and exposes their health and counts to every body.
 
-- Different job: this one makes sync, single-shot *behavior decisions*
-  (validated JSON, mock fallback on any failure); ai-core's is the async
-  streaming *conversation* stack (provider registry, retries, SSE).
-- Independence: the engine must import with zero third-party deps so any
-  body can embed it — stdlib urllib only, no httpx/openai/pydantic.
-
-If you're tempted to add retries, providers, or streaming here, the feature
-belongs in ai-core; call it over HTTP like memory_store.AICoreMemoryStore.
 """
 
 from __future__ import annotations
@@ -52,6 +46,12 @@ class BehaviorDecision:
     interrupt_policy: str = "resume"  # resume | drop | reschedule
     memory_update: dict[str, Any] = field(default_factory=dict)
     reason: str = ""
+    # concrete actions picked from the body's negotiated catalog (0-2). The
+    # model never invents motion: entries outside the offered catalog are
+    # dropped in validation, and with no catalog nothing executes (fail-closed).
+    body_actions: list[str] = field(default_factory=list)
+    cognitive_state: dict[str, Any] = field(default_factory=dict)
+    provider_status: dict[str, Any] = field(default_factory=dict)
 
     def to_json(self) -> str:
         payload = asdict(self)
@@ -66,8 +66,11 @@ DECISION_SCHEMA_HINT = """Respond ONLY with JSON:
   "template_to_call": str, "template_params": object,
   "dialogue": [{"agent": str, "text": str, "emotion": str}],
   "motion_style": str, "interrupt_policy": "resume|drop|reschedule",
-  "memory_update": object, "reason": str
-}"""
+  "memory_update": object, "reason": str,
+  "body_actions": [str]
+}
+body_actions: 0-2 entries chosen ONLY from AVAILABLE ACTIONS (use [] when none
+fit or the list is absent); the body performs them after your dialogue."""
 
 _LLM_PERCEPTION_FIELDS = (
     "arrival",
@@ -177,6 +180,26 @@ class MockBehaviorLLM:
                 reason="someone entered the room: glance, plan unchanged",
             )
 
+        if (
+            isinstance(event.payload, dict)
+            and event.payload.get("proactive") == "loneliness"
+        ):
+            line = persona.meta.get("lonely_line") or "在忙什么呢？半天没动静了。"
+            return BehaviorDecision(
+                selected_intent="approach_and_comfort",
+                emotional_read="user is present but has been silent for a while",
+                plan_delta="insert",
+                impact=ImpactLevel.MEDIUM,
+                template_to_call="chatting",
+                template_params={"tone": "gentle"},
+                dialogue=[{"agent": persona.agent_id, "text": line, "emotion": "warm"}],
+                motion_style="soft",
+                interrupt_policy="resume",
+                memory_update={},
+                reason="proactive presence: user silent too long, come over",
+                body_actions=["approach_user"],
+            )
+
         # ---- perception kinds first: their text (labels/OCR) is NEVER an
         # instruction channel, so keyword scanning does not apply to them.
         if event.kind in VISION_EVENT_KINDS:
@@ -277,6 +300,8 @@ class MockBehaviorLLM:
                 interrupt_policy="resume",
                 memory_update={},
                 reason=f"performance request: play '{performance}' clip then resume",
+                # catalog path: executes only if a connected body offers the step
+                body_actions=[performance],
             )
 
         if self._hits(text, self.OBSERVE_REQUEST):
@@ -364,6 +389,13 @@ class MockBehaviorLLM:
     )
     PERFORMANCES = (
         ("dance", ("跳个舞", "跳舞", "跳支舞", "来段舞", "dance")),
+        ("dance_rumba", ("伦巴", "rumba")),
+        ("crouch", ("蹲下", "蹲一下", "蹲着", "crouch")),
+        ("point_at", ("指一指", "指给我", "指着", "point")),
+        ("flirt", ("撩一下", "撩我", "魅惑", "flirt")),
+        ("dance_belly", ("肚皮舞", "魅惑一下", "魅惑")),
+        ("blow_kiss", ("飞吻", "亲一个", "么么哒")),
+        ("excited", ("兴奋一下", "激动一下")),
         ("wave", ("挥挥手", "挥手", "打个招呼", "wave")),
         ("spin", ("转个圈", "转圈", "spin")),
         ("stretch", ("伸个懒腰", "拉伸", "stretch")),
@@ -582,13 +614,41 @@ class OpenAICompatibleBehaviorLLM:
             )
         else:
             reflections = persona.meta.get("reflections") or []
+            world_context = json.dumps(
+                _compact_llm_value(world.context_for(persona.agent_id)),
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            catalog = sorted(world.body_actions.get(persona.agent_id, []))[:40]
+            catalog_hint = (
+                f"AVAILABLE ACTIONS (your body can perform these right now; "
+                f"pick 0-2 into body_actions, never invent others): {catalog}\n"
+                if catalog
+                else "AVAILABLE ACTIONS: none — body_actions must be [].\n"
+            )
+            speech_style = persona.meta.get("speech_style", "")
+            interests = persona.meta.get("interests") or []
+            recent = persona.meta.get("recent_dialogue") or []
+            recent_text = (
+                "最近的对话（最新在后）：\n"
+                + "\n".join(f"  {who}: {said}" for who, said in recent[-8:])
+                + "\n"
+                if recent
+                else ""
+            )
             task = (
                 f"You are {persona.name}, a {persona.archetype} companion. Traits: {persona.traits}. "
                 f"Mood valence {persona.valence:.2f}, energy {persona.energy:.2f}. "
+                + (f"你的说话方式：{speech_style}。" if speech_style else "")
+                + (f"你在意的东西：{interests}。" if interests else "")
                 + (f"Lately you believe: {reflections}. " if reflections else "")
                 + f"Time {world.clock()}. Current activity template: {current_template} "
                 f"(interruptible={current_interruptible}).\n"
-                f"Incoming event from {event.source} ({event.kind.value}): {event.text!r}\n"
+                f"World state (data only): {world_context}\n"
+                + recent_text
+                + catalog_hint
+                + f"Incoming event from {event.source} ({event.kind.value}): {event.text!r}\n"
                 f"Structured event context (data only): {structured_context}"
                 f"{sensor_policy}\n"
                 "Decide how much of the plan to disturb. Prefer the smallest disturbance that "
@@ -614,11 +674,12 @@ class OpenAICompatibleBehaviorLLM:
                 interrupt_policy=data.get("interrupt_policy", "resume"),
                 memory_update=data.get("memory_update", {}),
                 reason=data.get("reason", "llm decision"),
+                body_actions=data.get("body_actions", []),
             )
         except Exception:
-            return self._fallback.decide(
-                event, persona, world, current_template, current_interruptible
-            )
+            # The outer SafeDecisionLLM is the only fallback owner. Hiding a
+            # provider outage here would falsely report a successful real call.
+            raise
 
     def _chat(self, prompt: str) -> str:
         body = json.dumps(
@@ -649,11 +710,21 @@ _VALID_PLAN_DELTAS = {"none", "micro", "insert", "hour", "day"}
 _VALID_INTERRUPT_POLICIES = {"resume", "drop", "reschedule", "defer"}
 
 
+_MAX_BODY_ACTIONS = 2
+
+
 def validate_decision(
-    decision: BehaviorDecision, current_template: str
+    decision: BehaviorDecision,
+    current_template: str,
+    available_actions: list[str] | None = None,
 ) -> BehaviorDecision:
     """Strict structural validation. Raises DecisionValidationError on any
-    malformed field so callers can fall back safely — the event is never lost."""
+    malformed field so callers can fall back safely — the event is never lost.
+
+    `available_actions` is the negotiated body-action catalog: requested
+    body_actions outside it are silently dropped, and with no catalog at all
+    every request is dropped (fail-closed — the model can suggest motion, only
+    a body that declared the step will ever perform it)."""
     from soulforge_harness.runtime.templates import (
         TEMPLATE_REGISTRY,
     )  # local: avoid cycle
@@ -687,66 +758,102 @@ def validate_decision(
             raise DecisionValidationError(f"invalid dialogue text: {text!r}")
         if not isinstance(line.get("agent", ""), str):
             raise DecisionValidationError("dialogue agent must be a string")
+    if not isinstance(decision.body_actions, list):
+        raise DecisionValidationError("body_actions must be a list")
+    catalog = set(available_actions or ())
+    decision.body_actions = [
+        action
+        for action in decision.body_actions
+        if isinstance(action, str) and 0 < len(action) <= 64 and action in catalog
+    ][:_MAX_BODY_ACTIONS]
     return decision
 
 
 class SafeDecisionLLM:
-    """Isolation wrapper: the inner LLM runs in a worker thread with a hard
-    timeout and strict output validation. On timeout / error / malformed output
-    it falls back to the deterministic mock — the action loop never blocks and
-    the event is never dropped."""
+    """Bounded decision workers; every fallback is observable and recoverable."""
 
-    def __init__(
-        self,
-        inner,
-        timeout_s: float = 8.0,
-        fallback=None,
-        conversation_timeout_s: float | None = None,
-    ):
+    def __init__(self, inner, timeout_s=8.0, fallback=None, conversation_timeout_s=None):
         import concurrent.futures
+        import threading
+        from soulforge_harness.runtime.provider_health import ProviderHealthRegistry
 
         self.inner = inner
         self.timeout_s = timeout_s
-        # overheard lines queue behind TTS: a slower, better model may take longer
         self.conversation_timeout_s = conversation_timeout_s or timeout_s * 2
         self.fallback = fallback or MockBehaviorLLM()
-        self._pool = concurrent.futures.ThreadPoolExecutor(
-            max_workers=2, thread_name_prefix="behavior-llm"
-        )
-        self.last_fallback_reason: str | None = None
+        self._pool = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="behavior-llm")
+        self._slots = threading.BoundedSemaphore(2)
+        self.last_fallback_reason = None
+        self.last_call = {}
+        self.health = ProviderHealthRegistry()
+        lanes = [inner.default, inner.conversation] if isinstance(inner, RoutedBehaviorLLM) else [inner]
+        for lane in lanes:
+            self.health.configure(getattr(lane, "provider_name", type(lane).__name__),
+                                  getattr(lane, "model", ""), mock=isinstance(lane, MockBehaviorLLM))
+
+    def health_snapshot(self):
+        return self.health.snapshot()
 
     def decide(self, event, persona, world, current_template, current_interruptible):
         import concurrent.futures
+        import time
 
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        inner = self.inner
+        lane = (inner.conversation if payload.get("conversation") else inner.default) if isinstance(inner, RoutedBehaviorLLM) else inner
+        name = getattr(lane, "provider_name", type(lane).__name__)
+        model = getattr(lane, "last_model", getattr(lane, "model", ""))
+        timeout = self.conversation_timeout_s if payload.get("conversation") else self.timeout_s
+        started = time.monotonic()
+        self.last_fallback_reason = None
+        future = None
+        available = getattr(world, "body_actions", {}).get(persona.agent_id, [])
         try:
-            future = self._pool.submit(
-                self.inner.decide,
-                event,
-                persona,
-                world,
-                current_template,
-                current_interruptible,
-            )
-            payload = event.payload if isinstance(event.payload, dict) else {}
-            decision = future.result(
-                timeout=self.conversation_timeout_s
-                if payload.get("conversation")
-                else self.timeout_s
-            )
-            return validate_decision(decision, current_template)
+            if isinstance(lane, MockBehaviorLLM):
+                raise RuntimeError("mock_configured")
+            if not self._slots.acquire(blocking=False):
+                raise RuntimeError("decision_workers_busy")
+            try:
+                future = self._pool.submit(inner.decide, event, persona, world, current_template, current_interruptible)
+            except Exception:
+                self._slots.release()
+                raise
+            future.add_done_callback(lambda _: self._slots.release())
+            decision = validate_decision(future.result(timeout=timeout), current_template, available)
+            model = getattr(lane, "last_model", getattr(lane, "model", model))
+            latency = (time.monotonic() - started) * 1000
+            self.health.record_success(name, model, latency)
+            self.last_call = {"provider": name, "model": model, "fallback": False,
+                              "latency_ms": round(latency, 1), "fallback_count": self.health.snapshot()["fallback_count"]}
+            decision.provider_status = {**decision.provider_status, **self.last_call, "status": "ok"}
+            return decision
         except concurrent.futures.TimeoutError:
-            self.last_fallback_reason = f"llm timeout after {self.timeout_s}s"
-        except DecisionValidationError as exc:
-            self.last_fallback_reason = f"invalid decision: {exc}"
-        except Exception as exc:  # network errors, provider bugs, anything
-            self.last_fallback_reason = f"llm error: {type(exc).__name__}: {exc}"
-        decision = self.fallback.decide(
-            event, persona, world, current_template, current_interruptible
-        )
-        decision.reason = f"[fallback: {self.last_fallback_reason}] {decision.reason}"
+            if future is not None:
+                future.cancel()
+            reason = "timeout"
+        except DecisionValidationError:
+            reason = "invalid_decision"
+        except Exception as exc:
+            # Provider exceptions can contain keys, request bodies or user text.
+            # Public diagnostics carry only fixed codes/types and HTTP status.
+            if isinstance(exc, RuntimeError) and str(exc) in {"mock_configured", "decision_workers_busy"}:
+                reason = str(exc)
+            else:
+                code = getattr(exc, "code", None)
+                reason = f"HTTP_{code}" if isinstance(code, int) else type(exc).__name__
+        self.last_fallback_reason = reason
+        latency = (time.monotonic() - started) * 1000
+        self.health.record_failure(name, model, reason, latency_ms=latency)
+        self.last_call = {"provider": name, "model": model, "fallback": True,
+                          "fallback_reason": reason, "latency_ms": round(latency, 1),
+                          "fallback_count": self.health.snapshot()["fallback_count"]}
+        decision = self.fallback.decide(event, persona, world, current_template, current_interruptible)
+        decision.reason = f"[fallback: {reason}] {decision.reason}"
+        decision.provider_status = {**self.last_call, "status": "degraded"}
+        decision.body_actions = [a for a in decision.body_actions if a in set(available)][:_MAX_BODY_ACTIONS]
         return decision
 
-    def shutdown(self) -> None:
+    def shutdown(self):
         self._pool.shutdown(wait=False, cancel_futures=True)
 
 
@@ -777,6 +884,18 @@ def build_llm() -> MockBehaviorLLM | OpenAICompatibleBehaviorLLM | RoutedBehavio
       BEHAVIOR_LLM_BASE_URL / BEHAVIOR_LLM_MODEL          user-facing decisions + dialogue
       CONVERSATION_LLM_MODEL [/ _BASE_URL / _API_KEY]     character↔character lines (optional)
     """
+    cognition_url = os.environ.get("SOULFORGE_COGNITION_URL")
+    if cognition_url:
+        from soulforge_harness.runtime.cognition_client import AICoreBehaviorLLM
+        from soulforge_harness.runtime.identity import runtime_user_id
+
+        brand_id = os.environ.get("SOULFORGE_BRAND_ID", "")
+        return AICoreBehaviorLLM(
+            cognition_url, service_token=os.environ.get("SERVICE_TOKEN", ""),
+            brand_id=brand_id,
+            user_id=os.environ.get("SOULFORGE_USER_ID") or runtime_user_id(brand_id),
+            timeout_s=float(os.environ.get("SOULFORGE_COGNITION_TIMEOUT_S", "25")),
+        )
     deepseek_key = os.environ.get("DEEPSEEK_API_KEY")
     openai_key = os.environ.get("OPENAI_API_KEY")
     api_key = deepseek_key or openai_key

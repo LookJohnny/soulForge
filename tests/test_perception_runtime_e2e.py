@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import httpx
 
 GATEWAY_SRC = Path(__file__).resolve().parents[1] / "packages" / "gateway" / "src"
 if str(GATEWAY_SRC) not in sys.path:
@@ -51,6 +52,12 @@ async def test_visual_event_reaches_tts_and_terminal_ack_over_real_websockets(
     runtime_url = f"ws://127.0.0.1:{server.bound_port}"
     monkeypatch.setattr(settings, "character_runtime_url", runtime_url)
     monkeypatch.setattr(settings, "character_runtime_agent", "kai")
+    brand = "00000000-0000-4000-8000-000000000011"
+    user = "00000000-0000-4000-8000-000000000012"
+    character = "00000000-0000-4000-8000-000000000013"
+    monkeypatch.setattr(settings, "soulforge_brand_id", brand)
+    monkeypatch.setattr(settings, "soulforge_user_id", user)
+    monkeypatch.setattr(settings, "service_token", "offline-test-service")
 
     bridge = CharacterBridge(
         url=runtime_url,
@@ -60,10 +67,32 @@ async def test_visual_event_reaches_tts_and_terminal_ack_over_real_websockets(
     )
     orchestrator = PipelineOrchestrator.__new__(PipelineOrchestrator)
     orchestrator._character_bridge = bridge
+    orchestrator._voice_bridges = {"e2e-session": bridge}
     orchestrator._pending_playback = {}
     synthesized = []
 
-    async def synthesize(text, character_id, brand_id=None):
+    def resolve(request):
+        assert request.url.path == "/runtime/resolve"
+        assert request.headers["X-Brand-Id"] == brand
+        return httpx.Response(
+            200,
+            json={
+                "identity": {
+                    "user_id": user,
+                    "character_id": character,
+                    "agent_id": "kai",
+                    "body_id": bridge.body_id,
+                    "session_id": "e2e-session",
+                }
+            },
+        )
+
+    orchestrator.client = httpx.AsyncClient(
+        transport=httpx.MockTransport(resolve), base_url="http://isolated-core"
+    )
+
+    async def synthesize(text, character_id, brand_id=None, *, emotion=None):
+        assert emotion is None or isinstance(emotion, str)
         synthesized.append((text, character_id, brand_id))
         return b"offline-tts-audio"
 
@@ -108,7 +137,8 @@ async def test_visual_event_reaches_tts_and_terminal_ack_over_real_websockets(
         assert chunk.text
         assert chunk.audio_data == b"offline-tts-audio"
         assert chunk.playback_receipt
-        assert synthesized == [(chunk.text, "kai", None)]
+        assert synthesized == [(chunk.text, character, brand)]
+        assert session.end_user_id == user
 
         body = server.bodies[bridge.body_id]
         command = next(iter(body.sent_commands.values()))
@@ -126,5 +156,6 @@ async def test_visual_event_reaches_tts_and_terminal_ack_over_real_websockets(
     finally:
         await sink.close()
         await bridge.close()
+        await orchestrator.client.aclose()
         server.stop()
         await asyncio.wait_for(serve_task, timeout=3)

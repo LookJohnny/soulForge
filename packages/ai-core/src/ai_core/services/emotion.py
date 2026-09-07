@@ -498,7 +498,7 @@ class EmotionEngine:
     async def update_with_explicit_pad(
         self,
         session_id: str,
-        pad_values: dict | "PADState",
+        pad_values: dict | PADState,
         touch_gesture: str | None = None,
         user_mood: str | None = None,
         personality: dict | None = None,

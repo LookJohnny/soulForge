@@ -114,6 +114,10 @@ Welcome 之后，服务端立即对每个 accepted agent 推送一帧当前 `pla
 
 不通过协商的命令**根本不会发给该身体**（"body never sees what it can't do"）。
 
+### 3.3 动作目录反哺决策（action catalog）
+
+能力协商是双向的：身体声明的词汇表不只用于过滤下行命令，还会被服务端整理成**决策模型可选的有限动作目录**（`EmbodimentManifest.selectable_actions()` = 声明/协商步骤 − 规划器内部控制步骤），发布到 `WorldState.body_actions[agent_id]` 并写进决策 prompt。决策产出的 `body_actions` 请求在唯一必经点按目录严格过滤（**fail-closed**：目录里没有的、或身体全部下线后的请求一律丢弃），通过后作为普通 micro-step 随台词同一节拍下发——仍走第 3.2 节的逐身体协商，链路上没有任何新帧类型。
+
 ---
 
 ## 4. 消息类型详解

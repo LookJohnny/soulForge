@@ -4,6 +4,7 @@ import json
 from types import SimpleNamespace
 
 from gateway.pipeline.orchestrator import PipelineOrchestrator
+from gateway.config import settings
 from gateway.protocols.base import MessageType
 from gateway.protocols.generic_ws import GenericWSAdapter
 from gateway.protocols.web_audio import WebAudioAdapter
@@ -68,7 +69,10 @@ class _FakeAdapter:
         return json.dumps({"type": message.type.value, "payload": message.payload})
 
 
-async def test_orchestrator_process_reaction_event_calls_ai_core_and_safety_preview():
+async def test_orchestrator_process_reaction_event_calls_ai_core_and_safety_preview(monkeypatch):
+    # This test explicitly covers the legacy reaction API; unified mode has
+    # separate tests for suppression and deterministic safety responses.
+    monkeypatch.setattr(settings, "character_runtime_url", "")
     fake_client = _FakeClient()
     orchestrator = PipelineOrchestrator.__new__(PipelineOrchestrator)
     orchestrator.client = fake_client

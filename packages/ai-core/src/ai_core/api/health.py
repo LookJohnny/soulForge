@@ -8,6 +8,14 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 
+@router.get("/health/providers")
+async def provider_health():
+    """Read actual request outcomes without sending provider probes."""
+    from ai_core.services.provider_health import provider_health as registry
+
+    return registry.snapshot()
+
+
 @router.get("/health")
 async def health():
     """Enhanced health check — tests DB, Redis, and Milvus connectivity."""

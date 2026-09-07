@@ -16,6 +16,7 @@ Usage:
 import asyncio
 import logging
 import threading
+import time
 
 import dashscope.audio.asr as dashscope_asr
 
@@ -111,12 +112,35 @@ class StreamingASR:
         logger.info("streaming_asr.started")
 
     def feed(self, pcm_chunk: bytes):
-        """Feed a PCM audio chunk to the recognizer."""
-        if self._started and self._recognition:
-            try:
-                self._recognition.send_audio_frame(pcm_chunk)
-            except Exception as e:
+        """Feed a PCM audio chunk to the recognizer.
+
+        Always-listening sessions outlive the provider's session limits: when
+        the cloud recognizer dies, rebuild it (rate-limited) instead of
+        feeding a corpse forever — and log the outage once, not per frame."""
+        if not (self._started and self._recognition):
+            return
+        try:
+            self._recognition.send_audio_frame(pcm_chunk)
+            self._feed_failures = 0
+        except Exception as e:
+            failures = getattr(self, "_feed_failures", 0) + 1
+            self._feed_failures = failures
+            if failures == 1:
                 logger.warning("streaming_asr.feed_error: %s", e)
+            now = time.time()
+            if now - getattr(self, "_last_restart", 0.0) < 3.0:
+                return
+            self._last_restart = now
+            try:
+                try:
+                    self._recognition.stop()
+                except Exception:
+                    pass
+                self.start()
+                self._feed_failures = 0
+                logger.info("streaming_asr.restarted_after_provider_stop")
+            except Exception as restart_error:
+                logger.warning("streaming_asr.restart_failed: %s", restart_error)
 
     async def finish(self, timeout: float = 8.0) -> str:
         """Stop streaming and return the final recognized text."""

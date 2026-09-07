@@ -257,44 +257,63 @@ def test_vision_provider_timeout_yields_error_event_not_a_hang():
 
 # 7 ─ 同一句话不被 Gateway LLM 与 Planner LLM 双重处理 ------------------------
 @pytest.mark.asyncio
-async def test_gateway_single_decision_path_bypasses_legacy_chat():
+async def test_gateway_single_decision_path_bypasses_legacy_chat(monkeypatch):
     import sys
+    from types import SimpleNamespace
+    from uuid import uuid4
 
     sys.path.insert(
         0, str(Path(__file__).parent.parent / "packages" / "gateway" / "src")
     )
     gateway = pytest.importorskip("gateway.pipeline.orchestrator")
+    from gateway.session import Session
+
+    brand, user, character = (str(uuid4()) for _ in range(3))
+    for key, value in {
+        "character_runtime_url": "ws://unused.invalid",
+        "character_runtime_agent": "kai",
+        "soulforge_brand_id": brand,
+        "soulforge_user_id": user,
+        "service_token": "offline-test-service",
+    }.items():
+        monkeypatch.setattr(gateway.settings, key, value)
 
     class FakeBridge:
+        body_id, agent_id = "test-voice-body", "kai"
+
         def __init__(self):
             self.calls = []
 
         async def process_utterance(self, text, payload=None):
-            self.calls.append(text)
+            self.calls.append((text, payload))
             return {"text": "我来看看。", "correlation_id": "c1", "commands": []}
 
-    class ExplodingClient:
-        async def post(self, *a, **k):
-            raise AssertionError("legacy ai-core chat path must NOT be called")
+    class ResolveOnlyClient:
+        async def post(self, path, *, json, headers):
+            assert path == "/runtime/resolve", (
+                "legacy ai-core chat path must NOT be called"
+            )
+            assert json["user_id"] == user and json["agent_id"] == "kai"
+            assert headers["X-Brand-Id"] == brand
+            identity = {**json, "character_id": character}
+            return SimpleNamespace(
+                raise_for_status=lambda: None, json=lambda: {"identity": identity}
+            )
 
     orchestrator = gateway.PipelineOrchestrator.__new__(gateway.PipelineOrchestrator)
-    orchestrator.client = ExplodingClient()
-    orchestrator._character_bridge = FakeBridge()
-
-    class S:  # minimal session
-        character_id = "kai"
-        end_user_id = device_id = session_id = "t"
-        brand_id = None
-
-    gateway.settings.character_runtime_url = "ws://127.0.0.1:1"
-    try:
-        result = await gateway.PipelineOrchestrator.process_text(
-            orchestrator, S(), "你好"
-        )
-        assert result["text"] == "我来看看。"
-        assert orchestrator._character_bridge.calls == ["你好"]
-    finally:
-        gateway.settings.character_runtime_url = ""
+    orchestrator.client = ResolveOnlyClient()
+    bridge = FakeBridge()
+    orchestrator._voice_bridges = {"test-session": bridge}
+    orchestrator._pending_playback = {}
+    session = Session("test-session", "test-device", end_user_id=user, brand_id=brand)
+    result = await gateway.PipelineOrchestrator.process_text(
+        orchestrator, session, "你好"
+    )
+    assert result["text"] == "我来看看。"
+    assert len(bridge.calls) == 1 and bridge.calls[0][0] == "你好"
+    identity = bridge.calls[0][1]["identity"]
+    assert identity["user_id"] == user and identity["character_id"] == character
+    assert identity["body_id"] == bridge.body_id
 
 
 # 8 ─ 原始媒体不进长期记忆 ----------------------------------------------------

@@ -25,6 +25,24 @@ _UNIVERSAL_STEPS = {
     "report",
 }
 
+# plumbing the planner drives itself — never offered to the decision model as
+# something a character would "choose to do"
+_CONTROL_STEPS = {
+    "idle_breathing",
+    "wait",
+    "resume_activity",
+    "pause_template",
+    "resume_template",
+    "stop_current_activity",
+    "abort_all_templates",
+    "report",
+    "safe_stop",
+    "hold_safe_breakpoint",
+    "walk_to",
+    "speak_line",
+    "look_at_user",
+}
+
 
 @dataclass
 class EmbodimentManifest:
@@ -108,3 +126,13 @@ class EmbodimentManifest:
         extra = {"look_at_user", "speak_line", "approach_user"}
         known.update(s for s in extra if self.accepts_step(s))
         return sorted(known)
+
+    def selectable_actions(self) -> list[str]:
+        """Actions the decision model may pick from for this body: everything
+        the body advertised or negotiated, minus planner plumbing. Explicit
+        supported_steps count too — a body's gesture vocabulary (wave, jump)
+        need not appear in any activity template to be offerable. This is what
+        the host publishes into WorldState.body_actions."""
+        offered = set(self.negotiated_steps())
+        offered.update(self.resolve_step(s) for s in self.supported_steps)
+        return sorted(offered - _CONTROL_STEPS)

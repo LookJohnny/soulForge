@@ -101,6 +101,10 @@ class WorldState:
     user_mood_hint: str = "unknown"
     flags: dict[str, Any] = field(default_factory=dict)
     space: Any = None  # SpaceState — who is in which place (lazy: avoids import cycle)
+    # agent_id -> actions its connected bodies can actually perform right now.
+    # Maintained by the host (runtime server) from capability negotiation; the
+    # decision LLM may only request actions listed here (fail-closed).
+    body_actions: dict[str, list[str]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.space is None:
@@ -117,6 +121,26 @@ class WorldState:
     def clock(self) -> str:
         m = int(self.sim_minute) % (24 * 60)
         return f"{m // 60:02d}:{m % 60:02d}"
+
+    def context_for(self, agent_id: str) -> dict[str, Any]:
+        """Structured world snapshot for one agent's decision prompt.
+
+        Engine state rendered as data is the richest context a decision model
+        can get — richer than any prose retelling. Values are bounded here so
+        the prompt cannot grow with world size.
+        """
+        place = self.space.where(agent_id)
+        return {
+            "clock": self.clock(),
+            "day": self.day_index(),
+            "place": place,
+            "place_label": self.space.label(place),
+            "props_here": self.space.props_at(place)[:12],
+            "others_here": self.space.others_at(agent_id)[:8],
+            "user_present": self.user_present,
+            "user_mood_hint": self.user_mood_hint,
+            "sensors": dict(sorted(self.sensors.items())[:12]),
+        }
 
 
 @dataclass

@@ -13,7 +13,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from gateway.config import settings
 from gateway.protocols.base import MessageType, OutboundMessage
 from gateway.protocols.registry import registry
-from gateway.session import SessionManager
+from gateway.session import DeviceRegistryUnavailable, SessionManager
 from gateway.handlers.audio import AudioHandler
 from gateway.handlers.audio_codec import StreamingMp3OpusEncoder
 from gateway.latency import latency_tracker
@@ -180,6 +180,8 @@ class WebSocketServer:
 
             # Create session
             session = await self.session_manager.create_session(device_id, adapter.name)
+            if settings.character_runtime_url:
+                await self.orchestrator.bind_runtime_session(session)
             session._last_activity = time.monotonic()
             logger.info(
                 "gateway.device_connected",
@@ -208,11 +210,11 @@ class WebSocketServer:
             # system event (rather than microphone speech) caused the line.
             runtime_dialogue_task = None
             voice_device = settings.character_runtime_voice_device_id
-            owns_runtime_voice = (
-                device_id == voice_device
-                if voice_device
-                else session.character_id == settings.character_runtime_agent
-            )
+            # Lane B without an explicit voice device: every session is the
+            # agent's voice body. Web sessions auto-bind to whatever DB
+            # character exists — never the runtime agent id — so the old
+            # equality check silently muted the character in every browser.
+            owns_runtime_voice = device_id == voice_device if voice_device else True
             if settings.character_runtime_url and owns_runtime_voice:
                 runtime_dialogue_task = asyncio.create_task(
                     self._runtime_dialogue_loop(ws, adapter, session),
@@ -254,6 +256,14 @@ class WebSocketServer:
 
         except WebSocketDisconnect:
             logger.info("gateway.device_disconnected")
+        except PermissionError:
+            logger.warning("gateway.device_ownership_rejected")
+            with contextlib.suppress(Exception):
+                await ws.close(code=4003, reason="Device belongs to a different runtime identity")
+        except DeviceRegistryUnavailable:
+            logger.warning("gateway.device_registry_unavailable")
+            with contextlib.suppress(Exception):
+                await ws.close(code=1013, reason="Device registry temporarily unavailable")
         except Exception:
             logger.exception("gateway.connection_error")
         finally:
@@ -274,6 +284,7 @@ class WebSocketServer:
                     silence_task.cancel()
                     session._silence_task = None
                 self.audio_handler.release(session)
+                await self.orchestrator.close_session_runtime(session)
                 await self.session_manager.remove_session(session.session_id)
 
     async def _handle_message(self, ws, adapter, session, msg):
@@ -957,8 +968,26 @@ class WebSocketServer:
         payload = msg.payload if isinstance(msg.payload, dict) else {}
         if getattr(session, "_life", None):
             session._life.notify_activity()
+        receipt = None
         try:
             result = await self.orchestrator.process_touch(session, payload)
+            receipt = result.get("playback_receipt") if result else None
+            state = result.get("cognitive_state") if result else None
+            if state:
+                from gateway.pipeline.orchestrator import StreamChunk
+
+                await self._send_emotion(
+                    ws,
+                    adapter,
+                    StreamChunk(
+                        text="",
+                        audio_data=None,
+                        index=-1,
+                        kind="emotion",
+                        emotion=state.get("emotion", ""),
+                        pad=state.get("pad"),
+                    ),
+                )
             if result and result.get("text"):
                 # Touch triggered a verbal response (no "start": touch replies
                 # never began a thinking indicator on the device)
@@ -968,8 +997,25 @@ class WebSocketServer:
                     await pb.send_sentence(result["text"])
                     if result.get("audio_data"):
                         await pb.send_clip(result["audio_data"], sentence_start=False)
-                    await pb.finish(settle=False, wait_drain=False)
+                    await pb.finish(settle=False)
+                if receipt:
+                    await self.orchestrator.confirm_playback(
+                        receipt,
+                        played=not pb.interrupted,
+                        detail="touch playback interrupted" if pb.interrupted else "",
+                    )
+                    receipt = None
+        except asyncio.CancelledError:
+            if receipt:
+                await self.orchestrator.confirm_playback(
+                    receipt, played=False, detail="touch playback cancelled"
+                )
+            raise
         except Exception:
+            if receipt:
+                await self.orchestrator.confirm_playback(
+                    receipt, played=False, detail="touch playback error"
+                )
             logger.exception("gateway.touch_error")
 
     async def _handle_reaction_event(self, ws, adapter, session, payload: dict):
