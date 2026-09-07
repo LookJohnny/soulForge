@@ -2,6 +2,7 @@
 import asyncio
 import base64
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -139,8 +140,11 @@ async def test_canonical_identity_and_one_runtime_call_with_persistent_bridge(me
     assert (await client.post(f"/media/sessions/{sid}/turn", json={"text": "changed", "turn_id": "t1"})).status_code == 409
 
 
-async def test_media_correlation_survives_real_runtime_replanner_and_bridge(media):
+async def test_media_correlation_survives_real_runtime_replanner_and_bridge(media, monkeypatch):
     """A fake decision over ephemeral real WS; no provider, DB, GPU or live port."""
+    # The engine host lives at the repository root, outside the installed Gateway
+    # package. Console-script pytest does not add that root like python -m pytest.
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3]))
     from engine.server.server import SoulForgeRuntimeServer
     from soulforge_harness.runtime.llm_interface import BehaviorDecision
     from soulforge_harness.runtime.models import ImpactLevel, Persona
@@ -398,11 +402,19 @@ async def test_tts_failure_never_yields_done_or_leaks_exception(media):
     assert bridges[0].observations[0][1]["played"] is False
 
 
-async def test_close_and_idle_expiration_reclaim_pending_receipts(media):
+async def test_close_and_idle_expiration_reclaim_pending_receipts(media, monkeypatch):
+    # A fresh CI runner may have less uptime than idle_timeout. Control only the
+    # media clock, keeping asyncio's real monotonic clock untouched.
+    clock = SimpleNamespace(now=0.0)
+    monkeypatch.setattr("gateway.media_api.time", SimpleNamespace(monotonic=lambda: clock.now))
     manager, _, bridges, client = media
     sid = await new(media)
     await rendered(media, sid)
-    manager.sessions[sid].touched = 0
+    clock.now = manager.sessions[sid].touched + manager.idle_timeout
+    await manager.reap()
+    assert sid in manager.sessions
+    assert not bridges[0].closed and not bridges[0].observations
+    clock.now += 1
     await manager.reap()
     assert sid not in manager.sessions
     assert bridges[0].closed

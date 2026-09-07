@@ -30,7 +30,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: uv tool install ruff
+      # Match uv.lock; rule and formatter upgrades must be reviewed together.
+      - run: uv tool install ruff==0.15.6
       - run: ruff check packages/ai-core/src packages/gateway/src engine tests studio
       - run: ruff format --check packages/ai-core/src packages/gateway/src engine tests studio
 

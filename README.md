@@ -68,7 +68,7 @@ git clone https://github.com/LookJohnny/soulForge.git
 cd soulForge
 # macOS，已安装 Homebrew：语音网关需要原生 Opus 与 ffmpeg
 brew install opus ffmpeg
-export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix)/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
+export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix opus)/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
 uv sync --all-packages --python 3.12 --frozen
 pnpm install --frozen-lockfile
 ```

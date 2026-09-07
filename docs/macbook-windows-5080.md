@@ -108,7 +108,7 @@ docker run --rm --volumes-from soulforge-minio:ro busybox:1.37.0 tar -C /data -c
 
 ```bash
 brew install opus ffmpeg
-export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix)/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
+export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix opus)/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
 ```
 
 在启动服务或测试的新终端里也设置上述变量，或按自己的 shell 配置保存它。仅 `pip/uv` 安装 `opuslib` 仍可能报 `Could not find Opus library`；本指南使用的 uv Python 3.12 新环境已实际遇到并核实该依赖。
