@@ -96,7 +96,7 @@ def inject_memory(body: bytes) -> bytes:
     # live run with it on opened in English despite a Chinese persona. Memory
     # fidelity beats prompt polish, so it is forced off unless asked for.
     if avatar.pop("persona_enhance", False) and not CONFIG.get("allow_persona_enhance"):
-        print("  → 关掉 persona_enhance（它会重写注入的记忆）")
+        print("  → 关掉 persona_enhance（它会重写注入的记忆）", flush=True)
 
     preamble = CONFIG.get("preamble", "")
     persona = (avatar.get("persona") or "").strip()
@@ -115,7 +115,7 @@ def inject_memory(body: bytes) -> bytes:
     payload.setdefault("audio", {})["enable_transcription"] = True
 
     facts = preamble.count("\n- ")
-    print(f"  → 已注入记忆（{facts} 条）与 memory_retrieval 回调")
+    print(f"  → 已注入记忆（{facts} 条）与 memory_retrieval 回调", flush=True)
     return json.dumps(payload).encode()
 
 
@@ -191,7 +191,7 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(length) if length else b""
 
         if path == CREATE_LIVE_PATH and body:
-            print("创建会话…")
+            print("创建会话…", flush=True)
             body = inject_memory(body)
 
         target = f"{upstream}{path}" + (f"?{query}" if query else "")
@@ -223,7 +223,7 @@ class Handler(BaseHTTPRequestHandler):
             )
 
         if path == CREATE_LIVE_PATH:
-            print(f"  ← {status}")
+            print(f"  ← {status}", flush=True)
 
         self.send_response(status)
         self.send_header("Content-Type", ctype or "application/json")
