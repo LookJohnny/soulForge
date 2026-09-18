@@ -161,6 +161,101 @@ def _to_vidu_memory(item: dict, vidu_type: str) -> dict:
     }
 
 
+def safe_memories(pack: dict, wanted: set[str] | None = None, limit: int = 5) -> list[dict]:
+    """Everything from a memory pack that is safe to hand to Vidu, and nothing else.
+
+    The single place the disclosure boundary is drawn. Both the retrieval callback
+    and the session preamble go through here, so the two cannot drift apart and
+    leave one path leaking what the other withholds.
+    """
+    wanted = wanted or set()
+    out: list[dict] = []
+
+    # Only DIRECT_SURFACE memories travel as themselves. Their content is, by the
+    # policy layer's own decision, something the character may say.
+    for item in pack.get("direct", []):
+        vidu_type = _LAYER_TO_VIDU_TYPE.get(item.get("memory_layer", ""), "other")
+        if wanted and vidu_type not in wanted:
+            continue
+        out.append(_to_vidu_memory(item, vidu_type))
+
+    # Compiled rules describe how to speak, not facts about the user, so the worst
+    # case if one is read aloud is awkwardness rather than disclosure.
+    for item in pack.get("compiled_rules", []):
+        if wanted and _COMPILED_RULE_TYPE not in wanted:
+            continue
+        out.append(_to_vidu_memory(item, _COMPILED_RULE_TYPE))
+
+    # Implicit-only memories stop here. Their behavioural shadow goes instead.
+    if not wanted or _COMPILED_RULE_TYPE in wanted:
+        out.extend(_behaviour_directives(pack))
+
+    return out[:limit]
+
+
+class ViduPreambleRequest(BaseModel):
+    """Internal request: build the memory block that seeds a session's persona."""
+
+    user_id: str
+    character_id: str | None = None
+    limit: int = Field(default=6, ge=1, le=20)
+
+
+@router.post("/memory/preamble")
+async def vidu_memory_preamble(req: ViduPreambleRequest) -> dict:
+    """Memory to put in ``avatar.persona`` before the character ever speaks.
+
+    The retrieval callback alone is not enough. Vidu's model starts speaking
+    before the tool result lands — in a live three-turn probe the tool fired on
+    turn one, and the character still answered from nothing, then used that same
+    result correctly on turn two without calling again. Retrieval is therefore
+    one turn late by construction, which for a companion means the first thing it
+    ever says is the thing most likely to be invented.
+
+    Seeding the persona removes the race for whatever we can predict will matter;
+    the callback stays for everything we cannot.
+    """
+    svc = await get_memory_service()
+    pack = await svc.retrieve_memory_pack(
+        end_user_id=req.user_id,
+        character_id=req.character_id,
+        query="",
+        context={"channel": "vidu_live_preamble"},
+        limit=req.limit,
+    )
+    memories = safe_memories(pack, limit=req.limit)
+    return {
+        "preamble": build_persona_preamble(memories),
+        "memory_count": len(memories),
+        "implicit_withheld": len(pack.get("implicit", [])),
+    }
+
+
+def build_persona_preamble(memories: list[dict]) -> str:
+    """Render safe memories as a persona block. Empty string when there are none."""
+    if not memories:
+        return ""
+    facts = [m for m in memories if m["type"] != _COMPILED_RULE_TYPE]
+    styles = [m for m in memories if m["type"] == _COMPILED_RULE_TYPE]
+
+    lines: list[str] = []
+    if facts:
+        lines.append("你已经记得关于对方的这些事，可以自然地提起：")
+        lines += [f"- {_strip_marker(m['summary'])}" for m in facts]
+    if styles:
+        lines.append("说话方式要求（照做，但不要读出来）：")
+        lines += [f"- {_strip_marker(m['summary'])}" for m in styles]
+    lines.append("除此之外关于对方的事，你并不确定；需要时再去检索，不要编造。")
+    return "\n".join(lines)
+
+
+def _strip_marker(summary: str) -> str:
+    """Drop the leading ``[…]`` tag — in a persona the surrounding text says it."""
+    if summary.startswith("[") and "]" in summary:
+        return summary[summary.index("]") + 1 :].strip()
+    return summary
+
+
 @router.post("/memory/retrieve")
 async def vidu_memory_retrieve(
     req: ViduMemoryRequest,
@@ -189,31 +284,8 @@ async def vidu_memory_retrieve(
         # makes the character stumble mid-sentence.
         return {"memories": [], "error": "retrieval_unavailable"}
 
-    memories: list[dict] = []
-
-    # Only DIRECT_SURFACE memories travel as themselves. Their content is, by the
-    # policy layer's own decision, something the character may say.
-    for item in pack.get("direct", []):
-        vidu_type = _LAYER_TO_VIDU_TYPE.get(item.get("memory_layer", ""), "other")
-        if wanted and vidu_type not in wanted:
-            continue
-        memories.append(_to_vidu_memory(item, vidu_type))
-
-    # Compiled rules describe how to speak, not facts about the user, so the worst
-    # case if one is read aloud is awkwardness rather than disclosure.
-    for item in pack.get("compiled_rules", []):
-        if wanted and _COMPILED_RULE_TYPE not in wanted:
-            continue
-        memories.append(_to_vidu_memory(item, _COMPILED_RULE_TYPE))
-
-    # Implicit-only memories stop here. Their behavioural shadow goes instead.
     implicit = pack.get("implicit", [])
-    for directive in _behaviour_directives(pack):
-        if wanted and _COMPILED_RULE_TYPE not in wanted:
-            continue
-        memories.append(directive)
-
-    memories = memories[: req.max_results]
+    memories = safe_memories(pack, wanted=wanted, limit=req.max_results)
 
     logger.info(
         "vidu.memory.retrieved",

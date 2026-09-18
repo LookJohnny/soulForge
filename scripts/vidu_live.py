@@ -41,13 +41,57 @@ from ai_core.services.vidu_session_token import mint_session_token  # noqa: E402
 DEFAULT_HOST = "https://api.vidu.com"
 
 
-def build_payload(args: argparse.Namespace, token: str) -> dict:
+def fetch_preamble(
+    ai_core_url: str, service_token: str, args: argparse.Namespace
+) -> str:
+    """Ask ai-core for the memory block to seed the persona with.
+
+    Best-effort: a session with a cold persona is worse than one with a warm one,
+    but it still works, so a failure here warns rather than aborts.
+    """
+    body = json.dumps(
+        {
+            "user_id": args.user_id,
+            "character_id": args.character_id,
+            "limit": args.preamble_limit,
+        }
+    ).encode()
+    req = urllib.request.Request(
+        f"{ai_core_url.rstrip('/')}/vidu/memory/preamble",
+        data=body,
+        headers={"X-Service-Token": service_token, "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read())
+    except Exception as exc:  # noqa: BLE001 - any failure degrades, never blocks
+        print(f"warning: could not load memory preamble ({exc})", file=sys.stderr)
+        print(
+            "         the character will start the session knowing nothing",
+            file=sys.stderr,
+        )
+        return ""
+    print(
+        f"preamble      : {result.get('memory_count', 0)} memories "
+        f"({result.get('implicit_withheld', 0)} implicit withheld)",
+        file=sys.stderr,
+    )
+    return result.get("preamble", "")
+
+
+def build_payload(args: argparse.Namespace, token: str, preamble: str = "") -> dict:
+    persona = args.persona
+    if preamble:
+        # Ahead of the persona text so the memories are not read as flavour.
+        persona = f"{preamble}\n\n{persona}" if persona else preamble
+
     payload: dict = {
         "model": args.model,
         "call_mode": args.call_mode,
         "avatar": {
             "image_uri": args.avatar_image,
-            "persona": args.persona,
+            "persona": persona,
         },
         "memory_retrieval": {
             "enabled": True,
@@ -110,6 +154,18 @@ def main() -> int:
         help="Public base URL of ai-core, reachable by Vidu",
     )
     parser.add_argument("--host", default=os.environ.get("VIDU_HOST", DEFAULT_HOST))
+    parser.add_argument(
+        "--ai-core-url",
+        default=os.environ.get("SOULFORGE_AI_CORE_URL", "http://127.0.0.1:8100"),
+        help="Local ai-core, used to seed the persona with memory",
+    )
+    parser.add_argument(
+        "--no-preamble",
+        dest="preamble",
+        action="store_false",
+        help="Start the session with a cold persona (no memory seeded)",
+    )
+    parser.add_argument("--preamble-limit", type=int, default=6)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -118,11 +174,22 @@ def main() -> int:
     if not args.public_base_url.startswith(("http://", "https://")):
         parser.error("--public-base-url must be an absolute http(s) URL")
 
+    preamble = ""
+    if args.preamble:
+        service_token = os.environ.get("SERVICE_TOKEN", "")
+        if service_token:
+            preamble = fetch_preamble(args.ai_core_url, service_token, args)
+        else:
+            print(
+                "warning: SERVICE_TOKEN is not set, starting with a cold persona",
+                file=sys.stderr,
+            )
+
     # No live_id yet — CreateLive is what mints it. The token is therefore bound
     # to the user, not to a single session; verify_session_token treats an unset
     # live claim as "any session of this user".
     token = mint_session_token(end_user_id=args.user_id, character_id=args.character_id)
-    payload = build_payload(args, token)
+    payload = build_payload(args, token, preamble)
 
     if args.dry_run:
         redacted = json.loads(json.dumps(payload))

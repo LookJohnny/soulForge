@@ -164,6 +164,10 @@ async def run(args: argparse.Namespace) -> int:
                 if pending:
                     seq += 1
                     await _say_next(ws, args, conn_id, seq, pending, turns)
+                else:
+                    # Every question has an answer. Sitting out the rest of the
+                    # timeout would only run up billed_seconds.
+                    break
 
         seq += 1
         await ws.send(_envelope(T_CALL_HANGUP, args.live_id, conn_id, seq, {}))

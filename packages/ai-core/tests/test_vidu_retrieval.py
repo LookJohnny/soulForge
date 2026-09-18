@@ -306,3 +306,52 @@ def test_tool_instruction_does_not_rely_on_the_model_policing_disclosure():
         assert self_policing not in text
     # It should still discourage the failure the transcript showed on turn one.
     assert "不要编造" in text
+
+
+# ──────────────────────────────────────────────
+# Persona preamble
+# ──────────────────────────────────────────────
+
+
+def test_preamble_never_carries_implicit_content():
+    """Same boundary as the callback — a second path must not leak what one holds."""
+    safe = vidu_retrieval.safe_memories(_pack(), limit=10)
+    text = vidu_retrieval.build_persona_preamble(safe)
+    assert SENSITIVE not in text
+    assert "舍曲林" not in text
+
+
+def test_preamble_states_direct_facts_and_style_separately():
+    safe = vidu_retrieval.safe_memories(_pack(), limit=10)
+    text = vidu_retrieval.build_persona_preamble(safe)
+    assert "期末考试" in text
+    assert "你已经记得关于对方的这些事" in text
+    assert "说话方式要求" in text
+    # The behaviour directive derived from the implicit memory rides along.
+    assert "语气放轻" in text
+
+
+def test_preamble_tells_the_model_not_to_invent_the_rest():
+    """The defect this preamble exists to fix is first-turn confabulation."""
+    safe = vidu_retrieval.safe_memories(_pack(), limit=10)
+    assert "不要编造" in vidu_retrieval.build_persona_preamble(safe)
+
+
+def test_preamble_strips_the_bracket_markers():
+    safe = vidu_retrieval.safe_memories(_pack(), limit=10)
+    text = vidu_retrieval.build_persona_preamble(safe)
+    assert "[可自然提及]" not in text
+    assert "[编译行为规则]" not in text
+
+
+def test_empty_memory_means_empty_preamble_not_a_lie():
+    # A preamble claiming to remember nothing in particular is worse than none.
+    assert vidu_retrieval.build_persona_preamble([]) == ""
+
+
+def test_safe_memories_is_the_only_boundary_both_paths_use():
+    pack = _pack()
+    callback_side = vidu_retrieval.safe_memories(pack, limit=10)
+    preamble_side = vidu_retrieval.safe_memories(pack, limit=10)
+    assert callback_side == preamble_side
+    assert all(SENSITIVE not in m["summary"] for m in callback_side)
