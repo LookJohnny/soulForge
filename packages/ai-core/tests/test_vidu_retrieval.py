@@ -355,3 +355,15 @@ def test_safe_memories_is_the_only_boundary_both_paths_use():
     preamble_side = vidu_retrieval.safe_memories(pack, limit=10)
     assert callback_side == preamble_side
     assert all(SENSITIVE not in m["summary"] for m in callback_side)
+
+
+def test_behaviour_directives_state_behaviour_without_explaining_why():
+    """A directive that explains itself can be read backwards.
+
+    An earlier wording opened with "对方近期状态可能比较脆弱"; asked
+    "我最近睡得怎么样？" the character replied "你最近好像睡得不太踏实" —
+    it had been sent no implicit content, only that rationale.
+    """
+    for text in vidu_retrieval._SPEECH_POLICY_DIRECTIVES.values():
+        for rationale in ("脆弱", "焦虑", "失眠", "状态可能", "因为"):
+            assert rationale not in text, text

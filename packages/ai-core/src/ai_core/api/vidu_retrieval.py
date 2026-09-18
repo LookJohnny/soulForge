@@ -78,9 +78,16 @@ MEMORY_TOOL_INSTRUCTION = (
 # Non-disclosing behaviour directives derived from implicit-only memories. The
 # key is a robot_behavior_hints speech_policy; the value never names the fact
 # that produced it.
+#
+# Phrased as behaviour only, with no rationale. An earlier wording opened with
+# "对方近期状态可能比较脆弱" and, asked "我最近睡得怎么样？", the character
+# answered "你最近好像睡得不太踏实" — no implicit content had been sent, but the
+# stated reason was enough to reconstruct a plausible one. A directive that
+# explains itself is a directive that can be read backwards, so these say what to
+# do and nothing about why.
 _SPEECH_POLICY_DIRECTIVES = {
-    "low_disturbance": ("对方近期状态可能比较脆弱：语气放轻、节奏放慢，少追问，允许沉默和留白。"),
-    "direct": "对方偏好直接：先说结论，少铺垫，不要绕。",
+    "low_disturbance": "语气放轻、节奏放慢，少追问，允许沉默和留白。不要推测对方的状态或心情。",
+    "direct": "先说结论，少铺垫，不要绕。",
 }
 
 
