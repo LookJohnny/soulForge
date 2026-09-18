@@ -69,12 +69,40 @@ def load_demo_page() -> bytes:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cached = CACHE_DIR / "index.html"
     if cached.exists() and cached.stat().st_size > 1000:
-        return cached.read_bytes()
+        return patch_page(cached.read_bytes())
     print(f"下载 Vidu demo 页面 → {cached}")
     with urllib.request.urlopen(DEMO_URL, timeout=30) as resp:
         data = resp.read()
     cached.write_bytes(data)
-    return data
+    return patch_page(data)
+
+
+# The demo publishes your own camera in video mode and treats any failure as
+# fatal — it rethrows, which tears down the channel and the WebSocket with it.
+# On a machine where Chrome cannot open the camera the session dies before the
+# character ever appears.
+#
+# Subscribing to the character's video is set up earlier and separately
+# (setDefaultSubscribeAllRemoteVideoStreams), so the local camera is not needed
+# to see anything. Talking to a companion should not require pointing a camera
+# at yourself, so the rethrow is removed: warn, then carry on to audio.
+_CAMERA_FATAL = b"""            showMediaNotice("camera", error);
+            throw error;"""
+_CAMERA_SOFT = b"""            showMediaNotice("camera", error);
+            console.warn("[soulforge] no local camera; continuing audio-only");"""
+
+
+def patch_page(html: bytes) -> bytes:
+    if _CAMERA_FATAL not in html:
+        # Upstream changed shape: better a loud warning than a silently
+        # un-patched page that dies on the next machine without a webcam.
+        print(
+            "warning: 摄像头补丁没匹配上，demo 页面可能已更新——"
+            "没有摄像头的机器会连不上",
+            file=sys.stderr,
+        )
+        return html
+    return html.replace(_CAMERA_FATAL, _CAMERA_SOFT)
 
 
 def inject_memory(body: bytes) -> bytes:
