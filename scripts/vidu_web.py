@@ -89,11 +89,20 @@ def inject_memory(body: bytes) -> bytes:
     except (ValueError, TypeError):
         return body
 
+    avatar = payload.setdefault("avatar", {})
+
+    # persona_enhance rewrites and expands the persona on Vidu's side, which
+    # means it rewrites the memory block and the "不要编造" line with it. A first
+    # live run with it on opened in English despite a Chinese persona. Memory
+    # fidelity beats prompt polish, so it is forced off unless asked for.
+    if avatar.pop("persona_enhance", False) and not CONFIG.get("allow_persona_enhance"):
+        print("  → 关掉 persona_enhance（它会重写注入的记忆）")
+
     preamble = CONFIG.get("preamble", "")
-    if preamble:
-        avatar = payload.setdefault("avatar", {})
-        persona = (avatar.get("persona") or "").strip()
-        avatar["persona"] = f"{preamble}\n\n{persona}" if persona else preamble
+    persona = (avatar.get("persona") or "").strip()
+    parts = [p for p in (preamble, persona, CONFIG.get("language_line", "")) if p]
+    if parts:
+        avatar["persona"] = "\n\n".join(parts)
 
     payload["memory_retrieval"] = {
         "enabled": True,
@@ -329,6 +338,19 @@ def main() -> int:
     parser.add_argument(
         "--persona", default="你是用户的长期陪伴角色。说话克制、口语化、允许留白。"
     )
+    parser.add_argument(
+        "--voice", default="Maia", help="Vidu voice id, see the Voice List doc"
+    )
+    parser.add_argument(
+        "--language",
+        default="请始终用中文对话，包括第一句开场白。",
+        help="Appended to the persona; set empty to let the model choose",
+    )
+    parser.add_argument(
+        "--allow-persona-enhance",
+        action="store_true",
+        help="Let Vidu rewrite the persona (it will rewrite the injected memory too)",
+    )
     parser.add_argument("--no-open", action="store_true", help="Do not open a browser")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
@@ -355,6 +377,8 @@ def main() -> int:
         {
             "api_key": api_key,
             "preamble": preamble,
+            "language_line": args.language,
+            "allow_persona_enhance": args.allow_persona_enhance,
             "public_base_url": args.public_base_url,
             "memory_timeout_ms": args.memory_timeout_ms,
             "session_token": mint_session_token(
@@ -374,6 +398,10 @@ def main() -> int:
             # Only the base persona — the memories are injected server-side so
             # they never appear in the URL or the browser's history.
             "avatar_persona": args.persona,
+            # The page ships "甜甜 Tina" in these two fields; left alone the
+            # character introduces itself as someone else entirely.
+            "avatar_name": "",
+            "avatar_voice": args.voice,
         }
     )
     url = f"http://127.0.0.1:{args.port}/?{query}"
