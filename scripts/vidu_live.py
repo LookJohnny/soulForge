@@ -59,6 +59,10 @@ def build_payload(args: argparse.Namespace, token: str) -> dict:
             "tool_instruction": MEMORY_TOOL_INSTRUCTION,
         },
     }
+    if args.enable_transcription:
+        # Without this the character's reply exists only as RTC audio, so a
+        # headless check (scripts/vidu_live_probe.py) has nothing to read.
+        payload["audio"] = {"enable_transcription": True}
     if args.voice:
         payload["avatar"]["voice"] = args.voice
     if args.idle_timeout_seconds:
@@ -93,6 +97,12 @@ def main() -> int:
     parser.add_argument("--model", default="vidu-s2", choices=["vidu-s1", "vidu-s2"])
     parser.add_argument("--call-mode", default="video", choices=["video", "audio"])
     parser.add_argument("--memory-timeout-ms", type=int, default=3000)
+    parser.add_argument(
+        "--no-transcription",
+        dest="enable_transcription",
+        action="store_false",
+        help="Do not return reply text over the WebSocket",
+    )
     parser.add_argument("--idle-timeout-seconds", type=int, default=0)
     parser.add_argument(
         "--public-base-url",

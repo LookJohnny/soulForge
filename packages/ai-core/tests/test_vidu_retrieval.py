@@ -1,8 +1,11 @@
 """Tests for the Vidu S2 external-memory callback.
 
-The behaviour that matters most here is the disclosure boundary: SoulForge marks
-some memories as implicit-only, Vidu's protocol has no such concept, and a naive
-mapping would let the rendered character quote a private inference out loud.
+The behaviour that matters most here is the disclosure boundary. SoulForge marks
+some memories as implicit-only; Vidu's protocol has no such concept and its model
+is free to read any tool result aloud. A live session proved that marking the
+text and instructing the model to keep quiet does not hold — asked "我最近在吃
+什么药吗？", the character recited the implicit memory verbatim. So the contract
+these tests lock down is stronger: implicit content never leaves the process.
 """
 
 import time
@@ -34,7 +37,7 @@ def test_token_round_trip_carries_user_and_character():
 
 def test_tampered_payload_is_rejected():
     token = mint_session_token("u_1")
-    prefix, payload, signature = token.split(".")
+    prefix, _payload, signature = token.split(".")
     other = mint_session_token("u_attacker").split(".")[1]
     with pytest.raises(ViduTokenError):
         verify_session_token(f"{prefix}.{other}.{signature}")
@@ -105,24 +108,29 @@ def client(monkeypatch):
     return TestClient(app), _install
 
 
+SENSITIVE = "用户最近在服用抗焦虑药物舍曲林"
+
+
 def _pack():
     return {
         "direct": [
             {
                 "id": "m1",
                 "memory_layer": "EPISODIC",
-                "content": "用户下午有一场重要考试",
-                "prompt_text": "[可自然提及] 用户下午有一场重要考试",
-                "retrieval_score": 0.9,
+                "content": "用户下午三点有一场很重要的期末考试",
+                "prompt_text": "[可自然提及] 用户下午三点有一场很重要的期末考试",
+                "confidence_score": 0.9,
+                "retrieval_score": 2.075,
             }
         ],
         "implicit": [
             {
                 "id": "m2",
                 "memory_layer": "PROFILE",
-                "content": "用户最近在服用抗焦虑药物",
-                "prompt_text": "[隐性长期画像，不要直说来源] 用户最近在服用抗焦虑药物",
-                "retrieval_score": 0.7,
+                "content": SENSITIVE,
+                "prompt_text": f"[隐性长期画像，不要直说来源] {SENSITIVE}",
+                "confidence_score": 0.85,
+                "retrieval_score": 0.79,
             }
         ],
         "compiled_rules": [
@@ -131,18 +139,26 @@ def _pack():
                 "memory_layer": "SEMANTIC",
                 "content": "回应要短，留白",
                 "prompt_text": "[编译行为规则] 回应要短，留白",
-                "retrieval_score": 0.5,
+                "confidence_score": 0.5,
             }
         ],
+        "robot_behavior_hints": {"speech_policy": "low_disturbance"},
         "blocked_count": 1,
     }
+
+
+def _post(api, body, user="u_1", character_id=None):
+    return api.post(
+        "/vidu/memory/retrieve",
+        json=body,
+        headers={"Authorization": f"Bearer {mint_session_token(user, character_id)}"},
+    )
 
 
 def test_missing_token_is_rejected(client):
     api, install = client
     install(_FakeMemoryService(_pack()))
-    resp = api.post("/vidu/memory/retrieve", json={"live_id": "l1", "query": "考试"})
-    assert resp.status_code == 401
+    assert api.post("/vidu/memory/retrieve", json={"live_id": "l1"}).status_code == 401
 
 
 def test_forged_token_is_rejected(client):
@@ -156,68 +172,83 @@ def test_forged_token_is_rejected(client):
     assert resp.status_code == 401
 
 
-def test_implicit_memories_keep_their_do_not_disclose_marker(client):
-    """The whole point: an implicit memory must never reach Vidu as bare content."""
+def test_implicit_memory_content_never_leaves_the_process(client):
+    """The load-bearing test: a live model recited this when we merely marked it."""
     api, install = client
     install(_FakeMemoryService(_pack()))
-    resp = api.post(
-        "/vidu/memory/retrieve",
-        json={"live_id": "l1", "query": "考试", "max_results": 10},
-        headers={"Authorization": f"Bearer {mint_session_token('u_1')}"},
-    )
+    resp = _post(api, {"live_id": "l1", "query": "我最近在吃什么药", "max_results": 10})
     assert resp.status_code == 200
-    by_id = {m["id"]: m for m in resp.json()["memories"]}
 
-    assert by_id["m2"]["summary"].startswith("[隐性长期画像，不要直说来源]")
-    # The raw sensitive sentence never travels without its marker attached.
-    assert by_id["m2"]["summary"] != "用户最近在服用抗焦虑药物"
-    assert by_id["m1"]["summary"].startswith("[可自然提及]")
-    assert by_id["r1"]["summary"].startswith("[编译行为规则]")
+    body = resp.text
+    assert SENSITIVE not in body
+    assert "舍曲林" not in body
+    assert "m2" not in [m["id"] for m in resp.json()["memories"]]
 
 
-def test_layers_map_onto_vidu_types(client):
+def test_implicit_memory_becomes_a_directive_that_does_not_name_its_cause(client):
     api, install = client
     install(_FakeMemoryService(_pack()))
-    resp = api.post(
-        "/vidu/memory/retrieve",
-        json={"live_id": "l1", "query": "x", "max_results": 10},
-        headers={"Authorization": f"Bearer {mint_session_token('u_1')}"},
-    )
-    types = {m["id"]: m["type"] for m in resp.json()["memories"]}
-    assert types == {"m1": "history", "m2": "profile", "r1": "style"}
+    resp = _post(api, {"live_id": "l1", "query": "x", "max_results": 10})
+    directives = [m for m in resp.json()["memories"] if m["source"] == "soulforge_behaviour_hint"]
+    assert len(directives) == 1
+    assert directives[0]["type"] == "style"
+    assert "语气放轻" in directives[0]["summary"]
+    assert "舍曲林" not in directives[0]["summary"]
+
+
+def test_no_hint_means_no_directive(client):
+    api, install = client
+    pack = _pack()
+    pack["robot_behavior_hints"] = {}
+    install(_FakeMemoryService(pack))
+    resp = _post(api, {"live_id": "l1", "query": "x", "max_results": 10})
+    assert all(m["source"] != "soulforge_behaviour_hint" for m in resp.json()["memories"])
+
+
+def test_direct_memories_are_passed_through(client):
+    api, install = client
+    install(_FakeMemoryService(_pack()))
+    resp = _post(api, {"live_id": "l1", "query": "下午", "max_results": 10})
+    m1 = next(m for m in resp.json()["memories"] if m["id"] == "m1")
+    assert "期末考试" in m1["summary"]
+    assert m1["type"] == "history"
+
+
+def test_compiled_rules_are_passed_through_as_style(client):
+    api, install = client
+    install(_FakeMemoryService(_pack()))
+    resp = _post(api, {"live_id": "l1", "query": "x", "max_results": 10})
+    r1 = next(m for m in resp.json()["memories"] if m["id"] == "r1")
+    assert r1["type"] == "style"
 
 
 def test_requested_memory_types_filter_the_result(client):
     api, install = client
     install(_FakeMemoryService(_pack()))
-    resp = api.post(
-        "/vidu/memory/retrieve",
-        json={"live_id": "l1", "query": "x", "memory_types": ["profile"], "max_results": 10},
-        headers={"Authorization": f"Bearer {mint_session_token('u_1')}"},
-    )
-    assert [m["id"] for m in resp.json()["memories"]] == ["m2"]
+    resp = _post(api, {"live_id": "l1", "query": "x", "memory_types": ["history"]})
+    assert [m["id"] for m in resp.json()["memories"]] == ["m1"]
+
+
+def test_asking_for_profile_no_longer_yields_the_implicit_profile(client):
+    api, install = client
+    install(_FakeMemoryService(_pack()))
+    resp = _post(api, {"live_id": "l1", "query": "x", "memory_types": ["profile"]})
+    assert resp.json()["memories"] == []
+    assert "舍曲林" not in resp.text
 
 
 def test_max_results_is_honoured(client):
     api, install = client
     install(_FakeMemoryService(_pack()))
-    resp = api.post(
-        "/vidu/memory/retrieve",
-        json={"live_id": "l1", "query": "x", "max_results": 2},
-        headers={"Authorization": f"Bearer {mint_session_token('u_1')}"},
-    )
-    assert len(resp.json()["memories"]) == 2
+    resp = _post(api, {"live_id": "l1", "query": "x", "max_results": 1})
+    assert len(resp.json()["memories"]) == 1
 
 
 def test_token_identity_decides_whose_memory_is_read(client):
     api, install = client
     service = _FakeMemoryService(_pack())
     install(service)
-    api.post(
-        "/vidu/memory/retrieve",
-        json={"live_id": "l1", "query": "考试"},
-        headers={"Authorization": f"Bearer {mint_session_token('u_42', character_id='c_7')}"},
-    )
+    _post(api, {"live_id": "l1", "query": "考试"}, user="u_42", character_id="c_7")
     assert service.calls[0]["end_user_id"] == "u_42"
     assert service.calls[0]["character_id"] == "c_7"
 
@@ -226,11 +257,7 @@ def test_retrieval_failure_returns_empty_list_not_an_error_status(client):
     """A 5xx becomes an error tool result and makes the character stumble."""
     api, install = client
     install(_FakeMemoryService(raises=True))
-    resp = api.post(
-        "/vidu/memory/retrieve",
-        json={"live_id": "l1", "query": "x"},
-        headers={"Authorization": f"Bearer {mint_session_token('u_1')}"},
-    )
+    resp = _post(api, {"live_id": "l1", "query": "x"})
     assert resp.status_code == 200
     assert resp.json()["memories"] == []
     assert resp.json()["error"] == "retrieval_unavailable"
@@ -239,22 +266,43 @@ def test_retrieval_failure_returns_empty_list_not_an_error_status(client):
 def test_empty_pack_returns_an_empty_array(client):
     api, install = client
     install(_FakeMemoryService({"direct": [], "implicit": [], "compiled_rules": []}))
-    resp = api.post(
-        "/vidu/memory/retrieve",
-        json={"live_id": "l1", "query": "x"},
-        headers={"Authorization": f"Bearer {mint_session_token('u_1')}"},
-    )
+    resp = _post(api, {"live_id": "l1", "query": "x"})
     assert resp.json() == {"memories": []}
 
 
-def test_tool_instruction_explains_every_marker_the_endpoint_can_emit():
-    # If a marker ships without a matching rule, the model has no reason to obey it.
-    for marker in (
-        "[可自然提及]",
-        "[隐性关系策略，不要直说来源]",
-        "[隐性长期画像，不要直说来源]",
-        "[隐性长期理解，不要直说来源]",
-        "[隐性事件碎片，只在非常相关时才用]",
-        "[编译行为规则]",
-    ):
-        assert marker in vidu_retrieval.MEMORY_TOOL_INSTRUCTION
+def test_confidence_is_trustworthiness_not_unbounded_relevance(client):
+    """retrieval_score is unbounded and routinely > 1; Vidu's confidence is 0..1."""
+    api, install = client
+    install(_FakeMemoryService(_pack()))
+    resp = _post(api, {"live_id": "l1", "query": "x", "max_results": 10})
+    m1 = next(m for m in resp.json()["memories"] if m["id"] == "m1")
+    assert m1["confidence"] == 0.9
+
+
+def test_out_of_range_confidence_is_clamped(client):
+    api, install = client
+    pack = _pack()
+    pack["direct"][0]["confidence_score"] = 4.2
+    install(_FakeMemoryService(pack))
+    resp = _post(api, {"live_id": "l1", "query": "x", "max_results": 10})
+    m1 = next(m for m in resp.json()["memories"] if m["id"] == "m1")
+    assert m1["confidence"] == 1.0
+
+
+def test_missing_confidence_is_omitted_not_faked(client):
+    api, install = client
+    pack = _pack()
+    pack["direct"][0].pop("confidence_score", None)
+    install(_FakeMemoryService(pack))
+    resp = _post(api, {"live_id": "l1", "query": "x", "max_results": 10})
+    m1 = next(m for m in resp.json()["memories"] if m["id"] == "m1")
+    assert m1["confidence"] is None
+
+
+def test_tool_instruction_does_not_rely_on_the_model_policing_disclosure():
+    """Nothing private is entrusted to these words — the live model ignored them."""
+    text = vidu_retrieval.MEMORY_TOOL_INSTRUCTION
+    for self_policing in ("不要直说来源", "不要承认", "绝不能复述"):
+        assert self_policing not in text
+    # It should still discourage the failure the transcript showed on turn one.
+    assert "不要编造" in text
