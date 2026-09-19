@@ -164,6 +164,14 @@ class Handler(BaseHTTPRequestHandler):
         if route:
             self._proxy_http(route)
             return
+        if urllib.parse.urlsplit(self.path).path == "/go":
+            # The prefilled URL is unusable by hand; /go is what you type on the
+            # other machine.
+            self.send_response(302)
+            self.send_header("Location", f"/?{CONFIG['query']}")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         self._serve_page()
 
     def do_POST(self):
@@ -437,6 +445,7 @@ def main() -> int:
             "avatar_voice": args.voice,
         }
     )
+    CONFIG["query"] = query
     url = f"http://127.0.0.1:{args.port}/?{query}"
 
     server = ThreadingHTTPServer((args.bind, args.port), Handler)
@@ -451,8 +460,12 @@ def main() -> int:
         # getUserMedia only exists in a secure context. A LAN address over plain
         # http is not one, so the camera and microphone are simply absent —
         # which looks identical to having no devices at all.
-        print("  另一台机器用局域网地址打开时，浏览器不会给出摄像头和麦克风：")
-        print("  http:// + 局域网 IP 不是安全上下文。在那台机器上这样启动 Chrome：")
+        print(f"  另一台机器上打开：http://<本机IP>:{args.port}/go")
+        print()
+        print("  但浏览器不会给出摄像头和麦克风：http:// + 局域网 IP 不是安全")
+        print(
+            "  上下文，navigator.mediaDevices 直接不存在。在那台机器上这样启动 Chrome："
+        )
         print()
         print(
             '    open -na "Google Chrome" --args --user-data-dir=/tmp/sf-chrome \\\n'
