@@ -21,6 +21,7 @@ Then open the printed URL, click 创建并连接, and allow the microphone.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import select
@@ -105,6 +106,38 @@ def patch_page(html: bytes) -> bytes:
     return html.replace(_CAMERA_FATAL, _CAMERA_SOFT)
 
 
+def resolve_avatar_image(value: str) -> str:
+    """Accept a local file as well as a URL.
+
+    Vidu takes ``image_uri`` as a public URL or a base64 data URI, so a local
+    portrait needs no hosting. It is resolved here rather than passed through the
+    page: a 300KB data URI does not belong in a query string.
+    """
+    if not value or value.startswith(("http://", "https://", "data:")):
+        return value
+    path = Path(value).expanduser()
+    if not path.is_file():
+        print(f"warning: 找不到图片 {path}，沿用页面里填的地址", file=sys.stderr)
+        return ""
+    suffix = path.suffix.lower().lstrip(".")
+    mime = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "webp": "webp"}.get(suffix)
+    if not mime:
+        print(
+            f"warning: 不支持的图片格式 .{suffix}（要 png/jpg/jpeg/webp）",
+            file=sys.stderr,
+        )
+        return ""
+    raw = path.read_bytes()
+    if len(raw) > 20 * 1024 * 1024:
+        print("warning: 图片超过 20MB，Vidu 会拒绝", file=sys.stderr)
+        return ""
+    print(
+        f"形象图片    : {path.name}（{len(raw) // 1024}KB，内联为 data URI）",
+        file=sys.stderr,
+    )
+    return f"data:image/{mime};base64," + base64.b64encode(raw).decode()
+
+
 def inject_memory(body: bytes) -> bytes:
     """Rewrite a CreateLive body so the character starts out knowing the user.
 
@@ -118,6 +151,9 @@ def inject_memory(body: bytes) -> bytes:
         return body
 
     avatar = payload.setdefault("avatar", {})
+
+    if CONFIG.get("avatar_image"):
+        avatar["image_uri"] = CONFIG["avatar_image"]
 
     # persona_enhance rewrites and expands the persona on Vidu's side, which
     # means it rewrites the memory block and the "不要编造" line with it. A first
@@ -420,6 +456,7 @@ def main() -> int:
             "preamble": preamble,
             "language_line": args.language,
             "allow_persona_enhance": args.allow_persona_enhance,
+            "avatar_image": resolve_avatar_image(args.avatar_image),
             "public_base_url": args.public_base_url,
             "memory_timeout_ms": args.memory_timeout_ms,
             "session_token": mint_session_token(
