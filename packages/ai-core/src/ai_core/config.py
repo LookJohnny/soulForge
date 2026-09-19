@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     # ─── Encryption (Sprint 3) ──────────────────
     master_secret: str = "change-me-in-production"
 
+    # Alibaba RTC application the Vidu component edition joins.
+    artc_app_id: str = ""
+    artc_app_key: str = ""
+
     # ─── Auth ───────────────────────────────────
     auth_secret: str = ""  # NextAuth AUTH_SECRET (shared with admin-web)
     service_token: str = ""  # Internal service-to-service token (gateway → ai-core)
