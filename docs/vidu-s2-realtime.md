@@ -348,3 +348,35 @@ Vidu 回显的 persona 里能看到注入的记忆；WebSocket 隧道可用
 （`conn_init_ack success=True`），两轮对话记忆答对、隐私守住，
 11s / 17 credits。**未验证：浏览器里真正点下"创建并连接"之后的
 AliRTC 入会、画面渲染与麦克风采集**——那一步需要授权麦克风并开始计费。
+
+## 在另一台机器上试用（笔记本当采集端）
+
+开发机常常没有摄像头和麦克风——Mac mini 就两样都没有，本项目的 RTC 联调
+一度因此完全跑不起来。不必把整套搬过去：**需要搬的只是采集设备**。
+
+ai-core、数据库、隧道、`vidu_web.py` 全留在原机器，笔记本只当浏览器：
+
+```bash
+# 原机器：让代理监听局域网
+python scripts/vidu_web.py --user-id <uuid> \
+  --public-base-url https://xxx.loca.lt \
+  --bind 0.0.0.0
+```
+
+笔记本打开 `http://<原机器IP>:28890/?...`，用的是笔记本自己的摄像头和麦克风。
+
+**但会踩一个坑：** `getUserMedia` 只存在于安全上下文。`http://` + 局域网 IP
+不是安全上下文，于是 `navigator.mediaDevices` 直接不存在——**表现和「没有
+设备」一模一样**，很容易误判成硬件问题。两种解法：
+
+```bash
+# 笔记本上这样启动 Chrome（--user-data-dir 必须带，否则标志不生效）
+open -na "Google Chrome" --args --user-data-dir=/tmp/sf-chrome \
+  --unsafely-treat-insecure-origin-as-secure=http://192.168.1.172:28890 \
+  'http://192.168.1.172:28890/?...'
+```
+
+或者给 28890 单开一条隧道，用 https 地址访问——但那会把这个代理暴露到公网，
+**任何拿到地址的人都能用你的 API key 建会话**，只适合极短时间的验证。
+
+`--bind 0.0.0.0` 默认关闭，要显式开。同一局域网、同一 Wi-Fi 是前提。

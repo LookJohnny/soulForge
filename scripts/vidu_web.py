@@ -357,6 +357,11 @@ def main() -> int:
         default=os.environ.get("SOULFORGE_AI_CORE_URL", "http://127.0.0.1:8100"),
     )
     parser.add_argument("--port", type=int, default=28890)
+    parser.add_argument(
+        "--bind",
+        default="127.0.0.1",
+        help="0.0.0.0 to let another machine on the LAN use its own camera and mic",
+    )
     parser.add_argument("--memory-timeout-ms", type=int, default=5000)
     parser.add_argument("--preamble-limit", type=int, default=6)
     parser.add_argument(
@@ -434,7 +439,7 @@ def main() -> int:
     )
     url = f"http://127.0.0.1:{args.port}/?{query}"
 
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    server = ThreadingHTTPServer((args.bind, args.port), Handler)
     server.daemon_threads = True
 
     print()
@@ -442,6 +447,19 @@ def main() -> int:
     print("  页面上点「创建并连接」，允许麦克风（摄像头可以拒绝）。")
     print("  建会话约 1 分钟。Ctrl-C 关掉这个服务器。")
     print()
+    if args.bind not in {"127.0.0.1", "localhost"}:
+        # getUserMedia only exists in a secure context. A LAN address over plain
+        # http is not one, so the camera and microphone are simply absent —
+        # which looks identical to having no devices at all.
+        print("  另一台机器用局域网地址打开时，浏览器不会给出摄像头和麦克风：")
+        print("  http:// + 局域网 IP 不是安全上下文。在那台机器上这样启动 Chrome：")
+        print()
+        print(
+            '    open -na "Google Chrome" --args --user-data-dir=/tmp/sf-chrome \\\n'
+            f"      --unsafely-treat-insecure-origin-as-secure=http://<本机IP>:{args.port} \\\n"
+            "      '<上面那个地址>'"
+        )
+        print()
     if preamble:
         print("  角色开场会知道：")
         for line in preamble.splitlines():
