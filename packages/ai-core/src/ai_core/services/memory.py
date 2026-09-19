@@ -997,6 +997,9 @@ class MemoryService:
             "prompt_text": prompt_text,
             "use_mode": use_mode,
             "memory_table": memory.get("memory_table"),
+            # How much we trust the memory (0..1), as distinct from
+            # retrieval_score, which is unbounded relevance for this one query.
+            "confidence_score": memory.get("confidence_score"),
             "retrieval_score": memory.get("retrieval_score"),
             "retrieval_score_parts": memory.get("retrieval_score_parts"),
         }
