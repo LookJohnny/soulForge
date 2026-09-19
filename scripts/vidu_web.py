@@ -178,6 +178,11 @@ def inject_memory(body: bytes) -> bytes:
     }
     payload.setdefault("audio", {})["enable_transcription"] = True
 
+    # Vidu defaults llm.max_tokens to 50, which is about one short sentence —
+    # replies come out clipped and read as stiff. A spoken companion needs room
+    # to finish a thought without turning into a monologue.
+    payload.setdefault("llm", {}).update(CONFIG["llm"])
+
     facts = preamble.count("\n- ")
     print(f"  → 已注入记忆（{facts} 条）与 memory_retrieval 回调", flush=True)
     return json.dumps(payload).encode()
@@ -407,13 +412,22 @@ def main() -> int:
         help="0.0.0.0 to let another machine on the LAN use its own camera and mic",
     )
     parser.add_argument("--memory-timeout-ms", type=int, default=5000)
+    parser.add_argument("--max-tokens", type=int, default=240)
+    parser.add_argument("--temperature", type=float, default=0.85)
     parser.add_argument("--preamble-limit", type=int, default=6)
     parser.add_argument(
         "--avatar-image",
         default="https://scene.vidu.zone/media-asset/084945-xpk47RWYcBgJ27nJ.png",
     )
     parser.add_argument(
-        "--persona", default="你是用户的长期陪伴角色。说话克制、口语化、允许留白。"
+        "--persona",
+        default=(
+            "你是对方的长期陪伴角色，认识很久了。"
+            "像熟人一样说话：短句，口语，可以停顿和跑题，"
+            "不用每句都完整、也不用每次都给建议。"
+            "别用「作为你的陪伴」「我在这里为你」这类客服腔，"
+            "别反复确认对方的感受，别把话说得太满。"
+        ),
     )
     parser.add_argument(
         "--voice", default="Maia", help="Vidu voice id, see the Voice List doc"
@@ -455,6 +469,10 @@ def main() -> int:
             "api_key": api_key,
             "preamble": preamble,
             "language_line": args.language,
+            "llm": {
+                "max_tokens": args.max_tokens,
+                "temperature": args.temperature,
+            },
             "allow_persona_enhance": args.allow_persona_enhance,
             "avatar_image": resolve_avatar_image(args.avatar_image),
             "public_base_url": args.public_base_url,

@@ -325,8 +325,8 @@ def test_preamble_states_direct_facts_and_style_separately():
     safe = vidu_retrieval.safe_memories(_pack(), limit=10)
     text = vidu_retrieval.build_persona_preamble(safe)
     assert "期末考试" in text
-    assert "你已经记得关于对方的这些事" in text
-    assert "说话方式要求" in text
+    assert "你记得这些" in text
+    assert "说话方式" in text
     # The behaviour directive derived from the implicit memory rides along.
     assert "语气放轻" in text
 
@@ -334,7 +334,7 @@ def test_preamble_states_direct_facts_and_style_separately():
 def test_preamble_tells_the_model_not_to_invent_the_rest():
     """The defect this preamble exists to fix is first-turn confabulation."""
     safe = vidu_retrieval.safe_memories(_pack(), limit=10)
-    assert "不要编造" in vidu_retrieval.build_persona_preamble(safe)
+    assert "别编" in vidu_retrieval.build_persona_preamble(safe)
 
 
 def test_preamble_strips_the_bracket_markers():
@@ -367,3 +367,12 @@ def test_behaviour_directives_state_behaviour_without_explaining_why():
     for text in vidu_retrieval._SPEECH_POLICY_DIRECTIVES.values():
         for rationale in ("脆弱", "焦虑", "失眠", "状态可能", "因为"):
             assert rationale not in text, text
+
+
+def test_preamble_drops_the_stored_third_person_subject():
+    """Stored memories read "用户喜欢…"; kept that way the character reports rather
+    than remembers, which is what made it sound stiff in live use."""
+    safe = vidu_retrieval.safe_memories(_pack(), limit=10)
+    text = vidu_retrieval.build_persona_preamble(safe)
+    assert "- 用户" not in text
+    assert "下午三点有一场很重要的期末考试" in text

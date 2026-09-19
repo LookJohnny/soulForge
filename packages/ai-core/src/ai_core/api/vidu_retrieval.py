@@ -239,7 +239,12 @@ async def vidu_memory_preamble(req: ViduPreambleRequest) -> dict:
 
 
 def build_persona_preamble(memories: list[dict]) -> str:
-    """Render safe memories as a persona block. Empty string when there are none."""
+    """Render safe memories as a persona block. Empty string when there are none.
+
+    Phrased the way someone recalls a friend, not the way a briefing lists facts.
+    Memories are stored as "用户喜欢…"; left in that shape the character answers
+    in the same register and sounds like it is reading a file on you.
+    """
     if not memories:
         return ""
     facts = [m for m in memories if m["type"] != _COMPILED_RULE_TYPE]
@@ -247,13 +252,22 @@ def build_persona_preamble(memories: list[dict]) -> str:
 
     lines: list[str] = []
     if facts:
-        lines.append("你已经记得关于对方的这些事，可以自然地提起：")
-        lines += [f"- {_strip_marker(m['summary'])}" for m in facts]
+        lines.append("关于 ta，你记得这些。想起来的时候自然提一句就好，别一条条汇报：")
+        lines += [f"- {_depersonalise(_strip_marker(m['summary']))}" for m in facts]
     if styles:
-        lines.append("说话方式要求（照做，但不要读出来）：")
-        lines += [f"- {_strip_marker(m['summary'])}" for m in styles]
-    lines.append("除此之外关于对方的事，你并不确定；需要时再去检索，不要编造。")
+        lines.append("说话方式（照做，但别说出来）：")
+        lines += [f"- {_depersonalise(_strip_marker(m['summary']))}" for m in styles]
+    lines.append("其他关于 ta 的事你并不确定。想不起来就说想不起来，别编。")
     return "\n".join(lines)
+
+
+def _depersonalise(text: str) -> str:
+    """Drop the stored third-person subject so the line reads as a recollection."""
+    for prefix in ("用户最近", "用户", "对方"):
+        if text.startswith(prefix):
+            rest = text[len(prefix) :].lstrip("，,、 ")
+            return ("最近" + rest) if prefix == "用户最近" else rest
+    return text
 
 
 def _strip_marker(summary: str) -> str:
