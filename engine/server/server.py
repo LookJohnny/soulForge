@@ -782,6 +782,14 @@ def main() -> None:
         action="store_true",
         help="let characters start small talk with each other on their own",
     )
+    parser.add_argument(
+        "--agents",
+        default="",
+        help=(
+            "只加载这些 agent（逗号分隔）。每个 agent 都在按 sim 时钟自行重新规划，"
+            "没人说话时也在调 LLM——录 demo 或做单角色开发时，整个名单是纯开销。"
+        ),
+    )
     args = parser.parse_args()
     hours, minutes = args.start_clock.split(":")
     start_minute = int(hours) * 60 + int(minutes)
@@ -810,8 +818,17 @@ def main() -> None:
         entries = load_characters()["characters"]
         store.project_characters(entries)
         store.bootstrap([entry["id"] for entry in entries])
+    personas = default_personas()
+    if args.agents:
+        wanted = {a.strip() for a in args.agents.split(",") if a.strip()}
+        missing = wanted - {p.agent_id for p in personas}
+        if missing:
+            raise SystemExit(f"configs/characters.json 里没有：{', '.join(sorted(missing))}")
+        personas = [p for p in personas if p.agent_id in wanted]
+        print(f"只加载 {len(personas)} 个 agent：{', '.join(p.agent_id for p in personas)}")
+
     server = SoulForgeRuntimeServer(
-        default_personas(),
+        personas,
         start_minute=start_minute,
         time_scale=args.time_scale,
         tick_hz=args.tick_hz,

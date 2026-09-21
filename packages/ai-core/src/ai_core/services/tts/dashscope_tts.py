@@ -1,7 +1,11 @@
 """DashScope CosyVoice TTS — SSML mode for voice persona control.
 
-Uses cosyvoice-v3-flash with SSML markup for pitch/rate/effect control:
+Uses cosyvoice-v2 with SSML markup for pitch/rate/effect control:
   <speak pitch="1.35" rate="1.1" effect="lolita">你好呀主人~</speak>
+
+Measured against the previous Fish provider on the same sentence: ~1.1s here
+versus ~6.9s there. Fish's cost is flat regardless of text length — two
+characters also took 6.6s — so it is the round trip, not the synthesis.
 """
 
 import asyncio
@@ -16,20 +20,62 @@ from ai_core.services.tts.base import TTSProvider
 
 logger = structlog.get_logger()
 
+# Voice ids are versioned with the model: a v1 name against cosyvoice-v2/v3
+# returns empty audio with engine code 418, not an error the SDK surfaces. The
+# suffix here must therefore match VOICE_MODEL below — see test_dashscope_tts.
+VOICE_MODEL = "cosyvoice-v2"
+
 PRESET_VOICES = {
-    "longxiaochun": "甜美少女",
-    "longxiaoxia": "温柔姐姐",
-    "longshu": "知性大姐",
-    "longlaotie": "东北老铁",
-    "longshuo": "阳光男孩",
-    "longjielidou": "活力少女",
-    "longyue": "优雅女声",
-    "longcheng": "沉稳男声",
+    "longxiaochun_v2": "甜美少女",
+    "longxiaoxia_v2": "温柔姐姐",
+    "longshu_v2": "知性大姐",
+    "longlaotie_v2": "东北老铁",
+    "longshuo_v2": "阳光男孩",
+    "longjielidou_v2": "活力少女",
+    "longyue_v2": "优雅女声",
+    "longcheng_v2": "沉稳男声",
 }
 
-DEFAULT_VOICE = "longxiaochun"
+DEFAULT_VOICE = "longxiaochun_v2"
 
 _RETRYABLE = (RuntimeError, TimeoutError, ConnectionError, OSError)
+
+# The suffix the current model expects, e.g. "_v2" for cosyvoice-v2.
+_MODEL_SUFFIX = "_v" + VOICE_MODEL.rsplit("-v", 1)[-1]
+_BASE_VOICES = {v.rsplit("_v", 1)[0] for v in PRESET_VOICES}
+
+
+def is_preset_voice(voice: str) -> bool:
+    """True for a CosyVoice preset id in any of its version spellings.
+
+    Routing needs this: a voice id that is not an Edge ``*Neural`` name was
+    previously assumed to be Fish's, which sends every CosyVoice request to the
+    wrong provider once DashScope is the configured one.
+    """
+    if not voice:
+        return False
+    base = voice.rsplit("_v", 1)[0] if "_v" in voice else voice
+    return base in _BASE_VOICES
+
+
+def normalize_voice(voice: str) -> str:
+    """Retag a preset voice id to the suffix this model expects.
+
+    The codebase carries three conventions for the same eight voices — bare
+    names in the database and the Prisma seed, ``_v3`` in voice_matcher, ``_v2``
+    here. A mismatched pair does not fail loudly: DashScope returns empty audio
+    with engine code 418, which reaches the caller as "synthesis failed".
+
+    Normalizing on the way out means existing rows keep working through a model
+    bump instead of every call site having to be found and edited. Anything that
+    is not a known preset — a cloned voice id, say — is passed through untouched.
+    """
+    if not voice:
+        return voice
+    base = voice.rsplit("_v", 1)[0] if "_v" in voice else voice
+    if base not in _BASE_VOICES:
+        return voice
+    return base + _MODEL_SUFFIX
 
 
 def _wrap_ssml(text: str, pitch: float, rate: float, effect: str) -> str:
@@ -57,7 +103,7 @@ def _wrap_ssml(text: str, pitch: float, rate: float, effect: str) -> str:
 class DashScopeTTSProvider(TTSProvider):
     """DashScope CosyVoice TTS with SSML support.
 
-    cosyvoice-v3-flash supports SSML markup:
+    cosyvoice-v2 supports SSML markup:
     - pitch: 0.5-2.0 (音高)
     - rate: 0.5-2.0 (语速)
     - effect: lolita/robot/echo/lowpass (变声特效)
@@ -86,20 +132,20 @@ class DashScopeTTSProvider(TTSProvider):
         ssml_effect: str = "",
     ) -> bytes:
         dashscope.api_key = settings.dashscope_api_key
-        voice_id = voice or DEFAULT_VOICE
+        voice_id = normalize_voice(voice or DEFAULT_VOICE)
 
         # Wrap text in SSML if any non-default params
         ssml_text = _wrap_ssml(text, ssml_pitch, ssml_rate, ssml_effect)
 
         kwargs: dict = {
-            "model": settings.tts_model,
+            "model": VOICE_MODEL,
             "voice": voice_id,
         }
 
         logger.info(
             "tts.synthesize",
             voice=voice_id,
-            model=settings.tts_model,
+            model=VOICE_MODEL,
             ssml_pitch=ssml_pitch,
             ssml_rate=ssml_rate,
             ssml_effect=ssml_effect or "none",
