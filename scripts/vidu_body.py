@@ -74,43 +74,55 @@ class RuntimeBody:
 
     async def connect(self) -> None:
         self.ws = await websockets.connect(f"{self.url}/body", proxy=None)
-        await self.ws.send(json.dumps({
-            "type": "hello",
-            "protocol": "0.2",
-            "body_id": self.body_id,
-            "backend": "vidu",
-            "agent_ids": [self.agent_id],
-            "manifest": {
-                # Only speech: gaze, nav and motion belong to bodies that have
-                # them. Step negotiation is the capability gate.
-                "supported_steps": ["speak_line"],
-                "supported_templates": [],
-                "features": {
-                    "speech": True,
-                    "speech_only": True,
-                    "autonomous_speech": True,
-                    "gaze": False,
-                    "nav": False,
+        await self.ws.send(
+            json.dumps(
+                {
+                    "type": "hello",
+                    "protocol": "0.2",
+                    "body_id": self.body_id,
+                    "backend": "vidu",
+                    "agent_ids": [self.agent_id],
+                    "manifest": {
+                        # Only speech: gaze, nav and motion belong to bodies that have
+                        # them. Step negotiation is the capability gate.
+                        "supported_steps": ["speak_line"],
+                        "supported_templates": [],
+                        "features": {
+                            "speech": True,
+                            "speech_only": True,
+                            "autonomous_speech": True,
+                            "gaze": False,
+                            "nav": False,
+                        },
+                    },
                 },
-            },
-        }, ensure_ascii=False))
+                ensure_ascii=False,
+            )
+        )
         welcome = json.loads(await asyncio.wait_for(self.ws.recv(), timeout=20))
         accepted = welcome.get("accepted_agents") or []
         if self.agent_id not in accepted:
-            raise RuntimeError(f"Runtime 未接受 agent {self.agent_id}；可用: {accepted}")
+            raise RuntimeError(
+                f"Runtime 未接受 agent {self.agent_id}；可用: {accepted}"
+            )
         print(f"已作为身体接入 Runtime（agent={self.agent_id}）", flush=True)
 
     async def say_to_character(self, text: str) -> str:
         """Send one utterance, return the dialogue the brain decided on."""
         event_id = uuid.uuid4().hex[:12]
-        await self.ws.send(json.dumps({
-            "type": "event",
-            "kind": "user_utterance",
-            "source": self.body_id,
-            "text": text,
-            "target_agent": self.agent_id,
-            "payload": {"event_id": event_id},
-        }, ensure_ascii=False))
+        await self.ws.send(
+            json.dumps(
+                {
+                    "type": "event",
+                    "kind": "user_utterance",
+                    "source": self.body_id,
+                    "text": text,
+                    "target_agent": self.agent_id,
+                    "payload": {"event_id": event_id},
+                },
+                ensure_ascii=False,
+            )
+        )
         return event_id
 
     async def reader(self, on_dialogue) -> None:
@@ -149,30 +161,57 @@ class RuntimeBody:
     async def _observe(self, command_id: str, status: str, error: str = "") -> None:
         if not command_id:
             return
-        await self.ws.send(json.dumps({
-            "type": "observation",
-            "command_id": command_id,
-            "agent_id": self.agent_id,
-            "status": status,
-            "error": error,
-        }, ensure_ascii=False))
+        await self.ws.send(
+            json.dumps(
+                {
+                    "type": "observation",
+                    "command_id": command_id,
+                    "agent_id": self.agent_id,
+                    "status": status,
+                    "error": error,
+                },
+                ensure_ascii=False,
+            )
+        )
 
 
 # ── mouth: TTS → PCM → Vidu ──────────────────────────────────
 
 
 def stream_tts_pcm(text: str, voice: str | None, sink) -> dict:
-    body = json.dumps({"text": text, "voice": voice} if voice else {"text": text}).encode()
+    body = json.dumps(
+        {"text": text, "voice": voice} if voice else {"text": text}
+    ).encode()
     req = urllib.request.Request(
         f"{STATE['ai_core_url'].rstrip('/')}/tts/stream",
         data=body,
-        headers={"X-Service-Token": STATE["service_token"], "Content-Type": "application/json"},
+        headers={
+            "X-Service-Token": STATE["service_token"],
+            "Content-Type": "application/json",
+        },
         method="POST",
     )
     ff = subprocess.Popen(
-        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
-         "-f", "s16le", "-acodec", "pcm_s16le", "-ar", str(SAMPLE_RATE), "-ac", "1", "pipe:1"],
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            "pipe:0",
+            "-f",
+            "s16le",
+            "-acodec",
+            "pcm_s16le",
+            "-ar",
+            str(SAMPLE_RATE),
+            "-ac",
+            "1",
+            "pipe:1",
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
     )
     stats = {"first_audio_ms": None, "total_bytes": 0}
     started = time.time()
@@ -207,30 +246,49 @@ def stream_tts_pcm(text: str, voice: str | None, sink) -> dict:
 # ── Vidu session ─────────────────────────────────────────────
 
 
+def _image_mime(raw: bytes, path: Path) -> str:
+    """Decide the media type from the bytes, not the file name.
+
+    Generated art often lands with the wrong extension — the avatar chosen here
+    was saved as .png but is JPEG. Vidu rejects a data URI whose declared type
+    disagrees with its payload, and the error does not say so.
+    """
+    if raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if raw.startswith(b"\xff\xd8\xff"):
+        return "jpeg"
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return "webp"
+    raise ValueError(f"不支持的图片格式: {path.name}")
+
+
 def create_session(args, vidu_token: str) -> dict:
     avatar = args.avatar_image
     if avatar and not avatar.startswith(("http://", "https://", "data:")):
         raw = Path(avatar).expanduser().read_bytes()
-        mime = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "webp": "webp"}[
-            Path(avatar).suffix.lower().lstrip(".")
-        ]
+        mime = _image_mime(raw, Path(avatar))
         avatar = f"data:image/{mime};base64," + base64.b64encode(raw).decode()
 
-    body = json.dumps({
-        "model": args.model,
-        "image_uri": avatar,
-        "rtc_info": {
-            "provider": "agora",
-            "app_id": STATE["app_id"],
-            "channel_id": STATE["channel"],
-            "user_id": str(args.vidu_uid),
-            "token": vidu_token,
-        },
-    }).encode()
+    body = json.dumps(
+        {
+            "model": args.model,
+            "image_uri": avatar,
+            "rtc_info": {
+                "provider": "agora",
+                "app_id": STATE["app_id"],
+                "channel_id": STATE["channel"],
+                "user_id": str(args.vidu_uid),
+                "token": vidu_token,
+            },
+        }
+    ).encode()
     req = urllib.request.Request(
         f"{VIDU_HOST}/live/s_avatar/component",
         data=body,
-        headers={"Authorization": f"Token {STATE['vidu_key']}", "Content-Type": "application/json"},
+        headers={
+            "Authorization": f"Token {STATE['vidu_key']}",
+            "Content-Type": "application/json",
+        },
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=200) as r:
@@ -242,12 +300,20 @@ async def drive_vidu(live_id: str, secret: str) -> None:
     url = f"{VIDU_WS}/live/v1/external-lives/{live_id}/stream?conn_id={conn}&client_secret={secret}"
     seq = [0]
     async with websockets.connect(url, proxy=None) as ws:
+
         async def conn_init():
             seq[0] += 1
-            await ws.send(json.dumps({
-                "type": 1, "live_id": str(live_id), "conn_id": conn,
-                "seq_id": seq[0], "payload": {"conn_init": {"version": 1}},
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": 1,
+                        "live_id": str(live_id),
+                        "conn_id": conn,
+                        "seq_id": seq[0],
+                        "payload": {"conn_init": {"version": 1}},
+                    }
+                )
+            )
 
         await conn_init()
 
@@ -276,7 +342,11 @@ async def drive_vidu(live_id: str, secret: str) -> None:
                     print("conn_init 失败:", ack.get("error_code"), flush=True)
                     return
             elif msg.get("type") == 6:
-                print("← Vidu 挂断:", json.dumps(msg.get("payload"), ensure_ascii=False), flush=True)
+                print(
+                    "← Vidu 挂断:",
+                    json.dumps(msg.get("payload"), ensure_ascii=False),
+                    flush=True,
+                )
                 if pump_task:
                     pump_task.cancel()
                 return
@@ -364,10 +434,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.startswith("/session"):
-            self._json({
-                "appId": STATE["app_id"], "channel": STATE["channel"],
-                "uid": STATE["viewer_uid"], "token": STATE["viewer_token"],
-            })
+            self._json(
+                {
+                    "appId": STATE["app_id"],
+                    "channel": STATE["channel"],
+                    "uid": STATE["viewer_uid"],
+                    "token": STATE["viewer_token"],
+                }
+            )
             return
         if self.path.startswith("/events"):
             lines, STATE["log"] = STATE["log"], []
@@ -417,7 +491,9 @@ async def run(args) -> None:
         stats = await asyncio.to_thread(
             stream_tts_pcm, line, args.voice, STATE["frames"].append
         )
-        STATE["log"].append(f"  首帧 {stats['first_audio_ms']}ms · {stats['frames']} 帧")
+        STATE["log"].append(
+            f"  首帧 {stats['first_audio_ms']}ms · {stats['frames']} 帧"
+        )
 
     await asyncio.gather(
         body.reader(speak),
@@ -427,12 +503,22 @@ async def run(args) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--avatar-image", default="/Users/lovelyjoy/Desktop/vtuber-1.jpg")
+    parser.add_argument(
+        "--avatar-image", default="/Users/lovelyjoy/Desktop/sf-idol-1.png"
+    )
     parser.add_argument("--model", default="vidu-s2", choices=["vidu-s1", "vidu-s2"])
-    parser.add_argument("--runtime-url", default=os.environ.get("CHARACTER_RUNTIME_URL", "ws://127.0.0.1:8765"))
-    parser.add_argument("--agent", default=os.environ.get("CHARACTER_RUNTIME_AGENT", "joi"))
+    parser.add_argument(
+        "--runtime-url",
+        default=os.environ.get("CHARACTER_RUNTIME_URL", "ws://127.0.0.1:8765"),
+    )
+    parser.add_argument(
+        "--agent", default=os.environ.get("CHARACTER_RUNTIME_AGENT", "joi")
+    )
     parser.add_argument("--body-id", default="vidu")
-    parser.add_argument("--ai-core-url", default=os.environ.get("SOULFORGE_AI_CORE_URL", "http://127.0.0.1:8100"))
+    parser.add_argument(
+        "--ai-core-url",
+        default=os.environ.get("SOULFORGE_AI_CORE_URL", "http://127.0.0.1:8100"),
+    )
     parser.add_argument("--voice", default=None)
     parser.add_argument("--port", type=int, default=28892)
     parser.add_argument("--bind", default="127.0.0.1")
@@ -444,18 +530,22 @@ def main() -> int:
         print("VIDU_API_KEY 未设置", file=sys.stderr)
         return 2
 
-    STATE.update({
-        "vidu_key": os.environ["VIDU_API_KEY"],
-        "app_id": os.environ["AGORA_APP_ID"],
-        "channel": f"sf{int(time.time())}",
-        "viewer_uid": args.viewer_uid,
-        "frames": deque(),
-        "log": [],
-        "ready": False,
-        "ai_core_url": args.ai_core_url,
-        "service_token": os.environ.get("SERVICE_TOKEN", ""),
-    })
-    STATE["viewer_token"] = mint_token(STATE["channel"], args.viewer_uid, publisher=False)
+    STATE.update(
+        {
+            "vidu_key": os.environ["VIDU_API_KEY"],
+            "app_id": os.environ["AGORA_APP_ID"],
+            "channel": f"sf{int(time.time())}",
+            "viewer_uid": args.viewer_uid,
+            "frames": deque(),
+            "log": [],
+            "ready": False,
+            "ai_core_url": args.ai_core_url,
+            "service_token": os.environ.get("SERVICE_TOKEN", ""),
+        }
+    )
+    STATE["viewer_token"] = mint_token(
+        STATE["channel"], args.viewer_uid, publisher=False
+    )
     vidu_token = mint_token(STATE["channel"], args.vidu_uid, publisher=True)
 
     print("创建 Vidu 会话…", flush=True)

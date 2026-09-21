@@ -67,7 +67,9 @@ def stream_tts_pcm(
     emits progressive MP3, and ffmpeg decodes a pipe as it fills, so the first
     frames can reach Vidu while the rest is still being generated.
     """
-    body = json.dumps({"text": text, "voice": voice} if voice else {"text": text}).encode()
+    body = json.dumps(
+        {"text": text, "voice": voice} if voice else {"text": text}
+    ).encode()
     req = urllib.request.Request(
         f"{ai_core_url.rstrip('/')}/tts/stream",
         data=body,
@@ -76,9 +78,26 @@ def stream_tts_pcm(
     )
 
     ff = subprocess.Popen(
-        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
-         "-f", "s16le", "-acodec", "pcm_s16le", "-ar", str(SAMPLE_RATE), "-ac", "1", "pipe:1"],
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            "pipe:0",
+            "-f",
+            "s16le",
+            "-acodec",
+            "pcm_s16le",
+            "-ar",
+            str(SAMPLE_RATE),
+            "-ac",
+            "1",
+            "pipe:1",
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
     )
 
     stats = {"first_audio_ms": None, "total_bytes": 0}
@@ -117,29 +136,49 @@ def stream_tts_pcm(
 # ── Vidu session ─────────────────────────────────────────────
 
 
+def _image_mime(raw: bytes, path: Path) -> str:
+    """Decide the media type from the bytes, not the file name.
+
+    Generated art often lands with the wrong extension — the avatar chosen here
+    was saved as .png but is JPEG. Vidu rejects a data URI whose declared type
+    disagrees with its payload, and the error does not say so.
+    """
+    if raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if raw.startswith(b"\xff\xd8\xff"):
+        return "jpeg"
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return "webp"
+    raise ValueError(f"不支持的图片格式: {path.name}")
+
+
 def create_session(args, vidu_token: str) -> dict:
     avatar = args.avatar_image
     if avatar and not avatar.startswith(("http://", "https://", "data:")):
         raw = Path(avatar).expanduser().read_bytes()
-        suffix = Path(avatar).suffix.lower().lstrip(".")
-        mime = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "webp": "webp"}[suffix]
+        mime = _image_mime(raw, Path(avatar))
         avatar = f"data:image/{mime};base64," + base64.b64encode(raw).decode()
 
-    body = json.dumps({
-        "model": args.model,
-        "image_uri": avatar,
-        "rtc_info": {
-            "provider": "agora",
-            "app_id": STATE["app_id"],
-            "channel_id": STATE["channel"],
-            "user_id": str(args.vidu_uid),
-            "token": vidu_token,
-        },
-    }).encode()
+    body = json.dumps(
+        {
+            "model": args.model,
+            "image_uri": avatar,
+            "rtc_info": {
+                "provider": "agora",
+                "app_id": STATE["app_id"],
+                "channel_id": STATE["channel"],
+                "user_id": str(args.vidu_uid),
+                "token": vidu_token,
+            },
+        }
+    ).encode()
     req = urllib.request.Request(
         f"{VIDU_HOST}/live/s_avatar/component",
         data=body,
-        headers={"Authorization": f"Token {STATE['vidu_key']}", "Content-Type": "application/json"},
+        headers={
+            "Authorization": f"Token {STATE['vidu_key']}",
+            "Content-Type": "application/json",
+        },
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=200) as r:
@@ -157,10 +196,17 @@ async def drive(live_id: str, secret: str) -> None:
 
         async def conn_init():
             seq[0] += 1
-            await ws.send(json.dumps({
-                "type": 1, "live_id": str(live_id), "conn_id": conn,
-                "seq_id": seq[0], "payload": {"conn_init": {"version": 1}},
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": 1,
+                        "live_id": str(live_id),
+                        "conn_id": conn,
+                        "seq_id": seq[0],
+                        "payload": {"conn_init": {"version": 1}},
+                    }
+                )
+            )
 
         await conn_init()
 
@@ -198,14 +244,21 @@ async def drive(live_id: str, secret: str) -> None:
                     print("conn_init 失败:", ack.get("error_code"), flush=True)
                     return
             elif t == 6:
-                print("← 对方挂断:", json.dumps(msg.get("payload"), ensure_ascii=False), flush=True)
+                print(
+                    "← 对方挂断:",
+                    json.dumps(msg.get("payload"), ensure_ascii=False),
+                    flush=True,
+                )
                 if pump_task:
                     pump_task.cancel()
                 return
             elif t in (9, 10):
                 for holder in msg.get("payload", {}).values():
                     if isinstance(holder, dict) and holder.get("content"):
-                        print(f"[{'用户' if t == 9 else '角色'}] {holder['content']}", flush=True)
+                        print(
+                            f"[{'用户' if t == 9 else '角色'}] {holder['content']}",
+                            flush=True,
+                        )
 
 
 # ── browser side ─────────────────────────────────────────────
@@ -290,12 +343,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.startswith("/session"):
-            self._json({
-                "appId": STATE["app_id"],
-                "channel": STATE["channel"],
-                "uid": STATE["viewer_uid"],
-                "token": STATE["viewer_token"],
-            })
+            self._json(
+                {
+                    "appId": STATE["app_id"],
+                    "channel": STATE["channel"],
+                    "uid": STATE["viewer_uid"],
+                    "token": STATE["viewer_token"],
+                }
+            )
             return
         body = PAGE.replace("__SDK__", AGORA_SDK).encode()
         self.send_response(200)
@@ -337,7 +392,9 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--avatar-image", default="/Users/lovelyjoy/Desktop/vtuber-1.jpg")
+    parser.add_argument(
+        "--avatar-image", default="/Users/lovelyjoy/Desktop/sf-idol-1.png"
+    )
     parser.add_argument("--model", default="vidu-s2", choices=["vidu-s1", "vidu-s2"])
     parser.add_argument("--port", type=int, default=28891)
     parser.add_argument("--bind", default="127.0.0.1")
@@ -345,7 +402,8 @@ def main() -> int:
     parser.add_argument("--viewer-uid", type=int, default=2002)
     parser.add_argument("--voice", default=None)
     parser.add_argument(
-        "--ai-core-url", default=os.environ.get("SOULFORGE_AI_CORE_URL", "http://127.0.0.1:8100")
+        "--ai-core-url",
+        default=os.environ.get("SOULFORGE_AI_CORE_URL", "http://127.0.0.1:8100"),
     )
     args = parser.parse_args()
 
@@ -354,20 +412,24 @@ def main() -> int:
         print("VIDU_API_KEY 未设置", file=sys.stderr)
         return 2
 
-    STATE.update({
-        "vidu_key": vidu_key,
-        "app_id": os.environ["AGORA_APP_ID"],
-        "channel": f"sf{int(time.time())}",
-        "viewer_uid": args.viewer_uid,
-        # Single producer (TTS decoder thread), single consumer (pump) — deque
-        # append/popleft are atomic, so no lock is needed across that boundary.
-        "frames": deque(),
-        "ready": False,
-        "ai_core_url": args.ai_core_url,
-        "service_token": os.environ.get("SERVICE_TOKEN", ""),
-        "voice": args.voice,
-    })
-    STATE["viewer_token"] = mint_token(STATE["channel"], args.viewer_uid, publisher=False)
+    STATE.update(
+        {
+            "vidu_key": vidu_key,
+            "app_id": os.environ["AGORA_APP_ID"],
+            "channel": f"sf{int(time.time())}",
+            "viewer_uid": args.viewer_uid,
+            # Single producer (TTS decoder thread), single consumer (pump) — deque
+            # append/popleft are atomic, so no lock is needed across that boundary.
+            "frames": deque(),
+            "ready": False,
+            "ai_core_url": args.ai_core_url,
+            "service_token": os.environ.get("SERVICE_TOKEN", ""),
+            "voice": args.voice,
+        }
+    )
+    STATE["viewer_token"] = mint_token(
+        STATE["channel"], args.viewer_uid, publisher=False
+    )
     vidu_token = mint_token(STATE["channel"], args.vidu_uid, publisher=True)
 
     print(f"频道       : {STATE['channel']}")
@@ -393,7 +455,9 @@ def main() -> int:
         try:
             with urllib.request.urlopen(req, timeout=20) as r:
                 live = json.loads(r.read())["live"]
-            print(f"\n本次 {live.get('billed_seconds')}s，{live.get('credits_cost')} credits")
+            print(
+                f"\n本次 {live.get('billed_seconds')}s，{live.get('credits_cost')} credits"
+            )
         except Exception:  # noqa: BLE001
             pass
     return 0
