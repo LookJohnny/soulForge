@@ -185,6 +185,19 @@ def inject_memory(body: bytes) -> bytes:
     # to finish a thought without turning into a monologue.
     payload.setdefault("llm", {}).update(CONFIG["llm"])
 
+    # Voice is forced here rather than left to the query string. The page has its
+    # own picker and its own default (Tina), and a voice set under voice_model
+    # outranks avatar.voice — so asking for a male voice in the URL and getting a
+    # female one back is the expected outcome, not a glitch. Both places are set.
+    if CONFIG.get("voice"):
+        avatar["voice"] = CONFIG["voice"]
+        model = payload.get("voice_model")
+        if isinstance(model, dict):
+            for branch in ("qwen", "doubao"):
+                if isinstance(model.get(branch), dict):
+                    model[branch]["voice"] = CONFIG["voice"]
+        print(f"  → 音色固定为 {CONFIG['voice']}", flush=True)
+
     facts = preamble.count("\n- ")
     print(f"  → 已注入记忆（{facts} 条）与 memory_retrieval 回调", flush=True)
     return json.dumps(payload).encode()
@@ -503,6 +516,7 @@ def main() -> int:
         }
     )
     CONFIG["query"] = query
+    CONFIG["voice"] = args.voice
     url = f"http://127.0.0.1:{args.port}/?{query}"
 
     server = DualProtocolServer((args.bind, args.port), Handler)
