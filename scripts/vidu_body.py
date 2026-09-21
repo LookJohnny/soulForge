@@ -659,9 +659,12 @@ async def run(args) -> None:
         stats = await asyncio.to_thread(
             stream_tts_pcm, line, args.voice, STATE["frames"].append
         )
-        STATE["log"].append(
-            f"  首帧 {stats['first_audio_ms']}ms · {stats['frames']} 帧"
-        )
+        # Both places: the page log is drained by /events on the next poll, so a
+        # stat that lives only there is gone by the time the session is over and
+        # you want to know how it went.
+        line_stats = f"  首帧 {stats['first_audio_ms']}ms · {stats['frames']} 帧"
+        STATE["log"].append(line_stats)
+        print(f"[语音]{line_stats}", flush=True)
 
     tasks = [body.reader(speak)]
     if STATE["live_id"]:
