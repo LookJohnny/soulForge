@@ -20,8 +20,6 @@ import asyncio
 import base64
 import json
 import os
-import socket
-import ssl
 import subprocess
 import sys
 import threading
@@ -29,7 +27,7 @@ import time
 import urllib.request
 import uuid
 from collections import deque
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
 import websockets
@@ -43,6 +41,8 @@ sys.path.insert(
         "src",
     ),
 )
+
+from lan_https import DualProtocolServer, lan_tls_context, local_ips  # noqa: E402
 
 from ai_core.services.agora_token import mint_token  # noqa: E402
 
@@ -545,98 +545,6 @@ class Handler(BaseHTTPRequestHandler):
         )
         self._json({"ok": True})
 
-
-# ── one port, either protocol ────────────────────────────────
-
-LAN_CERT = Path.home() / ".cache" / "soulforge" / "lan-cert.pem"
-LAN_KEY = Path.home() / ".cache" / "soulforge" / "lan-key.pem"
-
-
-def local_ips() -> list[str]:
-    """Every IPv4 this machine answers on.
-
-    A Mac with both ethernet and wifi sits on two subnets, and the one the
-    phone can reach is not always the one `ipconfig getifaddr en0` prints.
-    """
-    ips = {"127.0.0.1"}
-    for iface in ("en0", "en1", "en2", "en3"):
-        try:
-            out = subprocess.run(
-                ["ipconfig", "getifaddr", iface],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-        except (OSError, subprocess.SubprocessError):
-            continue
-        addr = out.stdout.strip()
-        if addr:
-            ips.add(addr)
-    return sorted(ips)
-
-
-def lan_tls_context(bind_ips: list[str]) -> ssl.SSLContext | None:
-    """A self-signed context for this machine's addresses, or None."""
-    if not (LAN_CERT.exists() and LAN_KEY.exists()):
-        sans = ",".join(f"IP:{ip}" for ip in bind_ips)
-        LAN_CERT.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            subprocess.run(
-                [
-                    "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
-                    "-days", "825", "-subj", "/CN=soulforge-lan",
-                    "-addext", f"subjectAltName={sans},DNS:localhost",
-                    "-keyout", str(LAN_KEY), "-out", str(LAN_CERT),
-                ],
-                check=True,
-                capture_output=True,
-                timeout=60,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return None
-    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    try:
-        ctx.load_cert_chain(str(LAN_CERT), str(LAN_KEY))
-    except (OSError, ssl.SSLError):
-        return None
-    return ctx
-
-
-class DualProtocolServer(ThreadingHTTPServer):
-    """Answer http and https on the same port.
-
-    Browsers decide on their own whether a bare `host:port` means http or
-    https, and a phone or laptop that picks https gets nothing back from a
-    plaintext port — no error the user can act on, just a page that will not
-    load. Peeking at the first byte costs nothing and removes the guess: 0x16
-    is a TLS handshake, anything else is a request line.
-    """
-
-    tls: ssl.SSLContext | None = None
-
-    def get_request(self):
-        sock, addr = super().get_request()
-        if self.tls is None:
-            return sock, addr
-        try:
-            sock.settimeout(10)
-            first = sock.recv(1, socket.MSG_PEEK)
-        except OSError:
-            return sock, addr
-        finally:
-            sock.settimeout(None)
-        if first == b"\x16":
-            print(f"[http] {addr[0]} 用 https 进来，已用自签证书接住", flush=True)
-            return self.tls.wrap_socket(sock, server_side=True), addr
-        return sock, addr
-
-    def handle_error(self, request, client_address):
-        # A refused certificate is the user clicking "go back", not a crash.
-        exc = sys.exception()
-        if isinstance(exc, ssl.SSLError):
-            print(f"[http] {client_address[0]} TLS 握手未完成：{exc.reason}", flush=True)
-            return
-        super().handle_error(request, client_address)
 
 
 # ── wiring ───────────────────────────────────────────────────

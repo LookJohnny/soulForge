@@ -31,7 +31,7 @@ import sys
 import urllib.parse
 import urllib.request
 import webbrowser
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
 sys.path.insert(
@@ -44,6 +44,8 @@ sys.path.insert(
     ),
 )
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from lan_https import DualProtocolServer, lan_tls_context, local_ips  # noqa: E402
 
 from ai_core.api.vidu_retrieval import MEMORY_TOOL_INSTRUCTION  # noqa: E402
 from ai_core.services.vidu_session_token import mint_session_token  # noqa: E402
@@ -503,7 +505,8 @@ def main() -> int:
     CONFIG["query"] = query
     url = f"http://127.0.0.1:{args.port}/?{query}"
 
-    server = ThreadingHTTPServer((args.bind, args.port), Handler)
+    server = DualProtocolServer((args.bind, args.port), Handler)
+    server.tls = lan_tls_context(local_ips())
     server.daemon_threads = True
 
     print()
@@ -512,21 +515,18 @@ def main() -> int:
     print("  建会话约 1 分钟。Ctrl-C 关掉这个服务器。")
     print()
     if args.bind not in {"127.0.0.1", "localhost"}:
-        # getUserMedia only exists in a secure context. A LAN address over plain
-        # http is not one, so the camera and microphone are simply absent —
-        # which looks identical to having no devices at all.
-        print(f"  另一台机器上打开：http://<本机IP>:{args.port}/go")
+        # getUserMedia only exists in a secure context, so the LAN address has to
+        # be https or the page has no microphone at all — which looks exactly
+        # like a machine with no devices. The self-signed certificate is what
+        # makes the origin secure; the warning is the price.
+        print("  另一台机器上，必须用 https，否则浏览器不给麦克风：")
         print()
-        print("  但浏览器不会给出摄像头和麦克风：http:// + 局域网 IP 不是安全")
-        print(
-            "  上下文，navigator.mediaDevices 直接不存在。在那台机器上这样启动 Chrome："
-        )
+        for ip in local_ips():
+            if ip != "127.0.0.1":
+                print(f"    https://{ip}:{args.port}/go")
         print()
-        print(
-            '    open -na "Google Chrome" --args --user-data-dir=/tmp/sf-chrome \\\n'
-            f"      --unsafely-treat-insecure-origin-as-secure=http://<本机IP>:{args.port} \\\n"
-            "      '<上面那个地址>'"
-        )
+        print("  证书是自签的，浏览器会先警告一次：高级 → 继续前往。")
+        print("  接受之后这个源就是安全上下文，麦克风正常出现。")
         print()
     if preamble:
         print("  角色开场会知道：")
