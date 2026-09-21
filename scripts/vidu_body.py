@@ -455,9 +455,35 @@ class Handler(BaseHTTPRequestHandler):
         # without any log there is no way to tell "the request never arrived"
         # from "it arrived and the response was wrong" — which is exactly the
         # question when a page loads on one machine and not another.
-        if "/events" in (self.path or ""):
+        #
+        # getattr, not self.path: on a malformed request line `path` was never
+        # assigned, and an AttributeError in here escapes through send_error and
+        # kills the connection thread before the client is told anything.
+        if "/events" in (getattr(self, "path", "") or ""):
             return
         print(f"[http] {self.client_address[0]} {fmt % args}", flush=True)
+
+    def handle_one_request(self):
+        """Name what a garbled request line actually was.
+
+        A browser that decided to speak TLS to a plaintext port produces an
+        unparseable request line and nothing else; without this the server just
+        logs a stack trace and the page looks unreachable.
+        """
+        try:
+            super().handle_one_request()
+        except ValueError:
+            raw = getattr(self, "raw_requestline", b"")[:24]
+            who = self.client_address[0]
+            if raw[:1] == b"\x16":
+                print(
+                    f"[http] {who} 发来的是 TLS 握手——浏览器在用 https 访问，"
+                    f"这个端口只说 http。请明确输入 http://",
+                    flush=True,
+                )
+            else:
+                print(f"[http] {who} 请求行无法解析：{raw!r}", flush=True)
+            self.close_connection = True
 
     def _json(self, obj, status=200):
         body = json.dumps(obj, ensure_ascii=False).encode()
