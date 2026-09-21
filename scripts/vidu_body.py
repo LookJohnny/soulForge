@@ -140,7 +140,10 @@ class RuntimeBody:
             if msg.get("type") != "action":
                 continue
             params = msg.get("params") or {}
-            line = params.get("dialogue")
+            # dialogue is a top-level field of ActionCommand; only cognitive_state
+            # and the rest of the decision ride in params. Reading it from params
+            # silently acknowledged every line and the body never spoke.
+            line = msg.get("dialogue")
             command_id = msg.get("command_id", "")
             if not line:
                 await self._observe(command_id, "accepted")
@@ -488,6 +491,9 @@ async def run(args) -> None:
         cog = params.get("cognitive_state") or {}
         rel = (cog.get("relationship") or {}).get("stage")
         STATE["log"].append(f"  情绪={cog.get('emotion')} 关系={rel}")
+        if not STATE["live_id"]:
+            STATE["log"].append("  （dry-run：跳过语音合成）")
+            return
         stats = await asyncio.to_thread(
             stream_tts_pcm, line, args.voice, STATE["frames"].append
         )
@@ -495,10 +501,10 @@ async def run(args) -> None:
             f"  首帧 {stats['first_audio_ms']}ms · {stats['frames']} 帧"
         )
 
-    await asyncio.gather(
-        body.reader(speak),
-        drive_vidu(STATE["live_id"], STATE["client_secret"]),
-    )
+    tasks = [body.reader(speak)]
+    if STATE["live_id"]:
+        tasks.append(drive_vidu(STATE["live_id"], STATE["client_secret"]))
+    await asyncio.gather(*tasks)
 
 
 def main() -> int:
@@ -524,6 +530,11 @@ def main() -> int:
     parser.add_argument("--bind", default="127.0.0.1")
     parser.add_argument("--vidu-uid", type=int, default=1001)
     parser.add_argument("--viewer-uid", type=int, default=2002)
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="只起网页与 Runtime 身体，不建 Vidu 会话（不计费，用于排查网络）",
+    )
     args = parser.parse_args()
 
     if not os.environ.get("VIDU_API_KEY"):
@@ -548,16 +559,26 @@ def main() -> int:
     )
     vidu_token = mint_token(STATE["channel"], args.vidu_uid, publisher=True)
 
-    print("创建 Vidu 会话…", flush=True)
-    result = create_session(args, vidu_token)
-    STATE["live_id"] = result["live"]["id"]
-    STATE["client_secret"] = result["client_secret"]
-    print(f"live_id    : {STATE['live_id']}", flush=True)
-
+    # Serve before creating the session: uploading the avatar takes seconds, and
+    # a browser that knocks during that window gets connection refused, which
+    # looks exactly like the server never started.
     server = ThreadingHTTPServer((args.bind, args.port), Handler)
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, daemon=True).start()
     print(f"\n  打开：http://127.0.0.1:{args.port}/\n", flush=True)
+
+    if args.dry_run:
+        # Vidu bills per second from conn_init, so anything that is not about the
+        # avatar itself — page reachability, Runtime wiring — is debugged free.
+        STATE["live_id"] = STATE["client_secret"] = ""
+        STATE["ready"] = True
+        print("dry-run：不创建 Vidu 会话，不计费", flush=True)
+    else:
+        print("创建 Vidu 会话…", flush=True)
+        result = create_session(args, vidu_token)
+        STATE["live_id"] = result["live"]["id"]
+        STATE["client_secret"] = result["client_secret"]
+        print(f"live_id    : {STATE['live_id']}", flush=True)
 
     try:
         asyncio.run(run(args))
