@@ -67,6 +67,10 @@ class Settings(BaseSettings):
     artc_app_id: str = ""
     artc_app_key: str = ""
 
+    # Agora RTC application the Vidu component edition joins.
+    agora_app_id: str = ""
+    agora_app_certificate: str = ""
+
     # ─── Auth ───────────────────────────────────
     auth_secret: str = ""  # NextAuth AUTH_SECRET (shared with admin-web)
     service_token: str = ""  # Internal service-to-service token (gateway → ai-core)
