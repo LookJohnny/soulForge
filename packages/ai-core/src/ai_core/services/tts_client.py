@@ -9,6 +9,7 @@ from typing import Any
 import structlog
 
 from ai_core.services import provider_health as observed
+from ai_core.services.tts.dashscope_tts import is_preset_voice as is_dashscope_preset
 from ai_core.services.tts.registry import create_tts_provider
 
 logger = structlog.get_logger()
@@ -100,13 +101,21 @@ class TTSClient:
                 self._fish = create_tts_provider(provider="fish")
 
     def _route(self, voice: str | None):
-        """Pick (primary, fallback) for this request by voice style.
+        """Pick (primary, fallback) for this request by who owns the voice id.
 
-        Edge voices end with "Neural"; anything else (fish preset nicknames,
-        32-hex clone ids) requires the fish provider — that is where voice
-        cloning lives, so switching the global provider must never lose it.
+        Edge voices end with "Neural". CosyVoice presets belong to DashScope.
+        What is left — fish preset nicknames, 32-hex clone ids — is Fish's, and
+        that is where voice cloning lives, so switching the global provider must
+        never lose it.
+
+        The rule used to be "anything that is not Neural is Fish's", which sent
+        every CosyVoice request to Fish no matter what TTS_PROVIDER said.
         """
-        if voice and not voice.endswith("Neural") and self._fish is not None:
+        if not voice:
+            return self._provider, self._fallback
+        if voice.endswith("Neural") or is_dashscope_preset(voice):
+            return self._provider, self._fallback
+        if self._fish is not None:
             edge = self._provider if self._provider.name == "edge" else self._fallback
             return self._fish, edge
         return self._provider, self._fallback

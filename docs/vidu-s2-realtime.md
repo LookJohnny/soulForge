@@ -380,3 +380,34 @@ open -na "Google Chrome" --args --user-data-dir=/tmp/sf-chrome \
 **任何拿到地址的人都能用你的 API key 建会话**，只适合极短时间的验证。
 
 `--bind 0.0.0.0` 默认关闭，要显式开。同一局域网、同一 Wi-Fi 是前提。
+
+## 两条并存的路线
+
+同一个 Vidu S2，有两种接法，仓库里都保留。它们的差别不是参数，是**谁在思考**。
+
+| | 实时版 `scripts/vidu_web.py` | 组件版 `scripts/vidu_component.py` |
+| --- | --- | --- |
+| Vidu 端点 | `/live/s_avatar/realtime` | `/live/s_avatar/component` |
+| ASR / LLM / TTS | **Vidu 全包**（`qwen_omni`） | **SoulForge 自己的** |
+| 人格 | 压成一段 persona 字符串 | 统一认知的人格投影 |
+| 记忆 | 只能通过检索回调塞进去，读不写 | 走统一认知，可读可写 |
+| 情绪 / 关系 / 主动性 | 用不上 | 统一认知与 Runtime 的能力 |
+| RTC 频道 | Vidu 自己开 | **我们提供**（Agora） |
+| 音频上行 | 不需要（Vidu 自己合成） | 我们推 PCM 24kHz 单声道 s16le |
+| 计费 | 按连接时长 | **1 credit / 秒**，约 112 元/小时 |
+| 起步成本 | 拿来就跑 | 需要 RTC 账号 |
+
+**实时版的用途是演示。** 它能立刻跑起来、画面和语音都通，适合给人看"长什么样"。
+但它的角色性格只是一段 prompt，说过的话不会被记住——不是产品。
+
+**组件版是产品方向。** Vidu 退回它真正擅长的事：让一张脸对着一段音频说话。
+思考、记忆、情绪、关系全部留在 SoulForge。
+
+两者共用的部分：Agora token 签发（`ai_core.services.agora_token`）、
+形象图片的 data URI 内联、记忆预热的边界函数 `safe_memories()`。
+
+### 组件版的已知问题
+
+TTS 合成整段才推流：实测一句 6.8 秒的话要等 **16.7 秒**才开始说。
+对陪伴产品这个延迟不可接受，要改成流式合成、边合成边推帧。
+链路本身是通的，但现在这个形态只能用于验证。
