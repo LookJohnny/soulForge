@@ -47,6 +47,24 @@ from ai_core.services.agora_token import mint_token  # noqa: E402
 VIDU_HOST = "https://api.vidu.com"
 VIDU_WS = "wss://api.vidu.com"
 AGORA_SDK = "https://download.agora.io/sdk/release/AgoraRTC_N-4.23.0.js"
+SDK_CACHE = Path.home() / ".cache" / "soulforge" / Path(AGORA_SDK).name
+
+
+def load_sdk() -> bytes:
+    """Serve the RTC SDK ourselves; the page must not need the open internet.
+
+    A phone or laptop on the same wifi may have no working route to
+    download.agora.io. A blocking <script> to a host it cannot reach leaves the
+    browser on a white page with no error — indistinguishable from the server
+    being down, which is how an afternoon gets spent on the wrong problem.
+    """
+    if SDK_CACHE.exists() and SDK_CACHE.stat().st_size > 100_000:
+        return SDK_CACHE.read_bytes()
+    with urllib.request.urlopen(AGORA_SDK, timeout=120) as resp:
+        data = resp.read()
+    SDK_CACHE.parent.mkdir(parents=True, exist_ok=True)
+    SDK_CACHE.write_bytes(data)
+    return data
 
 SAMPLE_RATE = 24000
 FRAME_MS = 20
@@ -359,7 +377,7 @@ async def drive_vidu(live_id: str, secret: str) -> None:
 
 PAGE = """<!doctype html>
 <meta charset="utf-8"><title>SoulForge 身体 × Vidu</title>
-<script src="__SDK__"></script>
+<script src="/agora.js" defer></script>
 <style>
  body{margin:0;font:14px -apple-system,system-ui,sans-serif;background:#0f1115;color:#e6e6e6}
  .wrap{max-width:760px;margin:0 auto;padding:24px}
@@ -416,7 +434,15 @@ document.getElementById('send').onclick = async () => {
 document.getElementById('text').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('send').click();
 });
-start().catch(e => log('启动失败：' + e.message));
+// The SDK is deferred so the page paints first: a failure here must show up as
+// a line in the log, never as a white screen.
+window.addEventListener('DOMContentLoaded', () => {
+  if (typeof AgoraRTC === 'undefined') {
+    log('RTC SDK 没加载出来，页面已经打开但看不到人。刷新试试。');
+    return;
+  }
+  start().catch(e => log('启动失败：' + e.message));
+});
 </script>
 """
 
@@ -424,8 +450,14 @@ start().catch(e => log('启动失败：' + e.message));
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
-    def log_message(self, *a):
-        pass
+    def log_message(self, fmt, *args):
+        # /events polls once a second, so the default access log is noise. But
+        # without any log there is no way to tell "the request never arrived"
+        # from "it arrived and the response was wrong" — which is exactly the
+        # question when a page loads on one machine and not another.
+        if "/events" in (self.path or ""):
+            return
+        print(f"[http] {self.client_address[0]} {fmt % args}", flush=True)
 
     def _json(self, obj, status=200):
         body = json.dumps(obj, ensure_ascii=False).encode()
@@ -450,7 +482,16 @@ class Handler(BaseHTTPRequestHandler):
             lines, STATE["log"] = STATE["log"], []
             self._json({"lines": lines})
             return
-        body = PAGE.replace("__SDK__", AGORA_SDK).encode()
+        if self.path.startswith("/agora.js"):
+            sdk = STATE["sdk"]
+            self.send_response(200)
+            self.send_header("Content-Type", "application/javascript")
+            self.send_header("Content-Length", str(len(sdk)))
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(sdk)
+            return
+        body = PAGE.encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -558,6 +599,9 @@ def main() -> int:
         STATE["channel"], args.viewer_uid, publisher=False
     )
     vidu_token = mint_token(STATE["channel"], args.vidu_uid, publisher=True)
+
+    STATE["sdk"] = load_sdk()
+    print(f"RTC SDK 本地就绪（{len(STATE['sdk']) // 1024} KB）", flush=True)
 
     # Serve before creating the session: uploading the avatar takes seconds, and
     # a browser that knocks during that window gets connection refused, which
