@@ -108,20 +108,55 @@ the same ~120-line loop.
 | Gateway | Fixed: receipt double-confirmation; sentences over the TTS limit are split; non-numeric latency stages no longer crash a turn; text-only clients are no longer idle-closed while chatting; no vision capture on the Runtime path, which ignores images; the ASR session no longer leaks on a repeated `listen start`. |
 | Tests | `test_relationship` used a fixed date against wall-clock decay; it has failed since late August. |
 
+## Prompt layout: a static head, so the prefill is reused
+
+A local model spent about 3 s on every turn just reading a ~2.2k-token prompt.
+The order is now chosen so most of it is identical from turn to turn, and Nous
+Tone reuses the cached KV of a matching prompt head:
+
+1. **System prompt.** It holds the character, style, rules, contract and schema,
+   and is byte-identical across turns. `PromptBuilder.build(defer_dynamic=True)`
+   leaves the per-turn sections out of it.
+2. **History.** It is trimmed in blocks (16, then the last 8), not as a sliding
+   window, so most turns only append to it.
+3. **Last message.** It carries the moment, mood, relationship numbers,
+   memories and retrieved knowledge (`templates/now_block.jinja2`), then the
+   current PAD, then the observation JSON. On a user turn, the user's words come
+   last as an escaped JSON string, so they can't close their quote and pose as
+   instructions.
+
+The system prompt is identical across comparable turns: same character, same
+kind of turn and same contract inputs. Three things still change it:
+- the relationship stage (rare; each change invalidates the cache once);
+- user versus autonomous turns, which get different contract text, so each kind
+  keeps its own cached prefix (Nous Tone holds several);
+- on autonomous turns, the current activity named in the silent-turn example.
+
+Keep per-turn content out of the system prompt. Anything that changes per turn
+and is placed early breaks the prefix for everything after it.
+
+## History must not teach parroting
+
+A small model imitates its own past replies. One reply that only echoed the user
+entered the history, and from then on most replies were echoes. A line that only
+repeats the user (`echoes()`) is still spoken, but it is never written to history.
+
 ## Measured (local Qwen3-1.7B, real stack)
 
 | | Before | After |
 |---|---|---|
 | User request waiting behind ambient generation | 4–8 s, sometimes a timeout | 0–1 s (preempted) |
 | Gap between sentences (Fish unreachable) | ~12 s | ~2 s |
-| First audio after the user's message | 22–27 s | ~6–9 s |
+| First audio after the user's message | 22–27 s | ~6–9 s; ~4–5 s with prefix reuse (from the 2nd turn) |
+| Prompt tokens prefilled per turn | ~2.2k | ~0.7–0.9k (1.3–1.5k reused) |
 | Decision output | 110–160 tokens | 85–105 tokens |
 
 Remaining costs:
-- Prompt prefill: about 3 s for about 2.2k prompt tokens.
+- Prompt prefill: now about 1 s; only the changed part is read.
 - Decode: the first line completes after about 2–3 s.
 - TTS.
 
-With 1.7B, reply quality is the limit: it often echoes the user's question. 4B
-is clearly better, but it needs more memory than this Mac can spare next to the
-stack.
+With 1.7B, reply quality is the limit. The habit of echoing the user's question
+came mostly from echoed replies left in history; that is now prevented (see
+above). 4B is still clearly better, but it needs more memory than this Mac can
+spare next to the stack.

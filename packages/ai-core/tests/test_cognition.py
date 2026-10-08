@@ -208,7 +208,10 @@ async def test_declaration_persists_before_return_and_survives_body_session_chan
         identity={**IDENTITY, "body_id": "unity", "session_id": "second-session"},
     )
     call = stack.llm.chat.await_args.kwargs
-    assert "小乔" in call["system_prompt"] and "抹茶拿铁" in call["system_prompt"]
+    # memories are per-turn content: they reach the model in the last message,
+    # after the history, so the system prompt stays a cacheable static head
+    assert "小乔" in call["user_input"] and "抹茶拿铁" in call["user_input"]
+    assert "抹茶拿铁" not in call["system_prompt"]
     assert call["history"][0]["content"] == "我叫小乔。我喜欢抹茶拿铁。"
     assert stack.llm.chat.await_count == 2
     assert stack.memory.events[-1]["context"]["body_id"] == "unity"
@@ -220,7 +223,7 @@ async def test_other_user_has_no_shared_memories_or_history(stack):
     await run(stack, "我叫小乔")
     await run(stack, "你好", identity={**IDENTITY, "user_id": "another-user"})
     call = stack.llm.chat.await_args.kwargs
-    assert "小乔" not in call["system_prompt"] and call["history"] == []
+    assert "小乔" not in call["system_prompt"] + call["user_input"] and call["history"] == []
 
 
 @pytest.mark.asyncio
