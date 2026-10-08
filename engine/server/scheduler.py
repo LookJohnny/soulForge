@@ -101,6 +101,9 @@ class DecisionScheduler:
         self.on_done = on_done
         self.log = log
         self.on_speech = on_speech  # deliver lines spoken before a decision completes
+        self._speech_tasks: set[asyncio.Task] = (
+            set()
+        )  # strong refs: the loop keeps only weak ones
         self.gate = PriorityGate(max_concurrent)
         self.max_queued = max_queued
         self.lanes: dict[str, Lane] = {}
@@ -193,7 +196,9 @@ class DecisionScheduler:
         def speak(line):
             self.runtime.speak_early(turn, line, self.minute())
             if self.on_speech is not None:
-                loop.create_task(self.on_speech())
+                task = loop.create_task(self.on_speech())
+                self._speech_tasks.add(task)
+                task.add_done_callback(self._speech_tasks.discard)
 
         return lambda line: loop.call_soon_threadsafe(speak, line)
 

@@ -183,3 +183,24 @@ async def test_only_optional_musings_are_preemptible_and_preemption_is_a_409(mon
             json={"identity": IDENTITY, "event": {"kind": "agent_state", "text": "Luna来了"}},
         )
     assert response.status_code == 409 and response.json()["detail"]["code"] == "preempted"
+
+
+@pytest.mark.asyncio
+async def test_unspoken_lines_do_not_cost_a_streamed_decision_its_plan(stack):
+    streaming_llm(stack, DIALOGUE_FIRST.replace('"body_actions": []', '"body_actions": ["wave"], "pad": {"p": 0.6, "a": 0.1, "d": 0.0}'))
+
+    async def on_line(line):
+        pass
+
+    result = await run(stack, "你好", on_line=on_line, available_actions=["wave"])
+    d = result["decision"]
+    # kai's line was refused by the stream; the rest of the decision stays intact
+    assert d["reason"] == "陪伴" and d["body_actions"] == ["wave"] and d["plan_delta"] == "micro"
+    assert result["authoritative_state"]["pad"]["p"] > 0
+
+
+def test_logged_reasons_keep_the_rule_and_drop_model_text():
+    from ai_core.services.cognition import safe_reason
+
+    assert safe_reason(ValueError("invalid dialogue text: '你的密码是123'")) == "invalid dialogue text"
+    assert safe_reason(KeyError("impact")) == "missing field impact"

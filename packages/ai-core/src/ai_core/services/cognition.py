@@ -177,6 +177,13 @@ def _parse_decision(raw: str, agent_id: str, current_template: str, actions: lis
         raise CognitionUnavailable("model returned an invalid behavior decision") from exc
 
 
+def safe_reason(cause: BaseException | None) -> str:
+    """The broken contract rule, without any model text (which may echo the user)."""
+    if isinstance(cause, KeyError):
+        return f"missing field {cause.args[0]!s}"[:80]
+    return str(cause).split(":", 1)[0].split("'", 1)[0].strip()[:80]
+
+
 _MAX_LINES = 3
 _MAX_LINE_CHARS = 500
 
@@ -437,6 +444,17 @@ class CognitionService:
             raw = await self._stream_decision(
                 llm_args, agent_id, text if is_user_turn else "", is_user_turn, streamed, on_line
             )
+        if on_line is not None:
+            # Validate what was spoken, not lines the stream already refused
+            # (another agent's, beyond the third): those must not cost the turn
+            # its valid plan, PAD and body actions.
+            try:
+                data = json.loads(raw.strip().removeprefix("```json").removesuffix("```"))
+                if isinstance(data, dict):
+                    data["dialogue"] = streamed
+                    raw = json.dumps(data, ensure_ascii=False)
+            except ValueError:
+                pass  # invalid JSON: handled by the parser / lenient path below
         try:
             decision, explicit_pad, changes = _parse_decision(
                 raw, agent_id, current_template, actions
@@ -446,7 +464,7 @@ class CognitionService:
                 raise
             logger.warning(
                 "cognition.lenient_after_stream",
-                reason=str(exc.__cause__)[:160],
+                reason=safe_reason(exc.__cause__),
                 lines=len(streamed),
             )
             decision, explicit_pad, changes = _lenient_decision([], current_template), None, None

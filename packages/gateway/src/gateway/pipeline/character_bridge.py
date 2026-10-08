@@ -281,13 +281,19 @@ class CharacterBridge:
                     )
                 )
                 while True:
-                    budget = deadline - loop.time()
-                    if budget <= 0:
-                        break
+                    # Lines already queued are always consumed: the deadline
+                    # bounds the Runtime's silence, not how long the consumer
+                    # spent speaking earlier lines while this generator waited.
                     try:
-                        data = await asyncio.wait_for(inbox.get(), timeout=budget)
-                    except asyncio.TimeoutError:
-                        break
+                        data = inbox.get_nowait()
+                    except asyncio.QueueEmpty:
+                        budget = deadline - loop.time()
+                        if budget <= 0:
+                            break
+                        try:
+                            data = await asyncio.wait_for(inbox.get(), timeout=budget)
+                        except asyncio.TimeoutError:
+                            break
                     if data.get("type") == "decision_complete":
                         if data.get("error") and not spoke:
                             raise RuntimeError("runtime decision failed: " + str(data["error"]))
@@ -302,6 +308,7 @@ class CharacterBridge:
                         break
                     spoke = True
                     yield "command", data
+                    deadline = loop.time() + self.timeout_s  # the Runtime is still talking
             finally:
                 self._waiters.pop(event_id, None)
                 if not completed:

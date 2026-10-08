@@ -29,6 +29,7 @@ from ai_core.services.cognition import (
     CognitionPreempted,
     CognitionService,
     CognitionUnavailable,
+    safe_reason,
 )
 
 router = APIRouter(prefix="/cognition", tags=["cognition"])
@@ -144,7 +145,7 @@ def _http_error(exc: Exception) -> HTTPException:
         logger.warning(
             "cognition.invalid_decision",
             error_type=type(exc.__cause__).__name__,
-            reason=str(exc.__cause__)[:160],
+            reason=safe_reason(exc.__cause__),
         )
         return HTTPException(
             status_code=503,

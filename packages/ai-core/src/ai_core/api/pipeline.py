@@ -257,7 +257,8 @@ async def chat(req: ChatRequest, request: Request):
     ai_raw = await llm.chat(
         system_prompt=prompt_result["system_prompt"],
         user_input=user_text,
-        priority=1,  # a user is waiting on this reply
+        # a user is waiting on this reply; an idle musing is background work
+        priority=0 if req.idle_mode else 1,
     )
     sw.mark("llm")
 

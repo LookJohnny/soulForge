@@ -198,3 +198,37 @@ async def test_orchestrator_speaks_the_first_line_before_the_second_exists(monke
     assert [c.kind for c in rest] == ["sentence", "emotion", "done"]
     assert rest[-1].full_text == "第一句。第二句。"
     assert {first.playback_receipt, rest[0].playback_receipt} == set(orch._pending_playback)
+
+
+@pytest.mark.asyncio
+async def test_lines_queued_while_the_consumer_was_speaking_are_not_dropped_at_the_deadline():
+    """The deadline bounds the Runtime's silence, not how long earlier lines took to play."""
+    bridge = CharacterBridge(url="ws://x", agent_id="joi", body_id="voice-1", timeout_s=0.3)
+
+    class Sock:
+        async def send(self, raw):
+            pass
+
+    async def connected():
+        return Sock()
+
+    bridge._ensure_connected = connected
+
+    async def runtime():
+        while not bridge._waiters:
+            await asyncio.sleep(0.005)
+        inbox = next(iter(bridge._waiters.values()))
+        await inbox.put({"type": "action", "dialogue": "第一句。", "command_id": "a"})
+        await inbox.put({"type": "action", "dialogue": "第二句。", "command_id": "b"})
+        await inbox.put({"type": "decision_complete"})
+
+    producer = asyncio.create_task(runtime())
+    got = []
+    async for kind, data in bridge.stream_utterance("你好"):
+        got.append(kind)
+        if data.get("command_id") == "a":
+            await asyncio.sleep(0.6)  # playing line 1 takes longer than timeout_s
+    await producer
+    # before: line 2 and the completion, queued on time, were dropped at the deadline
+    assert got == ["command", "command", "complete"]
+    assert not bridge._expired

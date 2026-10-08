@@ -36,7 +36,9 @@ only a conversation label, never authority to access another end user's memory.
 
 To run the chat brain on a local open model (Nous Tone) with per-sentence avatar
 expressions, see [local-model-expression.md](local-model-expression.md): the
-launcher then also starts the model server and widens these limits.
+launcher then also starts the model server and widens these limits. The wider
+local-model timeouts are defaults only: a limit already set in root `.env` (for
+example `CHARACTER_RUNTIME_TIMEOUT_S=35`) wins, so raise it there.
 
 The response time limits are nested: gateway waits up to 35 seconds for Runtime
 (`CHARACTER_RUNTIME_TIMEOUT_S`), Runtime allows 30 seconds for a decision
