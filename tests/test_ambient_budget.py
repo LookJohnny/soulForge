@@ -53,13 +53,21 @@ def test_budget_is_per_agent_and_never_limits_user_or_conversation_turns(monkeyp
     clock = [1000.0]
     monkeypatch.setattr(runtime_module.time, "monotonic", lambda: clock[0])
     llm = CountingLLM()
-    rt = CompanionRuntime(personas(), WorldState(sim_minute=900), llm=llm, ambient_min_interval_s=60)
+    rt = CompanionRuntime(
+        personas(), WorldState(sim_minute=900), llm=llm, ambient_min_interval_s=60
+    )
     rt.tick(900)
     llm.kinds.clear()
     rt.handle_event_now(arrival("kai"), 900)  # kai notices: decided
     rt.handle_event_now(arrival("kai"), 900)  # kai again inside his window: dropped
     rt.handle_event_now(arrival("pipo"), 900)  # pipo has her own budget: decided
-    user = Event(t_min=900, kind=EventKind.USER_UTTERANCE, source="user", text="你好", target_agent="kai")
+    user = Event(
+        t_min=900,
+        kind=EventKind.USER_UTTERANCE,
+        source="user",
+        text="你好",
+        target_agent="kai",
+    )
     rt.handle_event_now(user, 900)  # a user's turn is never budgeted
     rt.handle_event_now(user, 900)
     # a conversation opens with an AGENT_STATE event: it must never be budgeted away,
@@ -76,7 +84,11 @@ def test_budget_is_per_agent_and_never_limits_user_or_conversation_turns(monkeyp
         EventKind.AGENT_STATE,
         EventKind.AGENT_STATE,
     ]
-    dropped = [t for t in rt.trace if t.kind == "event_dropped" and t.detail.get("reason") == "ambient budget"]
+    dropped = [
+        t
+        for t in rt.trace
+        if t.kind == "event_dropped" and t.detail.get("reason") == "ambient budget"
+    ]
     assert [t.agent_id for t in dropped] == ["kai"]
     assert conv is not None and not conv.ended
 
@@ -85,12 +97,35 @@ def test_event_classes():
     from soulforge_harness.runtime.runtime import event_class
 
     assert event_class(arrival("kai")) == "droppable"
-    assert event_class(Event(t_min=0, kind=EventKind.USER_UTTERANCE, source="user", text="x")) == "user"
-    sensed = Event(t_min=0, kind=EventKind.PERSON_DETECTED, source="cam", text="", payload={"reply_body_id": "b"})
+    assert (
+        event_class(
+            Event(t_min=0, kind=EventKind.USER_UTTERANCE, source="user", text="x")
+        )
+        == "user"
+    )
+    sensed = Event(
+        t_min=0,
+        kind=EventKind.PERSON_DETECTED,
+        source="cam",
+        text="",
+        payload={"reply_body_id": "b"},
+    )
     assert event_class(sensed) == "user"  # a body is waiting on it
-    proactive = Event(t_min=0, kind=EventKind.USER_PRESENCE, source="user", text="", payload={"proactive": "loneliness"})
+    proactive = Event(
+        t_min=0,
+        kind=EventKind.USER_PRESENCE,
+        source="user",
+        text="",
+        payload={"proactive": "loneliness"},
+    )
     assert event_class(proactive) == "droppable"
-    opener = Event(t_min=0, kind=EventKind.AGENT_STATE, source="luna", text="", payload={"conversation": {"id": "c"}})
+    opener = Event(
+        t_min=0,
+        kind=EventKind.AGENT_STATE,
+        source="luna",
+        text="",
+        payload={"conversation": {"id": "c"}},
+    )
     assert event_class(opener) == "ambient"
 
 
@@ -120,7 +155,13 @@ def test_failed_optional_musings_are_quiet_but_user_turns_still_get_a_reply():
     try:
         quiet = safe.decide(arrival("kai"), persona, world, "idle", True)
         assert quiet.dialogue == [] and quiet.provider_status["status"] == "degraded"
-        user = Event(t_min=900, kind=EventKind.USER_UTTERANCE, source="user", text="你好", target_agent="kai")
+        user = Event(
+            t_min=900,
+            kind=EventKind.USER_UTTERANCE,
+            source="user",
+            text="你好",
+            target_agent="kai",
+        )
         reply = safe.decide(user, persona, world, "idle", True)
         assert reply.dialogue  # someone is waiting: the deterministic fallback answers
     finally:

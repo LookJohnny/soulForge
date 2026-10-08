@@ -13,8 +13,12 @@ from soulforge_harness.runtime.models import Event, EventKind
 
 def personas():
     return [
-        Persona("luna", "Luna", "creative_care", relationships={"user": 0.8, "kai": 0.7}),
-        Persona("kai", "Kai", "steady_caretaker", relationships={"user": 0.75, "luna": 0.7}),
+        Persona(
+            "luna", "Luna", "creative_care", relationships={"user": 0.8, "kai": 0.7}
+        ),
+        Persona(
+            "kai", "Kai", "steady_caretaker", relationships={"user": 0.75, "luna": 0.7}
+        ),
     ]
 
 
@@ -40,11 +44,23 @@ class SleepyLLM(MockBehaviorLLM):
 
 
 def arrival(to):
-    return Event(t_min=900, kind=EventKind.AGENT_STATE, source="luna", text="Luna来了客厅", target_agent=to)
+    return Event(
+        t_min=900,
+        kind=EventKind.AGENT_STATE,
+        source="luna",
+        text="Luna来了客厅",
+        target_agent=to,
+    )
 
 
 def utterance(to, text="你好"):
-    return Event(t_min=900, kind=EventKind.USER_UTTERANCE, source="user", text=text, target_agent=to)
+    return Event(
+        t_min=900,
+        kind=EventKind.USER_UTTERANCE,
+        source="user",
+        text=text,
+        target_agent=to,
+    )
 
 
 async def make(llm, **kw):
@@ -56,7 +72,11 @@ async def make(llm, **kw):
         done.append((event.kind.value, event.target_agent, error, time.monotonic()))
 
     sched = DecisionScheduler(
-        rt, minute=lambda: 900.0, on_done=on_done, log=lambda a, k, d: rt.log(900, a, k, d), **kw
+        rt,
+        minute=lambda: 900.0,
+        on_done=on_done,
+        log=lambda a, k, d: rt.log(900, a, k, d),
+        **kw,
     )
     return rt, sched, done
 
@@ -81,7 +101,9 @@ async def test_user_turn_is_not_blocked_by_an_in_flight_ambient_decision():
     assert user_done[3] - t0 < 0.5, "the user turn waited for the ambient decision"
     # the arrival notice was preempted: its result never reached the plan
     assert any(
-        t.kind == "event_dropped" and t.detail.get("reason") == "preempted by a user turn" for t in rt.trace
+        t.kind == "event_dropped"
+        and t.detail.get("reason") == "preempted by a user turn"
+        for t in rt.trace
     )
     assert [t.agent_id for t in rt.trace if t.kind == "decision"] == ["kai"]
     await sched.stop()
@@ -110,7 +132,9 @@ async def test_agents_decide_concurrently_but_ambient_never_takes_the_last_slot(
     sched.submit(arrival("kai"))
     sched.submit(arrival("luna"))  # second ambient must wait: one slot is reserved
     await asyncio.sleep(0.05)
-    sched.submit(utterance("luna"))  # preempts luna's queued arrival, takes the reserved slot
+    sched.submit(
+        utterance("luna")
+    )  # preempts luna's queued arrival, takes the reserved slot
     await settle(sched, done, 3)
     assert llm.peak == 2
     user_done = next(d for d in done if d[0] == "user_utterance")
@@ -144,7 +168,9 @@ async def test_backpressure_sheds_and_logs_instead_of_raising():
     rt, sched, done = await make(SleepyLLM(slow=0.3), max_queued=2)
     accepted = [sched.submit(arrival("kai")) for _ in range(4)]
     assert accepted.count(False) >= 1
-    assert any(t.detail.get("reason") == "event queue full (backpressure)" for t in rt.trace)
+    assert any(
+        t.detail.get("reason") == "event queue full (backpressure)" for t in rt.trace
+    )
     await sched.stop()
 
 
@@ -160,8 +186,12 @@ async def test_priority_gate():
 
     low1 = asyncio.create_task(use("low1", False, 0.2))
     await asyncio.sleep(0.01)
-    low2 = asyncio.create_task(use("low2", False, 0.01))  # blocked: the last slot is reserved
-    high = asyncio.create_task(use("high", True, 0.01))  # takes the reserved slot at once
+    low2 = asyncio.create_task(
+        use("low2", False, 0.01)
+    )  # blocked: the last slot is reserved
+    high = asyncio.create_task(
+        use("high", True, 0.01)
+    )  # takes the reserved slot at once
     await asyncio.sleep(0.05)
     assert order == ["low1", "high"]
     await asyncio.gather(low1, low2, high)

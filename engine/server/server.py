@@ -100,7 +100,10 @@ class SoulForgeRuntimeServer:
         # pool with a hard timeout and a deterministic fallback
         from engine.planner.llm_interface import SafeDecisionLLM, build_llm
 
-        if not isinstance(max_concurrent_decisions, int) or max_concurrent_decisions < 1:
+        if (
+            not isinstance(max_concurrent_decisions, int)
+            or max_concurrent_decisions < 1
+        ):
             raise ValueError("max_concurrent_decisions must be an int >= 1")
         self.max_concurrent_decisions = max_concurrent_decisions
         self.llm = SafeDecisionLLM(
@@ -161,7 +164,9 @@ class SoulForgeRuntimeServer:
         for event in due:
             with contextlib.suppress(ValueError):
                 self.runtime.event_queue.remove(event)
-            self.scheduler.submit(event)  # sheds (and logs) under backpressure, never raises
+            self.scheduler.submit(
+                event
+            )  # sheds (and logs) under backpressure, never raises
 
     async def _tick_loop(self) -> None:
         """Drift-corrected: next tick is scheduled on the absolute clock, so a
@@ -449,7 +454,9 @@ class SoulForgeRuntimeServer:
             self.runtime,
             minute=lambda: self.sim_minute,
             on_done=self._event_done,
-            log=lambda agent, kind, detail: self.runtime.log(self.sim_minute, agent, kind, detail),
+            log=lambda agent, kind, detail: self.runtime.log(
+                self.sim_minute, agent, kind, detail
+            ),
             max_concurrent=self.max_concurrent_decisions,
             on_speech=self._flush_pending,
         )
@@ -461,7 +468,12 @@ class SoulForgeRuntimeServer:
             await self._broadcast_new_trace()
         except Exception as exc:
             error = error or type(exc).__name__
-            self.runtime.log(self.sim_minute, event.target_agent or "*", "event_error", {"error": error})
+            self.runtime.log(
+                self.sim_minute,
+                event.target_agent or "*",
+                "event_error",
+                {"error": error},
+            )
         await self._complete_event(event, error=error)
 
     async def _complete_event(self, event, error: str = "") -> None:

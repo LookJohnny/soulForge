@@ -362,7 +362,9 @@ class WebSocketServer:
                         session._silence_task = None
                     audio = self.audio_handler.stop_listening(session)
                     if audio:
-                        self._spawn_turn(session, self._process_and_respond(ws, adapter, session, audio))
+                        self._spawn_turn(
+                            session, self._process_and_respond(ws, adapter, session, audio)
+                        )
 
             elif action == "event_choice":
                 await self._handle_event_choice(
@@ -784,7 +786,9 @@ class WebSocketServer:
                 stages[f"core_{k}"] = v
         # numbers only: a stage may carry a marker such as {"asr_only": "no_transcript"}
         stages = {
-            k: v for k, v in stages.items() if isinstance(v, int | float) and not isinstance(v, bool)
+            k: v
+            for k, v in stages.items()
+            if isinstance(v, int | float) and not isinstance(v, bool)
         }
         session._asr_finalize_ms = None
         latency_tracker.record_turn(route, stages)
@@ -857,9 +861,12 @@ class WebSocketServer:
             if result and result.get("text"):
                 # Touch triggered a verbal response (no "start": touch replies
                 # never began a thinking indicator on the device)
-                async with speech_lock(session), PlaybackChannel(
-                    ws, adapter, session, pace=False, check_interrupt=False, claim=False
-                ) as pb:
+                async with (
+                    speech_lock(session),
+                    PlaybackChannel(
+                        ws, adapter, session, pace=False, check_interrupt=False, claim=False
+                    ) as pb,
+                ):
                     await pb.send_sentence(result["text"])
                     if result.get("audio_data"):
                         await pb.send_clip(result["audio_data"], sentence_start=False)

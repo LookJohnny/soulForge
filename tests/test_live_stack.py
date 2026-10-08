@@ -420,7 +420,9 @@ def test_local_model_widens_timeouts_unless_configured(tmp_path):
     env = configured(tmp_path, LLM_PROVIDER="nous_tone")
     # the fixture pins RUNTIME_LLM_TIMEOUT; the others take the local-model budget
     assert env["LLM_TIMEOUT"] == env["SOULFORGE_COGNITION_TIMEOUT_S"] == "120"
-    assert float(env["CHARACTER_RUNTIME_TIMEOUT_S"]) > float(env["SOULFORGE_COGNITION_TIMEOUT_S"])
+    assert float(env["CHARACTER_RUNTIME_TIMEOUT_S"]) > float(
+        env["SOULFORGE_COGNITION_TIMEOUT_S"]
+    )
     assert env["RUNTIME_LLM_TIMEOUT"] == "30"
     assert "LLM_TIMEOUT" not in configured(tmp_path, LLM_PROVIDER="openai")
 
@@ -470,9 +472,16 @@ def test_tone_child_gets_its_repo_on_pythonpath(tmp_path, monkeypatch):
 def test_local_model_budgets_ambient_runtime_decisions(tmp_path):
     env = configured(tmp_path, **_tone_tree(tmp_path))
     assert env["RUNTIME_AMBIENT_MIN_INTERVAL_S"] == "60"
-    runtime = dict(live_stack.service_commands(env, live_stack.validate(env), "/python"))["runtime"]
+    runtime = dict(
+        live_stack.service_commands(env, live_stack.validate(env), "/python")
+    )["runtime"]
     assert runtime[runtime.index("--ambient-min-interval") + 1] == "60"
     hosted = configured(tmp_path)
-    assert "--ambient-min-interval" not in dict(live_stack.service_commands(hosted, live_stack.validate(hosted), "/python"))["runtime"]
+    assert (
+        "--ambient-min-interval"
+        not in dict(
+            live_stack.service_commands(hosted, live_stack.validate(hosted), "/python")
+        )["runtime"]
+    )
     with pytest.raises(ValueError):
         live_stack.validate(configured(tmp_path, RUNTIME_AMBIENT_MIN_INTERVAL_S="soon"))

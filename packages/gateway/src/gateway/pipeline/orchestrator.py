@@ -237,7 +237,11 @@ class PipelineOrchestrator:
         try:
             async for kind, data, bridge in self._runtime_stream(session, text):
                 params = data.get("params") or {}
-                state = data.get("cognitive_state") if kind == "complete" else params.get("cognitive_state")
+                state = (
+                    data.get("cognitive_state")
+                    if kind == "complete"
+                    else params.get("cognitive_state")
+                )
                 if state and not mood_sent:
                     mood_sent = True
                     yield StreamChunk(
@@ -733,7 +737,13 @@ class PipelineOrchestrator:
         if not clean:
             return None
         readout = pick.get("readout") if isinstance(pick.get("readout"), dict) else {}
-        cue = {"weights": clean, "readout": readout, "source": source, "index": index, "text": sentence}
+        cue = {
+            "weights": clean,
+            "readout": readout,
+            "source": source,
+            "index": index,
+            "text": sentence,
+        }
         # The line's own declared emotion: what the face shows for the part of
         # a sentence the readout cannot attribute to any tone (its neutral share).
         declared = (command.get("params") or {}).get("emotion")

@@ -53,7 +53,9 @@ class TurnResult:
     frames: int = 0
 
 
-async def render_turn(server, ws, adapter, session, chunks: AsyncIterator, style: TurnStyle) -> TurnResult:
+async def render_turn(
+    server, ws, adapter, session, chunks: AsyncIterator, style: TurnStyle
+) -> TurnResult:
     """Play one turn's chunks on the device, then settle receipts and history."""
     from gateway.handlers.audio_codec import StreamingMp3OpusEncoder
 
@@ -171,14 +173,18 @@ async def render_turn(server, ws, adapter, session, chunks: AsyncIterator, style
         logger.exception("gateway.pipeline_error")
         result.failed = True
         with contextlib.suppress(Exception):
-            out = OutboundMessage(type=MessageType.CONTROL, payload={"type": "tts", "state": "stop"})
+            out = OutboundMessage(
+                type=MessageType.CONTROL, payload={"type": "tts", "state": "stop"}
+            )
             await ws.send_text(await adapter.encode(out))
         return result
 
     if result.user_text:
         await server.session_manager.add_to_history(session.session_id, "user", result.user_text)
     if result.full_text:
-        await server.session_manager.add_to_history(session.session_id, "assistant", result.full_text)
+        await server.session_manager.add_to_history(
+            session.session_id, "assistant", result.full_text
+        )
     session._last_activity = time.monotonic()
     if getattr(session, "_life", None):
         session._life.notify_activity()

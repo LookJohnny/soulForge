@@ -295,7 +295,9 @@ class CharacterBridge:
                         # decision committed) must not discard lines already accepted.
                         completed = True
                         if not spoke and require_dialogue:
-                            raise RuntimeNoDialogueError("runtime completed decision without dialogue")
+                            raise RuntimeNoDialogueError(
+                                "runtime completed decision without dialogue"
+                            )
                         yield "complete", data
                         break
                     spoke = True

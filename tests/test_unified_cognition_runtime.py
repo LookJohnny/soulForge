@@ -134,7 +134,9 @@ async def test_one_core_call_yields_action_and_only_requesting_voice_speaks():
                     json.dumps({"type": "line", "line": line}, ensure_ascii=False)
                     for line in result["decision"]["dialogue"]
                 ]
-                body = "\n".join([*lines, json.dumps({"type": "result", **result})]).encode()
+                body = "\n".join(
+                    [*lines, json.dumps({"type": "result", **result})]
+                ).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -254,7 +256,9 @@ async def test_sentence_tts_uses_current_emotion_and_frozen_character(monkeypatc
     }
     orchestrator = PipelineOrchestrator.__new__(PipelineOrchestrator)
     orchestrator._runtime_stream = stream_of(
-        AsyncMock(return_value=(bridge, {"text": command["dialogue"], "commands": [command]}))
+        AsyncMock(
+            return_value=(bridge, {"text": command["dialogue"], "commands": [command]})
+        )
     )
     orchestrator.synthesize_tts = AsyncMock(return_value=b"audio")
     stream = orchestrator.process_text_stream(session, "测试")

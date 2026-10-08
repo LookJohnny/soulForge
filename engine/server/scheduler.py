@@ -106,7 +106,9 @@ class DecisionScheduler:
         self.lanes: dict[str, Lane] = {}
         # a slot-holder whose provider hangs keeps its thread; a little headroom
         # keeps new turns from queueing behind abandoned threads
-        self.pool = ThreadPoolExecutor(max_workers=max_concurrent + 2, thread_name_prefix="think")
+        self.pool = ThreadPoolExecutor(
+            max_workers=max_concurrent + 2, thread_name_prefix="think"
+        )
         self._stopped = False
 
     # ------------------------------------------------------------------ intake
@@ -117,7 +119,9 @@ class DecisionScheduler:
         """Queue an event on its agent's lane. False when shed for backpressure."""
         key = event.target_agent or "*"  # untargeted events keep one fan-out turn
         if self.queued() >= self.max_queued:
-            self.log(key, "event_dropped", {"reason": "event queue full (backpressure)"})
+            self.log(
+                key, "event_dropped", {"reason": "event queue full (backpressure)"}
+            )
             return False
         lane = self.lanes.get(key)
         if lane is None:
@@ -140,7 +144,9 @@ class DecisionScheduler:
                 continue
             event = lane.ambient.popleft()
             droppable = event_class(event) == "droppable"
-            task = asyncio.create_task(self._process(event, lane, lane.epoch if droppable else None))
+            task = asyncio.create_task(
+                self._process(event, lane, lane.epoch if droppable else None)
+            )
             # Wait for the ambient turn, unless a user event arrives first:
             # then serve the user now and let the ambient turn finish (or be
             # discarded) in the background. Non-droppable ambient work (a
@@ -200,7 +206,12 @@ class DecisionScheduler:
     # ---------------------------------------------------------------- shutdown
     async def stop(self) -> None:
         self._stopped = True
-        tasks = [t for lane in self.lanes.values() for t in (lane.task, *lane.background) if t]
+        tasks = [
+            t
+            for lane in self.lanes.values()
+            for t in (lane.task, *lane.background)
+            if t
+        ]
         for task in tasks:
             task.cancel()
         for task in tasks:
