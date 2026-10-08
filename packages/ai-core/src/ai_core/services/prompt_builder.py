@@ -151,7 +151,8 @@ class PromptBuilder:
         """Build complete system prompt and voice config.
 
         defer_dynamic: keep the system prompt identical across turns (the current
-        moment, mood, relationship numbers and memories are left out of it) and
+        moment, mood, relationship numbers, memories and retrieved knowledge are
+        left out of it; only a relationship-stage change still alters it) and
         return them as "dynamic_prompt" for the caller to place after the
         conversation history. A local model then reuses the cached prefill of the
         whole static head and the history instead of re-reading ~2k tokens.
@@ -361,6 +362,7 @@ class PromptBuilder:
             "sensations": sensations or "",
             "relationship_state_block": relationship_state_block,
             "memory_context": memory_context,
+            "rag_context": rag_context,  # retrieved for this turn's input
         }
         dynamic_prompt = ""
         if defer_dynamic:
@@ -378,6 +380,7 @@ class PromptBuilder:
                 "sensations": "",
                 "relationship_state_block": "",
                 "memory_context": [],
+                "rag_context": "",
             }
         system_prompt = template.render(
             name=safe_nickname,
@@ -412,7 +415,7 @@ class PromptBuilder:
             ),
             forbidden=base.get("forbidden", []),
             structured_output=structured_output,
-            rag_context=rag_context,
+            rag_context=now["rag_context"],
             # Vocalized mode — palette of allowed non-verbal utterances.
             vocalization_palette=safe_palette,
         )

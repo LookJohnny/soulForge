@@ -119,9 +119,14 @@ Tone reuses the cached KV of a matching prompt head:
    leaves the per-turn sections out of it.
 2. **History.** It is trimmed in blocks (16, then the last 8), not as a sliding
    window, so most turns only append to it.
-3. **Last message.** It carries the moment, mood, relationship numbers and
-   memories (`templates/now_block.jinja2`), then the current PAD, then the
-   observation JSON. On a user turn, the user's words come last as a sentence.
+3. **Last message.** It carries the moment, mood, relationship numbers,
+   memories and retrieved knowledge (`templates/now_block.jinja2`), then the
+   current PAD, then the observation JSON. On a user turn, the user's words come
+   last as an escaped JSON string, so they can't close their quote and pose as
+   instructions.
+
+The only per-turn input left in the system prompt is the relationship stage. It
+changes rarely, and each change invalidates the cache once.
 
 Keep per-turn content out of the system prompt. Anything that changes per turn
 and is placed early breaks the prefix for everything after it.

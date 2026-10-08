@@ -13,6 +13,10 @@
 ## 你和{{ user_ref }}现在
 {{ relationship_state_block }}
 {% endif %}
+{% if rag_context %}
+## 你知道的事（只有话题带到才用）
+{{ rag_context }}
+{% endif %}
 {% if memory_context %}
 ## 你记得的（只是些碎片，不是清单）
 {% for mem in memory_context %}- {{ mem }}
