@@ -134,6 +134,21 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
                 }
             )
             await ws.send_json({"type": "text", "content": "", "state": "start"})
+            # per-sentence tone readout cue, right before the sentence's clip (real gateway order);
+            # sad on purpose: differs from the turn's happy PAD, so the face visibly follows the cue
+            await ws.send_json(
+                {
+                    "type": "control",
+                    "payload": {
+                        "type": "expression",
+                        "weights": {"sad": 0.8, "neutral": 0.2},
+                        "readout": {"sadness": 0.62, "neutral": 0.2},
+                        "source": "sentence",
+                        "index": 0,
+                        "text": "echo: " + content,
+                    },
+                }
+            )
             await ws.send_json(
                 {"type": "text", "content": "echo: " + content, "state": "sentence"}
             )

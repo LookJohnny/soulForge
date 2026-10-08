@@ -235,6 +235,18 @@ function renderMood(e) {
   $('hud-emotion').textContent = e.emotion ? `情绪 · ${e.emotion}` : '';
   $('hud-causes').textContent = (e.causes ?? []).slice(0, 3).join('；');
 }
+const TONE_ZH = { happy: '开心', relaxed: '温和', sad: '难过', angry: '生气', surprised: '惊讶' };
+/** 当前这句驱动表情的依据（开播时由 'cue' 刷新）：读数 + 台词声明情绪；两者效价相反时标 ✕。 */
+function renderTone(cue) {
+  const el = $('hud-tone');
+  if (!el) return;
+  if (!cue) { el.textContent = ''; return; }
+  const top = Object.entries(cue.weights ?? {}).filter(([k, v]) => k in TONE_ZH && v >= 0.05).sort((a, b) => b[1] - a[1]).slice(0, 2);
+  const read = top.length ? top.map(([k, v]) => `${TONE_ZH[k]} ${v.toFixed(2)}`).join(' ') : '平静';
+  const said = cue.declared ? `${body.cue.conflict ? ' ✕ ' : ' · '}台词 ${cue.declared}` : '';
+  el.textContent = `此句 · 读数 ${read}${said}`;
+  el.title = body.cue.conflict ? '读数与台词声明的情绪相反：读数降权，以台词为准' : 'Nous Tone 逐句读数 + 台词声明情绪';
+}
 function padUI() {
   const { p, a, d } = body.mood.pad;
   const bar = (v) => { const w = Math.abs(v) * 45; const left = v >= 0 ? 45 : 45 - w; return `<span class="bar"><i style="left:${left}px;width:${w}px"></i></span>`; };
@@ -651,6 +663,14 @@ async function connect() {
   gw.addEventListener('speaking', (e) => { if (!e.detail.speaking) replyText = ''; });
   gw.addEventListener('speaking', (e) => { body.setSpeaking(e.detail.speaking); if (!e.detail.speaking) { bubbleUntil = performance.now() + 2500; setTimeout(() => { refreshMemoryGraph(); refreshNearEvents(); }, 4000); } });
   gw.addEventListener('emotion', (e) => { body.setPad(e.detail.pad); renderMood(e.detail); padUI(); });
+  // 逐句表情：音频开播时才到（gateway_client 按 AudioContext 时间线派发）。持续这句的时长 + 0.8s 余韵，
+  // 下一句的 cue 接替；说完后渐出交还 PAD。头姿/眨眼/目光始终由 PAD 驱动。
+  gw.addEventListener('cue', (e) => {
+    const d = e.detail;
+    body.setExpressionTarget(d.weights, { hold: d.duration != null ? d.duration + 0.8 : Infinity, meta: d, declared: d.declared });
+    renderTone(d);
+  });
+  gw.addEventListener('speaking', (e) => { if (!e.detail.speaking) { body.releaseExpressionTarget(1.2); setTimeout(() => { if (!body.cue.active) renderTone(null); }, 3000); } });
   gw.addEventListener('control:session', (e) => {
     session.end_user_id = e.detail.end_user_id; session.character_id = e.detail.character_id;
     if (e.detail.character_name) $('hud-name').textContent = e.detail.character_name;

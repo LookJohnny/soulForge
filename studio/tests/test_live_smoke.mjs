@@ -31,6 +31,9 @@ page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
 
 const checks = {};
+// The fixed provider-status badge (top-right, max z-index, since 0533ad8) covers the toolbar at this
+// viewport; click these toolbar buttons through the DOM so the rest of the smoke still runs.
+const domClick = (sel) => page.$eval(sel, (el) => el.click());
 const fail = (k, v) => { checks[k] = v; };
 
 await page.goto(`http://127.0.0.1:${STUDIO_PORT}/live?gateway=ws://127.0.0.1:${GW_PORT}/ws&runtime=ws://127.0.0.1:${GW_PORT}/body&agents=luna`);
@@ -47,7 +50,18 @@ checks.idleClip = await page.evaluate(() => window.__live.body.idleUrls[window._
 checks.hudStage = await page.evaluate(() => document.getElementById('hud-stage').textContent);
 checks.hudAxes = await page.evaluate(() => document.querySelectorAll('#hud-rel .axis').length);
 
+// face capability analysis of the loaded model (expression_mixer plan + VRoid region split)
+checks.faceInfo = await page.evaluate(() => window.__live.body.faceInfo);
+
 // one text turn
+await page.evaluate(() => {
+  const gw = window.__live.gw; window.__cue = { received: null, fired: null, ctxAtFire: null, detail: null };
+  gw.addEventListener('control:expression', () => { window.__cue.received = performance.now(); });
+  gw.addEventListener('cue', (e) => {
+    window.__cue.fired = performance.now(); window.__cue.detail = e.detail;
+    const b = window.__live.body; setTimeout(() => { window.__cue.face = { sad: b.expr.sad, happy: b.expr.happy, blend: b.cue.blend }; }, 700);
+  });
+});
 await page.fill('#text', '你好 事件');
 await page.press('#text', 'Enter');
 await page.waitForFunction(() => window.__live.gw.speaking === true, null, { timeout: 8000 });
@@ -70,6 +84,13 @@ checks.moodKey = await page.evaluate(() => window.__live.body.mood.key);
 checks.hudEmotion = await page.evaluate(() => document.getElementById('hud-emotion').textContent);
 checks.hudCauses = await page.evaluate(() => document.getElementById('hud-causes').textContent);
 checks.headPos = await page.evaluate(() => window.__live.body.getHeadScreenPos(window.__live.camera));
+// the cue waited for its clip's audio start (not its arrival) and the face follows it, not the PAD recipe
+checks.cue = await page.evaluate(() => {
+  const c = window.__cue, b = window.__live.body;
+  return { delayMs: c.fired && c.received ? Math.round(c.fired - c.received) : null, duration: c.detail?.duration,
+    cueSad: c.detail?.weights?.sad ?? null, face: c.face,
+    hudTone: document.getElementById('hud-tone').textContent };
+});
 await page.waitForFunction(() => window.__live.gw.speaking === false, null, { timeout: 10000 });
 checks.idleBackAfterTalk = await page.evaluate(() => !!window.__live.body.idleAction?.isRunning());
 
@@ -84,19 +105,19 @@ checks.bodyStatuses = await page.evaluate(() => new Promise((r) => { const bc = 
 // session frame → export enabled, memory graph via studio proxy → fake ai-core
 checks.sessionIds = await page.evaluate(() => window.__live.session);
 checks.exportEnabled = await page.evaluate(() => !document.getElementById('btn-export').disabled);
-await page.click('#btn-memory');
+await domClick('#btn-memory');
 await page.waitForFunction(() => window.__live.graph.nodes.length > 0, null, { timeout: 8000 }).catch(() => fail('graphNodes', 0));
 checks.graphNodes = await page.evaluate(() => window.__live.graph.nodes.length);
 checks.graphEdges = await page.evaluate(() => window.__live.graph.edges.length);
 checks.nearEvents = await page.evaluate(() => document.getElementById('near-events').textContent);
 // companion toggle round-trips through the gateway (lives in the settings drawer)
-await page.click('#btn-settings');
+await domClick('#btn-settings');
 await page.check('#opt-companion');
 await page.waitForFunction(() => document.getElementById('hud-stage').textContent.includes('陪伴'), null, { timeout: 5000 }).catch(() => fail('companionToggle', false));
 checks.companionToggle = await page.evaluate(() => document.getElementById('hud-stage').textContent);
 await page.uncheck('#opt-companion');
-await page.click('#btn-settings');
-await page.click('#btn-memory');
+await domClick('#btn-settings');
+await domClick('#btn-memory');
 
 // event scene card + choice round trip
 await page.waitForFunction(() => !document.getElementById('event-overlay').classList.contains('hidden'), null, { timeout: 5000 }).catch(() => fail('eventShown', false));
@@ -117,6 +138,8 @@ const ok = errors.length === 0 && checks.modelLoaded && checks.idleAnimated && c
   && ['big_happy', 'warm_smile'].includes(checks.moodKey)
   && checks.graphNodes === 4 && checks.exportEnabled && String(checks.companionToggle).includes('陪伴')
   && checks.decodeErrors.length === 0
+  && checks.faceInfo?.support === 'full' && checks.cue.delayMs >= 50 && checks.cue.duration > 0.1
+  && checks.cue.cueSad === 0.8 && checks.cue.face?.sad > checks.cue.face?.happy && checks.cue.face?.blend > 0.9 && checks.cue.hudTone.includes('难过')
   && checks.bodyWelcome && checks.bodyActionsLogged >= 4 && (checks.bodyStatuses ?? []).filter((s) => s === 'done').length >= 4;
 console.log(JSON.stringify({ ok, checks, errors }, null, 1));
 process.exit(ok ? 0 : 1);

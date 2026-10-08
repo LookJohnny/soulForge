@@ -14,7 +14,9 @@
       —— 没有 idle 片段时退回纯程序化姿态（呼吸/fidget/手臂）
    2. 生命层（叠加）：注视眼先头后、头部阻尼偏移、PAD 配方头姿 —— 以
       "加法"叠在动画层之上，不覆盖动捕数据
-   3. 表情层：PAD 配方表情阻尼、眨眼、口型（视素在 vrm.update 之前写入）
+   3. 表情层：PAD 配方表情 ⊕ 直接表情 cue（Nous Tone 逐句读数）阻尼、眨眼、口型
+      （视素在 vrm.update 之前写入）。说话时只让嘴部情绪形变让位给视素；
+      模型缺的情绪通道按 expression_mixer 的映射换替身或交给头姿。
 
    已知坑（沿用 docs/sim_life_vtuber_demo.md）：
    - VRMA 动画插件与 VRM0 解析同挂一个 loader 会冲突 → 独立 loader
@@ -26,6 +28,10 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils, VRMHumanBoneName } from '@pixiv/three-vrm';
 import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-vrm-animation';
 import { PadMood, EXPR_CHANNELS } from './pad_expression.js';
+import {
+  ExpressionCue, planChannels, mixTargets, unshownHead, speakingGain, residualSums, regionShare,
+  MOUTH_SPEAKING_GAIN, SPLIT_RESIDUAL_MAX,
+} from './expression_mixer.js';
 import { LipSync, VISEMES } from './lipsync.js';
 import { loadAnyHumanoid, applyToonLook, removeToonLook } from './humanoid_adapter.js';
 
@@ -99,6 +105,12 @@ export class VrmBody {
     this.speaking = false;
     this.head = { x: 0, y: 0, z: 0 };
     this.expr = Object.fromEntries(EXPR_CHANNELS.map((k) => [k, 0]));
+    this.cue = new ExpressionCue();             // 直接表情输入（逐句 tone 读数）
+    this.exprPlan = planChannels(() => true);   // 本模型的通道映射（load 时按实际表情重算）
+    this.faceRegions = {};                      // 通道 → {mouthShare, split?}（load 时分析形变）
+    this.faceInfo = null;
+    this.speakAmt = 0;                          // 说话程度 0..1（阻尼，避免让位跳变）
+    this.cueGain = 1;
     this.nextFidget = 3; this.fidget = null;
     this.blinkTimer = 0; this.nextBlink = 2.5; this.blinkProgress = -1; this.doubleBlink = false;
     this.clock = new THREE.Clock();
@@ -113,10 +125,14 @@ export class VrmBody {
    * @param {{kind?:string, toon?:boolean}} opts
    */
   async load(url, { kind, toon } = {}) {
+    // 并发换装（启动时的 .soul 形象 vs 用户手动切换）：只有最后一次 load 能挂到场景上，
+    // 否则两次 dispose 都先于加载完成，两个模型会叠在一起。
+    const seq = (this._loadSeq = (this._loadSeq ?? 0) + 1);
     this.dispose();
     const ext = (kind && kind !== 'robot' ? kind : url.split('?')[0].split('.').pop()).toLowerCase();
     let vrm;
     let native = true;
+    let clips = [], rig = null;
     if (ext === 'vrm') {
       const gltf = await this.loader.loadAsync(url);
       vrm = gltf.userData.vrm;
@@ -125,9 +141,15 @@ export class VrmBody {
       VRMUtils.combineSkeletons(gltf.scene);
     } else {
       const res = await loadAnyHumanoid(url, { kind: ext });
-      vrm = res.vrm; native = res.native;
-      this.nativeClips = res.animations ?? [];
-      this.rig = res.rig;
+      vrm = res.vrm; native = res.native; clips = res.animations ?? []; rig = res.rig;
+    }
+    if (seq !== this._loadSeq) {               // 被更新的一次 load 取代：丢弃，不挂场景
+      VRMUtils.deepDispose(vrm.scene);
+      return this.vrm;
+    }
+    if (ext !== 'vrm') {
+      this.nativeClips = clips;
+      this.rig = rig;
       if (native) { VRMUtils.removeUnnecessaryVertices(vrm.scene); VRMUtils.combineSkeletons(vrm.scene); }
     }
     VRMUtils.rotateVRM0(vrm);
@@ -138,6 +160,7 @@ export class VrmBody {
     if (vrm.lookAt) vrm.lookAt.target = this.gazeTarget;
     this.vrm = vrm;
     this.native = native;
+    this._analyzeFace();
     this.metaVersion = vrm.meta?.metaVersion === '1' ? '1' : '0';
     this._shin = null;
     this._restPose();
@@ -339,8 +362,26 @@ export class VrmBody {
   setSpeakingLevel(level) { this.speakingLevel = Math.max(0, Math.min(1, level)); }
   setAudioAnalyser(analyser) { this.lipsync.setAnalyser(analyser); }
 
+  /**
+   * 直接表情目标（绕过 PAD 配方量化）：weights 为 0..1 的 {happy,sad,angry,surprised,relaxed}
+   * （Nous Tone 的 expression；其 neutral 份额显示 declared——这句台词的声明情绪——没有则显示 PAD）。
+   * hold 秒内接管表情通道，过期后渐出交还 PAD；
+   * 头姿/眨眼/目光仍由 PAD 驱动。仍走逐帧阻尼与说话让位，模型缺的通道按映射处理。
+   */
+  setExpressionTarget(weights, { hold = Infinity, meta = null, declared = null } = {}) {
+    if (!weights || typeof weights !== 'object') return;
+    this.cue.set(weights, { now: this.clock.elapsedTime, hold, meta, declared });
+  }
+
+  /** after 秒后结束直接表情接管（渐出，不跳变）。 */
+  releaseExpressionTarget(after = 0) { this.cue.release(this.clock.elapsedTime, after); }
+
   /** 人格表情档（.soul expression / 问卷生成）：烈度 + PAD 基线。 */
-  setMoodProfile(expression) { this.mood.setProfile(expression ?? {}); }
+  setMoodProfile(expression) {
+    this.mood.setProfile(expression ?? {});
+    // 读数 cue 的强度随人格烈度：克制的角色同样的读数表情更淡
+    this.cueGain = 0.6 + 0.4 * this.mood.intensity;
+  }
 
   /** 一次倾听式点头（叠加在生命层上）。 */
   nod() { this.nodAt = this.clock.elapsedTime; }
@@ -405,6 +446,12 @@ export class VrmBody {
       y: gx * 0.32 * (this.lookPoint ? 2.2 : 1) + (preset.head?.y ?? 0),
       z: gx * -0.05 + (preset.head?.z ?? 0),
     };
+    // 脸上显示不了的读数情绪（无该通道且无替身，如无表情的机器人模型）由头姿带出
+    if (this.cue.blend > 0 && this.exprPlan.support !== 'full') {
+      const h = unshownHead(this.cue.weights, this.exprPlan), b = this.cue.blend * this.cueGain;
+      headT.x += b * h.x; headT.y += b * h.y; headT.z += b * h.z;
+      if (!this.lookPoint) this.gazeTarget.position.y += b * h.gazeY * 0.8;
+    }
     // fidget（动画层接管时只保留视线类小动作）
     let fx = 0, fy = 0, fz = 0;
     if (!this.fidget && t > this.nextFidget) {
@@ -501,6 +548,7 @@ export class VrmBody {
     const em = vrm.expressionManager;
     if (!em) return;
     const preset = this.mood.preset;
+    this.cue.step(t, dt);
 
     // 眨眼：变间隔 + 偶发双眨；非对称曲线（闭 30% / 开 70%，aikeya）
     this.blinkTimer += dt;
@@ -518,12 +566,28 @@ export class VrmBody {
       }
     }
 
-    // 情绪表情：说话时大表情让位（与舵机版一致）
-    const gain = this.speaking ? 0.45 : 1;
+    // 情绪表情：PAD 配方 ⊕ 直接表情 cue → 本模型通道 → 逐帧阻尼。
+    // 说话时只让嘴部让位给视素：可拆分的 VRoid 脸眉/眼满值、嘴 ×MOUTH_SPEAKING_GAIN；
+    // 整块表情按其嘴部形变占比让位（未知时等同旧的整脸 ×0.45）。
+    this.speakAmt = damp(this.speakAmt, this.speaking ? 1 : 0, 6, dt);
+    const targets = mixTargets(preset.expr, this.cue, this.exprPlan, this.cueGain);
+    const mouthGain = 1 - (1 - MOUTH_SPEAKING_GAIN) * this.speakAmt;
     for (const k of EXPR_CHANNELS) {
-      const target = (preset.expr?.[k] ?? 0) * gain;
-      this.expr[k] = damp(this.expr[k], target, 2.5, dt);
-      this.setExpr(k, this.expr[k]);
+      this.expr[k] = damp(this.expr[k], targets[k], 2.5, dt);
+      const region = this.faceRegions[k];
+      if (region?.split) {
+        this.setExpr(k, 0);
+        const w = this.expr[k], { brw, eye, mth } = region.split.idx;
+        for (const mesh of region.split.prims) {
+          const inf = mesh.morphTargetInfluences;
+          if (!inf) continue;
+          if (brw != null) inf[brw] = w;
+          if (eye != null) inf[eye] = w;
+          inf[mth] = w * mouthGain;
+        }
+      } else {
+        this.setExpr(k, this.expr[k] * speakingGain(region?.mouthShare, this.speakAmt));
+      }
     }
     this.setExpr('blink', blink);
 
@@ -535,6 +599,112 @@ export class VrmBody {
     } else {
       this.setExpr('aa', this.speakingLevel * 0.85);
     }
+  }
+
+  // ── 表情能力分析（load 时一次）────────────────────────
+  /** 通道映射 + 每个情绪表情的嘴部占比；VRoid 的 ALL 若严格等于 眉+眼+嘴 则按部位拆分驱动。 */
+  _analyzeFace() {
+    const em = this.vrm?.expressionManager;
+    this.exprPlan = planChannels((k) => this.hasExpr(k));
+    this.faceRegions = {};
+    const split = [], mouthShare = {};
+    if (em) {
+      const masks = this._mouthMasks();
+      const bound = this._boundMorphs(em);
+      for (const k of EXPR_CHANNELS) {
+        const ex = this._expression(k);
+        if (!ex) continue;
+        const r = this._regionsFor(ex, masks, bound);
+        this.faceRegions[k] = r;
+        if (r.split) split.push(k);
+        if (r.mouthShare != null) mouthShare[k] = Math.round(r.mouthShare * 100) / 100;
+      }
+    }
+    const plan = this.exprPlan;
+    this.faceInfo = { support: plan.support, missing: plan.missing, fallbacks: plan.fallbacks, split, mouthShare };
+    if (plan.support === 'none') {
+      console.warn('[VrmBody] 模型没有情绪表情通道（只有口型/眨眼）：情绪改由头姿和目光表达');
+      this.onLog?.('表情: 无情绪通道 → 头姿表达');
+    } else if (plan.missing.length) {
+      const how = plan.missing.map((k) => `${k}${plan.fallbacks[k] ? '→' + plan.fallbacks[k] : '→头姿'}`).join(', ');
+      console.warn('[VrmBody] 模型缺少表情通道: ' + how);
+      this.onLog?.('表情: 缺 ' + how);
+    }
+  }
+
+  _expression(name) {
+    const em = this.vrm?.expressionManager;
+    if (!em) return null;
+    for (const n of [name, ...(EXPR_ALIASES[name] ?? [])]) { const e = em.getExpression?.(n); if (e) return e; }
+    return null;
+  }
+
+  static _morphBinds(ex) { return (ex?.binds ?? []).filter((b) => Array.isArray(b.primitives) && Number.isInteger(b.index)); }
+
+  /** 视素（aa/ih/ou/ee/oh）实际移动的顶点 = 嘴部区域，按几何体记掩码。 */
+  _mouthMasks() {
+    const masks = new Map();
+    for (const v of VISEMES) {
+      for (const b of VrmBody._morphBinds(this._expression(v))) {
+        for (const mesh of b.primitives) {
+          const g = mesh.geometry, d = g?.morphAttributes?.position?.[b.index]?.array;
+          if (!d) continue;
+          const n = d.length / 3;
+          let m = masks.get(g);
+          if (!m) { m = new Uint8Array(n); masks.set(g, m); }
+          for (let i = 0; i < n; i++) if (Math.abs(d[3 * i]) + Math.abs(d[3 * i + 1]) + Math.abs(d[3 * i + 2]) > 1e-5) m[i] = 1;
+        }
+      }
+    }
+    return masks;
+  }
+
+  /** 已被任何表情绑定的 (几何体, morph 序号)：拆分驱动不能去写它们。 */
+  _boundMorphs(em) {
+    const bound = new Set();
+    for (const ex of em.expressions ?? []) {
+      for (const b of VrmBody._morphBinds(ex)) for (const mesh of b.primitives) bound.add(mesh.geometry?.uuid + ':' + b.index);
+    }
+    return bound;
+  }
+
+  _regionsFor(ex, masks, bound) {
+    const binds = VrmBody._morphBinds(ex);
+    if (!binds.length) return { mouthShare: null };
+    // 嘴部占比（全部图元合计的形变能量）
+    let inMouth = 0, total = 0;
+    for (const b of binds) {
+      for (const mesh of b.primitives) {
+        const d = mesh.geometry?.morphAttributes?.position?.[b.index]?.array, mask = masks.get(mesh.geometry);
+        if (!d) continue;
+        let e = 0;
+        for (let i = 0; i < d.length; i++) e += d[i] * d[i];
+        e *= b.weight * b.weight; total += e;
+        if (mask) inMouth += e * regionShare(d, mask);
+      }
+    }
+    const out = { mouthShare: total > 0 ? inMouth / total : null };
+    // VRoid：单个 Fcl_ALL_X 绑定，且 BRW/EYE/MTH 部位形变之和严格还原 ALL → 按部位拆分
+    if (binds.length !== 1 || Math.abs(binds[0].weight - 1) > 1e-3) return out;
+    const b = binds[0], dict = b.primitives[0]?.morphTargetDictionary;
+    if (!dict) return out;
+    const name = Object.keys(dict).find((n) => dict[n] === b.index) ?? '';
+    const m = /^(.*)Fcl_ALL_(.+)$/.exec(name);
+    if (!m) return out;
+    const [, pre, suf] = m, find = (...cands) => cands.map((c) => dict[pre + c]).find((i) => i != null);
+    const idx = { brw: find(`Fcl_BRW_${suf}`), eye: find(`Fcl_EYE_${suf}`, `Fcl_Eye_${suf}`), mth: find(`Fcl_MTH_${suf}`) };
+    if (idx.mth == null || (idx.brw == null && idx.eye == null)) return out;
+    let num = 0, den = 0;
+    for (const mesh of b.primitives) {
+      const pos = mesh.geometry?.morphAttributes?.position, md = mesh.morphTargetDictionary;
+      if (!pos || md?.[pre + 'Fcl_MTH_' + suf] !== idx.mth) return out;          // 各图元序号必须一致
+      const parts = [idx.brw, idx.eye, idx.mth].filter((i) => i != null);
+      if (parts.some((i) => bound.has(mesh.geometry.uuid + ':' + i))) return out; // 部位已被别的表情占用
+      const [n, d] = residualSums(pos[b.index].array, parts.map((i) => pos[i].array));
+      num += n; den += d;
+    }
+    if (den > 0 && num / den < SPLIT_RESIDUAL_MAX) out.split = { prims: b.primitives, idx, residual: num / den };
+    return out;
   }
 
   // ── 原语 ─────────────────────────────────────────────

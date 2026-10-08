@@ -72,6 +72,7 @@ input::placeholder { color: color-mix(in oklab, var(--dim) 70%, transparent); }
 #hud-mood { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 #hud-emotion { color: var(--fg); } #hud-causes { display: block; color: var(--dim); margin-top: 2px; }
 #hud-emotion:empty, #hud-mood:has(#hud-emotion:empty) { display: none; }
+#hud-tone { display: block; color: var(--dim); margin-top: 2px; font-variant-numeric: tabular-nums; } #hud-tone:empty { display: none; }
 #hud-pad summary { cursor: pointer; color: var(--dim); font-size: 11px; margin-top: 8px; list-style: none; letter-spacing: .1em; }
 #hud-pad summary::before { content: "▸ "; } #hud-pad[open] summary::before { content: "▾ "; }
 #pad { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-top: 4px; }
