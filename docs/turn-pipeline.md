@@ -125,8 +125,12 @@ Tone reuses the cached KV of a matching prompt head:
    last as an escaped JSON string, so they can't close their quote and pose as
    instructions.
 
-The only per-turn input left in the system prompt is the relationship stage. It
-changes rarely, and each change invalidates the cache once.
+The system prompt is identical across comparable turns: same character, same
+kind of turn and same contract inputs. Three things still change it:
+- the relationship stage (rare; each change invalidates the cache once);
+- user versus autonomous turns, which get different contract text, so each kind
+  keeps its own cached prefix (Nous Tone holds several);
+- on autonomous turns, the current activity named in the silent-turn example.
 
 Keep per-turn content out of the system prompt. Anything that changes per turn
 and is placed early breaks the prefix for everything after it.
