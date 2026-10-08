@@ -385,3 +385,103 @@ def test_optional_media_body_rejects_bad_configuration(tmp_path, overrides):
     }
     with pytest.raises(ValueError):
         live_stack.validate(configured(tmp_path, **values))
+
+
+def _tone_tree(tmp_path):
+    tone = tmp_path / "tone"
+    (tone / "nous_tone").mkdir(parents=True)
+    (tone / "nous_tone" / "server.py").write_text("")
+    for d in ("model", "packs/joy", "packs/warmth", "readout"):
+        (tmp_path / d).mkdir(parents=True)
+    return {
+        "LLM_PROVIDER": "nous_tone",
+        "LLM_BASE_URL": "http://127.0.0.1:7880/v1",
+        "NOUS_TONE_DIR": str(tone),
+        "NOUS_TONE_MODEL": str(tmp_path / "model"),
+        "NOUS_TONE_PACKS": f"{tmp_path / 'packs/joy'}, {tmp_path / 'packs/warmth'}",
+        "NOUS_TONE_READOUT": str(tmp_path / "readout"),
+    }
+
+
+def test_managed_local_model_starts_first_on_its_own_port(tmp_path):
+    env = configured(tmp_path, **_tone_tree(tmp_path))
+    ports = live_stack.validate(env)
+    assert ports["tone"] == 7880
+    commands = live_stack.service_commands(env, ports, "/python")
+    name, command = commands[0]
+    assert name == "tone"
+    assert command[:4] == ["/python", "-m", "nous_tone.server", str(tmp_path / "model")]
+    assert command[4:6] == [str(tmp_path / "packs/joy"), str(tmp_path / "packs/warmth")]
+    assert command[-2:] == ["--readout", str(tmp_path / "readout")]
+    assert "127.0.0.1" in command and "--port" in command
+
+
+def test_local_model_widens_timeouts_unless_configured(tmp_path):
+    env = configured(tmp_path, LLM_PROVIDER="nous_tone")
+    # the fixture pins RUNTIME_LLM_TIMEOUT; the others take the local-model budget
+    assert env["LLM_TIMEOUT"] == env["SOULFORGE_COGNITION_TIMEOUT_S"] == "120"
+    assert float(env["CHARACTER_RUNTIME_TIMEOUT_S"]) > float(
+        env["SOULFORGE_COGNITION_TIMEOUT_S"]
+    )
+    assert env["RUNTIME_LLM_TIMEOUT"] == "30"
+    assert "LLM_TIMEOUT" not in configured(tmp_path, LLM_PROVIDER="openai")
+
+
+def test_unmanaged_tone_server_is_not_spawned(tmp_path):
+    env = configured(tmp_path, LLM_PROVIDER="nous_tone")
+    assert "tone" not in live_stack.validate(env)
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"LLM_PROVIDER": "openai"},
+        {"LLM_BASE_URL": "http://10.0.0.5:7880/v1"},
+        {"LLM_BASE_URL": "http://127.0.0.1:7880/chat"},
+        {"LLM_BASE_URL": "http://127.0.0.1:8100/v1"},  # collides with ai-core
+        {"NOUS_TONE_MODEL": "/nonexistent/model"},
+        {"NOUS_TONE_PYTHON": "/nonexistent/python"},
+    ],
+)
+def test_managed_local_model_rejects_bad_configuration(tmp_path, override):
+    env = configured(tmp_path, **{**_tone_tree(tmp_path), **override})
+    with pytest.raises(ValueError):
+        live_stack.validate(env)
+
+
+def test_tone_child_gets_its_repo_on_pythonpath(tmp_path, monkeypatch):
+    env = configured(tmp_path, **_tone_tree(tmp_path))
+    stack = live_stack.LiveStack(tmp_path, env, live_stack.validate(env))
+    seen = {}
+
+    def popen(command, **kwargs):
+        seen[command[0]] = kwargs["env"].get("PYTHONPATH", "")
+        return SimpleNamespace(pid=123, poll=lambda: None)
+
+    monkeypatch.setattr(live_stack.subprocess, "Popen", popen)
+    stack.directory = tmp_path / "out"
+    stack.directory.mkdir()
+    stack.spawn("tone", ["tone-python"])
+    stack.spawn("gateway", ["gw-python"])
+    assert seen["tone-python"].split(":")[0] == env["NOUS_TONE_DIR"]
+    assert env["NOUS_TONE_DIR"] not in seen["gw-python"]
+    for log in stack.logs:
+        log.close()
+
+
+def test_local_model_budgets_ambient_runtime_decisions(tmp_path):
+    env = configured(tmp_path, **_tone_tree(tmp_path))
+    assert env["RUNTIME_AMBIENT_MIN_INTERVAL_S"] == "60"
+    runtime = dict(
+        live_stack.service_commands(env, live_stack.validate(env), "/python")
+    )["runtime"]
+    assert runtime[runtime.index("--ambient-min-interval") + 1] == "60"
+    hosted = configured(tmp_path)
+    assert (
+        "--ambient-min-interval"
+        not in dict(
+            live_stack.service_commands(hosted, live_stack.validate(hosted), "/python")
+        )["runtime"]
+    )
+    with pytest.raises(ValueError):
+        live_stack.validate(configured(tmp_path, RUNTIME_AMBIENT_MIN_INTERVAL_S="soon"))

@@ -79,9 +79,15 @@ class SoulForgeRuntimeServer:
         llm_timeout_s: float = 6.0,
         social: bool = False,
         memory_store=None,
+        ambient_min_interval_s: float = 0.0,
+        max_concurrent_decisions: int = 2,
     ):
         """time_scale: simulated minutes advanced per real second.
-        social: characters strike up small talk with each other on their own."""
+        social: characters strike up small talk with each other on their own.
+        ambient_min_interval_s: wall seconds between ambient (arrival-notice)
+        decisions; 0 = unlimited (hosted models), a budget for local models.
+        max_concurrent_decisions: model calls in flight across agents; one slot
+        is always kept for user turns (see engine/server/scheduler.py)."""
         import math
 
         self.time_scale = _require_finite_positive("time_scale", time_scale)
@@ -94,7 +100,18 @@ class SoulForgeRuntimeServer:
         # pool with a hard timeout and a deterministic fallback
         from engine.planner.llm_interface import SafeDecisionLLM, build_llm
 
-        self.llm = SafeDecisionLLM(llm or build_llm(), timeout_s=llm_timeout_s)
+        if (
+            not isinstance(max_concurrent_decisions, int)
+            or max_concurrent_decisions < 1
+        ):
+            raise ValueError("max_concurrent_decisions must be an int >= 1")
+        self.max_concurrent_decisions = max_concurrent_decisions
+        self.llm = SafeDecisionLLM(
+            llm or build_llm(),
+            timeout_s=llm_timeout_s,
+            # headroom for calls a timeout abandoned, so lanes never see "busy"
+            max_workers=max_concurrent_decisions + 2,
+        )
         if memory_store is not None and hasattr(self.llm.inner, "character_map"):
             self.llm.inner.character_map = memory_store.character_map
         self.runtime = CompanionRuntime(
@@ -104,6 +121,7 @@ class SoulForgeRuntimeServer:
             adapter=self._on_planner_dispatch,
             memory_store=memory_store,
             social_policy=SocialPolicy(auto_start=social, turn_gap_min=30.0),
+            ambient_min_interval_s=ambient_min_interval_s,
         )
         self.sim_minute = start_minute
         self.bodies: dict[str, BodyConnection] = {}
@@ -115,8 +133,9 @@ class SoulForgeRuntimeServer:
         self._stop = asyncio.Event()
         self.ready = asyncio.Event()
         self.bound_port: int | None = None
-        # events are handled on a worker so a slow LLM can never stall the tick
-        self._event_queue: asyncio.Queue = asyncio.Queue(maxsize=256)
+        # Decisions run on per-agent lanes off the tick path (engine/server/scheduler.py);
+        # created in serve() because it needs the running loop.
+        self.scheduler = None
         self._last_health_frame = ""
 
     # ------------------------------------------------------------------ core
@@ -140,12 +159,14 @@ class SoulForgeRuntimeServer:
 
     def _drain_runtime_events(self) -> None:
         """Events the runtime queued for itself (conversation turns, deferred
-        events) become due on the sim clock; hand them to the event worker."""
+        events) become due on the sim clock; hand them to the scheduler."""
         due = [e for e in list(self.runtime.event_queue) if e.t_min <= self.sim_minute]
         for event in due:
             with contextlib.suppress(ValueError):
                 self.runtime.event_queue.remove(event)
-            self._event_queue.put_nowait(event)
+            self.scheduler.submit(
+                event
+            )  # sheds (and logs) under backpressure, never raises
 
     async def _tick_loop(self) -> None:
         """Drift-corrected: next tick is scheduled on the absolute clock, so a
@@ -424,45 +445,44 @@ class SoulForgeRuntimeServer:
             payload=payload,
             target_agent=wire.target_agent,
         )
+        self.scheduler.submit(event)
+
+    def _make_scheduler(self):
+        from engine.server.scheduler import DecisionScheduler
+
+        return DecisionScheduler(
+            self.runtime,
+            minute=lambda: self.sim_minute,
+            on_done=self._event_done,
+            log=lambda agent, kind, detail: self.runtime.log(
+                self.sim_minute, agent, kind, detail
+            ),
+            max_concurrent=self.max_concurrent_decisions,
+            on_speech=self._flush_pending,
+        )
+
+    async def _event_done(self, event, error: str) -> None:
+        """After an event's decisions committed: send actions, plan state, completion."""
         try:
-            self._event_queue.put_nowait(event)
-        except asyncio.QueueFull:
+            await self._flush_pending()
+            await self._broadcast_new_trace()
+        except Exception as exc:
+            error = error or type(exc).__name__
             self.runtime.log(
                 self.sim_minute,
-                wire.target_agent or "*",
-                "event_dropped",
-                {"reason": "event queue full (backpressure)"},
+                event.target_agent or "*",
+                "event_error",
+                {"error": error},
             )
-
-    async def _event_worker(self) -> None:
-        """Runs LLM-bound event handling off the tick path with no blocking."""
-        loop = asyncio.get_event_loop()
-        while not self._stop.is_set():
-            try:
-                event = await asyncio.wait_for(self._event_queue.get(), timeout=0.25)
-            except asyncio.TimeoutError:
-                continue
-            try:
-                await loop.run_in_executor(
-                    None, self.runtime.handle_event_now, event, self.sim_minute
-                )
-                await self._flush_pending()
-                await self._broadcast_new_trace()
-                await self._complete_event(event)
-            except Exception as exc:  # decision failure must not kill the worker
-                self.runtime.log(
-                    self.sim_minute,
-                    event.target_agent or "*",
-                    "event_error",
-                    {"error": type(exc).__name__},
-                )
-                await self._complete_event(event, error=type(exc).__name__)
+        await self._complete_event(event, error=error)
 
     async def _complete_event(self, event, error: str = "") -> None:
         from soulforge_harness.protocol.frames import DecisionComplete
 
         body = self.bodies.get(event.payload.get("reply_body_id"))
         correlation = event.payload.get("event_id")
+        persona = self.runtime.personas.get(event.target_agent or "")
+        state = (persona.meta.get("cognitive_state") if persona else None) or {}
         if body is not None and correlation:
             await self._safe_send(
                 body.socket,
@@ -472,6 +492,7 @@ class SoulForgeRuntimeServer:
                         agent_id=event.target_agent or "",
                         error=error,
                         provider_health=self.provider_health(),
+                        cognitive_state=state if not error else {},
                     )
                 ),
             )
@@ -719,9 +740,9 @@ class SoulForgeRuntimeServer:
             process_request=self._process_http,
         ) as ws_server:
             self.bound_port = ws_server.sockets[0].getsockname()[1]
+            self.scheduler = self._make_scheduler()
             self.ready.set()
             ticker = asyncio.create_task(self._tick_loop())
-            event_worker = asyncio.create_task(self._event_worker())
             print(
                 f"SoulForge runtime server @ ws://{host}:{self.bound_port}  "
                 f"(protocol {PROTOCOL_VERSION}, clock {self.runtime.world.clock()}, "
@@ -731,11 +752,9 @@ class SoulForgeRuntimeServer:
                 await self._stop.wait()
             finally:
                 ticker.cancel()
-                event_worker.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await ticker
-                with contextlib.suppress(asyncio.CancelledError):
-                    await event_worker
+                await self.scheduler.stop()
                 store = self.runtime.memory_store
                 if hasattr(store, "flush"):
                     saved = await asyncio.to_thread(store.flush, 10.0)
@@ -774,6 +793,18 @@ def main() -> None:
     )
     parser.add_argument("--tick-hz", type=float, default=1.0)
     parser.add_argument("--llm-timeout", type=float, default=6.0)
+    parser.add_argument(
+        "--max-concurrent-decisions",
+        type=int,
+        default=2,
+        help="model calls in flight across agents (one slot is reserved for user turns)",
+    )
+    parser.add_argument(
+        "--ambient-min-interval",
+        type=float,
+        default=0.0,
+        help="wall seconds between ambient (arrival-notice) decisions; 0 = unlimited",
+    )
     parser.add_argument(
         "--mock-llm", action="store_true", help="offline: deterministic MockBehaviorLLM"
     )
@@ -817,6 +848,8 @@ def main() -> None:
         tick_hz=args.tick_hz,
         social=args.social,
         llm_timeout_s=args.llm_timeout,
+        ambient_min_interval_s=args.ambient_min_interval,
+        max_concurrent_decisions=args.max_concurrent_decisions,
         llm=MockBehaviorLLM() if args.mock_llm else None,
         memory_store=store,
     )

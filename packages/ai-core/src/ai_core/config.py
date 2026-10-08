@@ -28,10 +28,21 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 512
     llm_timeout: int = 30  # seconds
 
+    # ─── Nous Tone (local open model with tone steering + readout) ─────
+    # LLM_PROVIDER=nous_tone points chat at a local Nous Tone server (OpenAI
+    # compatible). Its readout probe reads the tone of each spoken sentence,
+    # which drives avatar expressions directly (see services/tone_reader.py).
+    nous_tone_url: str = ""  # empty = derived from llm_base_url when provider is nous_tone
+    nous_tone_read_enabled: bool = True  # per-sentence readouts for dialogue
+    nous_tone_read_timeout: float = 5.0  # seconds; a slow read never blocks a reply
+    nous_tone_steer: str = ""  # JSON open-loop strengths, e.g. {"warmth": 0.8}
+    nous_tone_target: str = ""  # JSON closed-loop targets 0..1, e.g. {"joy": 0.6}
+
     # ─── TTS Provider ───────────────────────────
     tts_provider: str = "dashscope"  # dashscope | fish | edge
     tts_model: str = "cosyvoice-v3-flash"
     tts_timeout: int = 15  # seconds
+    tts_breaker_s: float = 60.0  # after a primary TTS failure, use the fallback this long
     # Stream TTS audio chunk-by-chunk to the device (lower time-to-first-audio).
     # Only applies when the provider supports streaming AND the caller opts in
     # (ChatRequest.audio_streaming). Kill-switch: set false to force the

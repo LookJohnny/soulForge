@@ -15,14 +15,19 @@ from gateway.protocols.base import MessageType, OutboundMessage
 from gateway.protocols.registry import registry
 from gateway.session import DeviceRegistryUnavailable, SessionManager
 from gateway.handlers.audio import AudioHandler
-from gateway.handlers.audio_codec import StreamingMp3OpusEncoder
 from gateway.latency import latency_tracker
 from gateway.life import LifeLoop
 from gateway.pipeline.orchestrator import PipelineOrchestrator
 from gateway.playback import PlaybackChannel
 from gateway.plugins import match_plugin
+from gateway.reply import TurnStyle, render_turn, speech_lock
 
 logger = structlog.get_logger()
+
+
+def _log_turn_failure(task: asyncio.Task) -> None:
+    if not task.cancelled() and task.exception() is not None:
+        logger.error("gateway.turn_task_failed", error=type(task.exception()).__name__)
 
 
 class WebSocketServer:
@@ -82,11 +87,10 @@ class WebSocketServer:
             try:
                 chunk = await self.orchestrator.process_next_runtime_dialogue(session)
                 receipt = chunk.playback_receipt
-                while getattr(session, "_playing", False):
-                    await asyncio.sleep(0.05)
-
                 interrupted = False
-                async with PlaybackChannel(ws, adapter, session) as pb:
+                # waits for any reply playing now (voice, text or touch)
+                async with speech_lock(session), PlaybackChannel(ws, adapter, session) as pb:
+                    await self._send_expression(ws, adapter, chunk)
                     await pb.send_sentence(chunk.text)
                     if chunk.audio_data:
                         await pb.send_clip(chunk.audio_data)
@@ -116,9 +120,8 @@ class WebSocketServer:
                     )
                 logger.exception("gateway.runtime_dialogue_error")
                 await asyncio.sleep(0.2)
-            finally:
-                session._playing = False
-                session._interrupted = False
+            # No session-flag reset here: PlaybackChannel restores the flags it
+            # claimed, and clearing them blindly broke a turn playing meanwhile.
 
     async def _verify_device(self, device_id: str, device_secret: str | None) -> bool:
         """Verify device credentials against Redis/DB with fallback.
@@ -274,6 +277,7 @@ class WebSocketServer:
                 with contextlib.suppress(asyncio.CancelledError):
                     await runtime_dialogue_task
             if "session" in locals():
+                self._cancel_turns(session)
                 life = getattr(session, "_life", None)
                 if life:
                     life.cancel()
@@ -287,8 +291,42 @@ class WebSocketServer:
                 await self.orchestrator.close_session_runtime(session)
                 await self.session_manager.remove_session(session.session_id)
 
+    def _spawn_turn(self, session, coro) -> asyncio.Task:
+        """Run a reply turn off the receive loop, in arrival order per session.
+
+        Awaiting a turn inline froze the socket for the whole decision (seconds
+        on a local model): abort, barge-in audio and camera frames went unread."""
+        lock = getattr(session, "_turn_lock", None)
+        if lock is None:
+            lock = session._turn_lock = asyncio.Lock()
+        tasks = getattr(session, "_turn_tasks", None)
+        if tasks is None:
+            tasks = session._turn_tasks = set()
+
+        async def run():
+            try:
+                async with lock:
+                    await coro
+            finally:
+                coro.close()  # a turn cancelled while still queued never started
+
+        task = asyncio.create_task(run())
+        tasks.add(task)
+        task.add_done_callback(tasks.discard)
+        task.add_done_callback(_log_turn_failure)
+        return task
+
+    @staticmethod
+    def _cancel_turns(session) -> None:
+        for task in list(getattr(session, "_turn_tasks", ()) or ()):
+            task.cancel()
+
     async def _handle_message(self, ws, adapter, session, msg):
         """Route message to appropriate handler."""
+        if msg.type != MessageType.AUDIO:
+            # Typing, touching or controlling is activity too: a text-only client
+            # was idle-closed after idle_timeout_s while chatting.
+            session._last_activity = time.monotonic()
         if msg.type == MessageType.AUDIO:
             # During TTS playback: check for user interrupt (barge-in)
             if getattr(session, "_playing", False):
@@ -301,8 +339,9 @@ class WebSocketServer:
             # always-on bodies (e.g. the Pi thin client) get idle-closed mid-turn.
             session._last_activity = time.monotonic()
 
-            # Start VAD monitor if not running
-            if not getattr(session, "_silence_task", None):
+            # Start VAD monitor if not running (a finished task counts as not running)
+            task = getattr(session, "_silence_task", None)
+            if task is None or task.done():
                 session._silence_task = asyncio.create_task(self._vad_monitor(ws, adapter, session))
 
         elif msg.type == MessageType.CONTROL:
@@ -323,7 +362,9 @@ class WebSocketServer:
                         session._silence_task = None
                     audio = self.audio_handler.stop_listening(session)
                     if audio:
-                        await self._process_and_respond(ws, adapter, session, audio)
+                        self._spawn_turn(
+                            session, self._process_and_respond(ws, adapter, session, audio)
+                        )
 
             elif action == "event_choice":
                 await self._handle_event_choice(
@@ -343,6 +384,7 @@ class WebSocketServer:
                 if getattr(session, "_silence_task", None):
                     session._silence_task.cancel()
                     session._silence_task = None
+                self._cancel_turns(session)  # stop the reply that is thinking or playing
                 self.audio_handler.abort(session)
                 out = OutboundMessage(
                     type=MessageType.CONTROL,
@@ -368,21 +410,16 @@ class WebSocketServer:
                 return
             text = msg.payload if isinstance(msg.payload, str) else str(msg.payload)
             if text:
-                if self._is_vision_trigger(text):
-                    # Run as a task: the receive loop must stay free to accept
-                    # the vision_frame reply, or the capture would deadlock.
-                    logger.info("gateway.vision_trigger text=%s", text[:30])
 
-                    async def _vision_turn(turn_text=text):
-                        image = await self._request_frame(ws, adapter, session) or ""
-                        await self._process_text_and_respond(ws, adapter, session, turn_text, image)
+                async def _text_turn(turn_text=text):
+                    # off the receive loop, so a camera frame reply can still arrive
+                    image = await self._vision_frame_for(ws, adapter, session, turn_text)
+                    await self._process_text_and_respond(ws, adapter, session, turn_text, image)
 
-                    session._vision_task = asyncio.create_task(_vision_turn())
-                else:
-                    await self._process_text_and_respond(ws, adapter, session, text)
+                self._spawn_turn(session, _text_turn())
 
         elif msg.type == MessageType.TOUCH:
-            await self._handle_touch(ws, adapter, session, msg)
+            self._spawn_turn(session, self._handle_touch(ws, adapter, session, msg))
 
         elif msg.type == MessageType.HEARTBEAT:
             pass
@@ -428,6 +465,15 @@ class WebSocketServer:
         except Exception:
             logger.debug("gateway.barge_in_decode_error", exc_info=True)
 
+    def _rearm_listening(self, ws, adapter, session) -> None:
+        """Listen for the next utterance (same mic format) with a fresh VAD monitor.
+
+        Every way a voice turn ends comes back here: a browser sends "listen
+        start" only once, so a turn that forgot to re-arm left the mic deaf."""
+        self.audio_handler.start_listening(session, pcm=getattr(session, "_mic_pcm", False))
+        session._last_audio_time = time.monotonic()
+        session._silence_task = asyncio.create_task(self._vad_monitor(ws, adapter, session))
+
     async def _vad_monitor(self, ws, adapter, session):
         """Monitor VAD state and trigger processing when speech ends.
 
@@ -435,101 +481,81 @@ class WebSocketServer:
         every 100ms. Processing is triggered only when:
         1. Speech was detected (not just noise)
         2. Followed by sufficient silence (VAD says speech_complete)
+        Whatever happens, listening is re-armed afterwards (unless cancelled).
         """
         MAX_WAIT = 30.0  # absolute max wait time
         try:
             start = time.monotonic()
             while time.monotonic() - start < MAX_WAIT:
                 await asyncio.sleep(0.1)
-
-                if self.audio_handler.is_speech_complete(session):
-                    # Anchor for first-word latency: VAD said the user stopped talking
-                    t_speech_end = time.monotonic()
-                    # Try streaming ASR first (low latency)
-                    asr_text = await self.audio_handler.get_streaming_asr_result(session)
-                    session._t_speech_end = t_speech_end
-                    session._asr_finalize_ms = (time.monotonic() - t_speech_end) * 1000
-                    audio = self.audio_handler.stop_listening(session)
-
-                    # If streaming ASR failed or returned garbage, fall back to batch
-                    if not asr_text or len(asr_text) < 2 or asr_text.startswith("sentence_id"):
-                        if audio and asr_text:
-                            logger.info("gateway.streaming_asr_fallback bad=%s", asr_text[:30])
-                        if audio:
-                            # Fall back to sending audio to AI Core for batch ASR
-                            session._processing = True
-                            try:
-                                await self._process_and_respond(ws, adapter, session, audio)
-                            finally:
-                                session._processing = False
-                            self.audio_handler.start_listening(session)
-                            session._silence_task = asyncio.create_task(
-                                self._vad_monitor(ws, adapter, session)
-                            )
-                            return
-                        logger.info("gateway.vad_trigger empty asr")
-                        self.audio_handler.start_listening(session)
-                        session._silence_task = asyncio.create_task(
-                            self._vad_monitor(ws, adapter, session)
-                        )
-                        return
-
-                    if asr_text:
-                        logger.info("gateway.vad_trigger asr=%s", asr_text[:50])
-                        session._last_activity = time.monotonic()
-                        if getattr(session, "_life", None):
-                            session._life.notify_activity()
-
-                        # Check plugins first — skip LLM for simple queries
-                        plugin_result = match_plugin(asr_text)
-                        if plugin_result:
-                            handler, name = plugin_result
-                            try:
-                                reply = handler(asr_text)
-                                if reply:
-                                    logger.info("gateway.plugin hit=%s reply=%s", name, reply[:30])
-                                    await self._send_quick_reply(ws, adapter, session, reply)
-                                    # Restart listening
-                                    self.audio_handler.start_listening(session)
-                                    session._silence_task = asyncio.create_task(
-                                        self._vad_monitor(ws, adapter, session)
-                                    )
-                                    return
-                            except Exception:
-                                logger.exception("gateway.plugin_error name=%s", name)
-
-                        # Vision turn: fetch one camera frame before the pipeline
-                        image_data = None
-                        if self._is_vision_trigger(asr_text):
-                            logger.info("gateway.vision_trigger text=%s", asr_text[:30])
-                            # "" = vision turn whose capture failed → ai-core makes
-                            # the character honestly say it can't see right now.
-                            image_data = await self._request_frame(ws, adapter, session) or ""
-
-                        # No plugin match — full LLM pipeline
-                        session._processing = True
-                        try:
-                            await self._process_text_and_respond_streaming(
-                                ws, adapter, session, asr_text, image_data=image_data
-                            )
-                        finally:
-                            session._processing = False
-                    else:
-                        logger.info("gateway.vad_trigger empty asr")
-                        # Restart listening for next utterance
-                        self.audio_handler.start_listening(session)
-                        session._silence_task = asyncio.create_task(
-                            self._vad_monitor(ws, adapter, session)
-                        )
-                    return
-
-            # Max wait reached without speech — restart listening
-            logger.info("gateway.vad_timeout no speech detected")
-            self.audio_handler.stop_listening(session)
-            self.audio_handler.start_listening(session)
-            session._silence_task = asyncio.create_task(self._vad_monitor(ws, adapter, session))
+                if not self.audio_handler.is_speech_complete(session):
+                    continue
+                # Anchor for first-word latency: VAD said the user stopped talking
+                t_speech_end = time.monotonic()
+                # Try streaming ASR first (low latency)
+                asr_text = await self.audio_handler.get_streaming_asr_result(session)
+                session._t_speech_end = t_speech_end
+                session._asr_finalize_ms = (time.monotonic() - t_speech_end) * 1000
+                audio = self.audio_handler.stop_listening(session)
+                try:
+                    await self._voice_turn(ws, adapter, session, asr_text, audio)
+                finally:
+                    session._processing = False
+                break
+            else:
+                logger.info("gateway.vad_timeout no speech detected")
+                self.audio_handler.stop_listening(session)
+            self._rearm_listening(ws, adapter, session)
         except asyncio.CancelledError:
             pass
+
+    async def _voice_turn(self, ws, adapter, session, asr_text: str | None, audio: bytes | None):
+        """One finished utterance: plugin answer, batch-ASR fallback or the full pipeline."""
+        # Streaming ASR failed or returned garbage: fall back to batch ASR in AI Core.
+        if not asr_text or len(asr_text) < 2 or asr_text.startswith("sentence_id"):
+            if audio and asr_text:
+                logger.info("gateway.streaming_asr_fallback bad=%s", asr_text[:30])
+            if audio:
+                session._processing = True
+                await self._process_and_respond(ws, adapter, session, audio)
+            else:
+                logger.info("gateway.vad_trigger empty asr")
+            return
+
+        logger.info("gateway.vad_trigger asr=%s", asr_text[:50])
+        session._last_activity = time.monotonic()
+        if getattr(session, "_life", None):
+            session._life.notify_activity()
+
+        # Plugins first: simple queries (time, date, math) skip the brain
+        plugin_result = match_plugin(asr_text)
+        if plugin_result:
+            handler, name = plugin_result
+            try:
+                reply = handler(asr_text)
+                if reply:
+                    logger.info("gateway.plugin hit=%s reply=%s", name, reply[:30])
+                    await self._send_quick_reply(ws, adapter, session, reply)
+                    return
+            except Exception:
+                logger.exception("gateway.plugin_error name=%s", name)
+
+        image_data = await self._vision_frame_for(ws, adapter, session, asr_text)
+        session._processing = True
+        await self._process_text_and_respond_streaming(
+            ws, adapter, session, asr_text, image_data=image_data
+        )
+
+    async def _vision_frame_for(self, ws, adapter, session, text: str) -> str | None:
+        """A camera frame for a vision utterance, or None when it would be wasted.
+
+        Only the legacy ai-core pipeline consumes images; the Character Runtime
+        path ignores them, so capturing would only add up to 5 s of latency."""
+        if not self._is_vision_trigger(text) or settings.character_runtime_url:
+            return None
+        logger.info("gateway.vision_trigger text=%s", text[:30])
+        # "" = vision turn whose capture failed: ai-core says honestly it can't see
+        return await self._request_frame(ws, adapter, session) or ""
 
     # Utterances that ask the character to look at something through the
     # device camera. Substring match on the ASR text, same style as plugins.
@@ -620,6 +646,15 @@ class WebSocketServer:
             },
         )
 
+    async def _send_expression(self, ws, adapter, chunk):
+        """Expression cue for the sentence whose audio follows next on this socket.
+
+        Sent immediately before the sentence's clip so the client binds it to that
+        clip and applies it when the clip actually starts playing (TTS audio lags
+        the text). Clients that do not know the type ignore it."""
+        if chunk.expression:
+            await self._send_control(ws, adapter, {**chunk.expression, "type": "expression"})
+
     async def _send_relationship(self, ws, adapter, chunk):
         if chunk.relationship:
             await self._send_control(ws, adapter, {**chunk.relationship, "type": "relationship"})
@@ -697,7 +732,7 @@ class WebSocketServer:
         Used for plugin responses (time, date, math) that don't need AI.
         """
         try:
-            async with PlaybackChannel(ws, adapter, session) as pb:
+            async with speech_lock(session), PlaybackChannel(ws, adapter, session) as pb:
                 await pb.send_start()
                 await pb.send_sentence(text)
 
@@ -749,7 +784,12 @@ class WebSocketServer:
         if core_stages:
             for k, v in core_stages.items():
                 stages[f"core_{k}"] = v
-        stages = {k: v for k, v in stages.items() if v is not None}
+        # numbers only: a stage may carry a marker such as {"asr_only": "no_transcript"}
+        stages = {
+            k: v
+            for k, v in stages.items()
+            if isinstance(v, int | float) and not isinstance(v, bool)
+        }
         session._asr_finalize_ms = None
         latency_tracker.record_turn(route, stages)
         logger.info(
@@ -762,206 +802,36 @@ class WebSocketServer:
     async def _process_text_and_respond_streaming(
         self, ws, adapter, session, text: str, image_data: str | None = None
     ):
-        """Process text from streaming ASR through AI pipeline with TTS playback.
-
-        Same as _process_and_respond but takes pre-recognized text instead of
-        raw audio, skipping AI Core's ASR step. Includes playback state
-        management and interrupt detection.
-        """
-        playback_receipts: set[str] = set()
-        try:
-            logger.info("gateway.responding start (streaming asr: %s)", text[:30])
-
-            # Latency anchors: measure from VAD speech-end when available,
-            # otherwise from the start of processing.
-            t_speech_end = getattr(session, "_t_speech_end", None)
-            session._t_speech_end = None
-            t_ref = t_speech_end if t_speech_end is not None else time.monotonic()
-            first_chunk_ms = None
-            core_stages = None
-            full_text = ""
-            interrupted = False
-            total_opus_frames = 0
-
-            async with PlaybackChannel(ws, adapter, session) as pb:
-                await pb.send_start()
-
-                # Thinking filler — instant "嗯？" in the character's voice while
-                # the pipeline works; masks first-word latency.
-                life = getattr(session, "_life", None)
-                filler = life.pop_filler() if life else None
-                if filler:
-                    try:
-                        await pb.send_clip(filler, pace=False)
-                    except Exception:
-                        logger.exception("gateway.filler_error")
-                    # The filler must not count as the reply's first word,
-                    # and the mouth goes back to idle during the think gap
-                    pb.mark_aside_done()
-
-                # Per-sentence incremental MP3→Opus encoder (streaming TTS path).
-                enc: StreamingMp3OpusEncoder | None = None
-
-                async for chunk in self.orchestrator.process_text_stream(
-                    session, text, stream_audio=True, image_data=image_data
-                ):
-                    if chunk.playback_receipt:
-                        playback_receipts.add(chunk.playback_receipt)
-                    if chunk.is_done:
-                        full_text = chunk.full_text or full_text
-                        core_stages = chunk.stages
-                        break
-
-                    if first_chunk_ms is None:
-                        first_chunk_ms = (time.monotonic() - t_ref) * 1000
-
-                    if pb.interrupted:
-                        logger.info("gateway.interrupted by user")
-                        interrupted = True
-                        break
-
-                    if chunk.kind == "sentence":
-                        await pb.send_sentence(chunk.text)
-                        full_text += chunk.text
-                        # Legacy whole-clip audio (non-streaming providers ride here).
-                        if chunk.audio_data and not await pb.send_clip(chunk.audio_data):
-                            interrupted = True
-
-                    elif chunk.kind == "audio_chunk":
-                        if chunk.audio_data:
-                            if enc is None:
-                                enc = StreamingMp3OpusEncoder()
-                                await pb.send_sentence_start()
-                            frames = await enc.feed(chunk.audio_data)
-                            if frames and not await pb.send_frames(frames):
-                                interrupted = True
-
-                    elif chunk.kind == "audio_end":
-                        if enc is not None:
-                            frames = await enc.finish()
-                            if frames and not await pb.send_frames(frames):
-                                interrupted = True
-                            enc = None
-
-                    elif chunk.kind == "emotion":
-                        await self._send_emotion(ws, adapter, chunk)
-                    elif chunk.kind == "relationship":
-                        self._remember_energy(session, chunk.relationship)
-                        await self._send_relationship(ws, adapter, chunk)
-                    elif chunk.kind == "event":
-                        await self._send_event(ws, adapter, chunk)
-
-                    if interrupted:
-                        break
-
-                # Flush any dangling encoder (e.g. stream ended before audio_end).
-                if enc is not None and not interrupted:
-                    tail = await enc.finish()
-                    if tail:
-                        await pb.send_frames(tail)
-
-                # Record before the playback-wait sleeps so "respond" excludes them
-                self._record_voice_turn(
-                    session,
-                    t_ref,
-                    first_chunk_ms,
-                    pb.first_frame_ms(t_ref),
-                    core_stages,
-                    interrupted,
-                )
-                await pb.finish()
-                total_opus_frames = pb.total_frames
-
-            await self._confirm_playback_receipts(
-                playback_receipts,
-                played=not interrupted,
-                detail="user barge-in interrupted playback" if interrupted else "",
-            )
-
-            await self.session_manager.add_to_history(session.session_id, "user", text)
-            if full_text:
-                await self.session_manager.add_to_history(
-                    session.session_id, "assistant", full_text
-                )
-            if getattr(session, "_life", None):
-                session._life.notify_activity()
-            logger.info(
-                "gateway.responding done text=%s frames=%d", full_text[:50], total_opus_frames
-            )
-
-        except Exception:
-            await self._confirm_playback_receipts(
-                playback_receipts,
-                played=False,
-                detail="gateway playback error",
-            )
-            logger.exception("gateway.pipeline_error")
-            error_out = OutboundMessage(
-                type=MessageType.CONTROL,
-                payload={"type": "tts", "state": "stop"},
-            )
-            await ws.send_text(await adapter.encode(error_out))
+        """A voice turn from streaming ASR: paced playback, barge-in, thinking filler."""
+        life = getattr(session, "_life", None)
+        return await render_turn(
+            self,
+            ws,
+            adapter,
+            session,
+            self.orchestrator.process_text_stream(
+                session, text, stream_audio=True, image_data=image_data
+            ),
+            TurnStyle(
+                voice=True,
+                route="voice_turn",
+                filler=life.pop_filler() if life else None,
+                user_text=text,
+            ),
+        )
 
     async def _process_text_and_respond(
         self, ws, adapter, session, text: str, image_data: str | None = None
     ):
-        """Process text input through AI pipeline with streaming response."""
-        playback_receipts: set[str] = set()
-        try:
-            # Text-chat path: device buffers freely (no pacing), no barge-in,
-            # and the mic-suppression playing flag is not claimed.
-            async with PlaybackChannel(
-                ws, adapter, session, pace=False, check_interrupt=False, claim=False
-            ) as pb:
-                await pb.send_start()
-
-                full_text = ""
-                async for chunk in self.orchestrator.process_text_stream(
-                    session, text, image_data=image_data
-                ):
-                    if chunk.playback_receipt:
-                        playback_receipts.add(chunk.playback_receipt)
-                    if chunk.is_done:
-                        full_text = chunk.full_text or full_text
-                        break
-
-                    if chunk.kind == "emotion":
-                        await self._send_emotion(ws, adapter, chunk)
-                        continue
-                    if chunk.kind == "relationship":
-                        self._remember_energy(session, chunk.relationship)
-                        await self._send_relationship(ws, adapter, chunk)
-                        continue
-                    if chunk.kind == "event":
-                        await self._send_event(ws, adapter, chunk)
-                        continue
-
-                    await pb.send_sentence(chunk.text)
-                    full_text += chunk.text
-                    if chunk.audio_data:
-                        await pb.send_clip(chunk.audio_data, sentence_start=False)
-
-                await pb.finish(settle=False)
-            await self._confirm_playback_receipts(playback_receipts, played=True)
-
-            await self.session_manager.add_to_history(session.session_id, "user", text)
-            if full_text:
-                await self.session_manager.add_to_history(
-                    session.session_id, "assistant", full_text
-                )
-
-        except Exception:
-            await self._confirm_playback_receipts(
-                playback_receipts,
-                played=False,
-                detail="gateway text playback error",
-            )
-            logger.exception("gateway.text_pipeline_error")
-            error_out = OutboundMessage(
-                type=MessageType.CONTROL,
-                payload={"type": "tts", "state": "stop"},
-            )
-            await ws.send_text(await adapter.encode(error_out))
+        """A typed turn: the device buffers freely, no barge-in."""
+        return await render_turn(
+            self,
+            ws,
+            adapter,
+            session,
+            self.orchestrator.process_text_stream(session, text, image_data=image_data),
+            TurnStyle(voice=False, user_text=text),
+        )
 
     async def _handle_touch(self, ws, adapter, session, msg):
         """Forward touch event to ai-core and optionally trigger a response."""
@@ -991,9 +861,12 @@ class WebSocketServer:
             if result and result.get("text"):
                 # Touch triggered a verbal response (no "start": touch replies
                 # never began a thinking indicator on the device)
-                async with PlaybackChannel(
-                    ws, adapter, session, pace=False, check_interrupt=False, claim=False
-                ) as pb:
+                async with (
+                    speech_lock(session),
+                    PlaybackChannel(
+                        ws, adapter, session, pace=False, check_interrupt=False, claim=False
+                    ) as pb,
+                ):
                     await pb.send_sentence(result["text"])
                     if result.get("audio_data"):
                         await pb.send_clip(result["audio_data"], sentence_start=False)
@@ -1045,128 +918,20 @@ class WebSocketServer:
             logger.exception("gateway.reaction_event_error")
 
     async def _process_and_respond(self, ws, adapter, session, audio_data: bytes):
-        """Process audio through AI pipeline with streaming response.
-
-        Sets session._playing = True during TTS playback to suppress echo
-        from the device's microphone picking up the speaker output.
-        After all audio is sent, waits for estimated playback duration
-        before resuming listening.
-        """
-        playback_receipts: set[str] = set()
-        try:
-            logger.info("gateway.responding start")
-
-            t_speech_end = getattr(session, "_t_speech_end", None)
-            session._t_speech_end = None
-            t_ref = t_speech_end if t_speech_end is not None else time.monotonic()
-            first_chunk_ms = None
-            core_stages = None
-            full_text = ""
-            user_text = ""
-            interrupted = False
-            total_opus_frames = 0
-            need_vision_text = None
-
-            async with PlaybackChannel(ws, adapter, session) as pb:
-                await pb.send_start()
-
-                async for chunk in self.orchestrator.process_audio_stream(session, audio_data):
-                    if chunk.playback_receipt:
-                        playback_receipts.add(chunk.playback_receipt)
-                    if chunk.is_done:
-                        full_text = chunk.full_text or full_text
-                        user_text = chunk.user_text
-                        core_stages = chunk.stages
-                        break
-
-                    if first_chunk_ms is None:
-                        first_chunk_ms = (time.monotonic() - t_ref) * 1000
-
-                    if pb.interrupted:
-                        logger.info("gateway.interrupted by user")
-                        interrupted = True
-                        break
-
-                    if chunk.kind == "emotion":
-                        await self._send_emotion(ws, adapter, chunk)
-                        continue
-                    if chunk.kind == "relationship":
-                        self._remember_energy(session, chunk.relationship)
-                        await self._send_relationship(ws, adapter, chunk)
-                        continue
-                    if chunk.kind == "event":
-                        await self._send_event(ws, adapter, chunk)
-                        continue
-
-                    if chunk.kind == "need_vision":
-                        # ai-core transcribed a vision request; capture a frame
-                        # and re-run the turn as text+image after playback closes.
-                        need_vision_text = chunk.text
-                        break
-
-                    logger.info(
-                        "gateway.sending sentence=%s audio=%d",
-                        chunk.text[:30],
-                        len(chunk.audio_data) if chunk.audio_data else 0,
-                    )
-                    await pb.send_sentence(chunk.text)
-                    full_text += chunk.text
-
-                    if chunk.audio_data and not await pb.send_clip(chunk.audio_data):
-                        interrupted = True
-                        break
-
-                self._record_voice_turn(
-                    session,
-                    t_ref,
-                    first_chunk_ms,
-                    pb.first_frame_ms(t_ref),
-                    core_stages,
-                    interrupted,
-                    route="voice_turn_batch",
-                )
-                await pb.finish()
-                total_opus_frames = pb.total_frames
-
-            await self._confirm_playback_receipts(
-                playback_receipts,
-                played=not interrupted,
-                detail="user barge-in interrupted playback" if interrupted else "",
+        """A voice turn from batch ASR (ai-core transcribes); the user text comes back
+        on the done chunk. A legacy-path vision request re-runs as a streaming turn."""
+        result = await render_turn(
+            self,
+            ws,
+            adapter,
+            session,
+            self.orchestrator.process_audio_stream(session, audio_data),
+            TurnStyle(voice=True, route="voice_turn_batch"),
+        )
+        if result.need_vision:
+            logger.info("gateway.vision_trigger text=%s", result.need_vision[:30])
+            image = await self._request_frame(ws, adapter, session) or ""
+            return await self._process_text_and_respond_streaming(
+                ws, adapter, session, result.need_vision, image_data=image
             )
-
-            if need_vision_text:
-                logger.info("gateway.vision_trigger text=%s", need_vision_text[:30])
-                image = await self._request_frame(ws, adapter, session) or ""
-                await self._process_text_and_respond_streaming(
-                    ws, adapter, session, need_vision_text, image_data=image
-                )
-                return
-
-            logger.info(
-                "gateway.responding done text=%s frames=%d interrupted=%s",
-                full_text[:50],
-                total_opus_frames,
-                interrupted,
-            )
-
-            if user_text:
-                await self.session_manager.add_to_history(session.session_id, "user", user_text)
-            if full_text:
-                await self.session_manager.add_to_history(
-                    session.session_id, "assistant", full_text
-                )
-            if getattr(session, "_life", None):
-                session._life.notify_activity()
-
-        except Exception:
-            await self._confirm_playback_receipts(
-                playback_receipts,
-                played=False,
-                detail="gateway playback error",
-            )
-            logger.exception("gateway.pipeline_error")
-            error_out = OutboundMessage(
-                type=MessageType.CONTROL,
-                payload={"type": "tts", "state": "stop"},
-            )
-            await ws.send_text(await adapter.encode(error_out))
+        return result

@@ -14,6 +14,7 @@ import math
 import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 import asyncpg
 import structlog
@@ -146,7 +147,7 @@ def _stringify_row(row: asyncpg.Record) -> dict:
     for key, value in dict(row).items():
         if hasattr(value, "isoformat"):
             result[key] = value.isoformat()
-        elif hasattr(value, "hex"):
+        elif isinstance(value, UUID):  # not hasattr(value, "hex"): floats have .hex() too
             result[key] = str(value)
         else:
             result[key] = value

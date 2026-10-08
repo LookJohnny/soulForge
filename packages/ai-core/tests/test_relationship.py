@@ -31,7 +31,9 @@ from ai_core.services.relationship import (
     relationship_payload,
 )
 
-NOW = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
+# Relative to the real clock: the engine decays against datetime.now(), so a fixed
+# date here turned "last interaction" into weeks ago once the calendar moved on.
+NOW = datetime.now(UTC)
 
 
 def _state(**over) -> dict:

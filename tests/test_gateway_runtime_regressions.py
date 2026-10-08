@@ -139,6 +139,16 @@ class _FakeBridge:
             ],
         }
 
+    async def stream_utterance(self, text: str, *, payload=None):
+        """The streaming face of the same turn: each line, then the completion."""
+        decision = await self.process_utterance(text)
+        for command in decision["commands"]:
+            yield "command", command
+        yield (
+            "complete",
+            {"type": "decision_complete", "correlation_id": decision["correlation_id"]},
+        )
+
     async def confirm_spoken(self, command_id: str, *, played: bool, detail: str):
         self.confirmations.append((command_id, played, detail))
 

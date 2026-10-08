@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
+from uuid import UUID
 
 import asyncpg
 from jinja2 import Environment, FileSystemLoader
@@ -471,7 +472,7 @@ class PromptBuilder:
             # Convert UUID objects to strings and asyncpg enums to plain strings.
             result = {}
             for k, v in dict(row).items():
-                if hasattr(v, "hex"):
+                if isinstance(v, UUID):  # not hasattr(v, "hex"): floats have .hex() too
                     result[k] = str(v)
                 elif hasattr(v, "value") and not isinstance(v, (int, float, bool)):
                     # asyncpg returns postgres enums as strings already, but
@@ -500,7 +501,7 @@ class PromptBuilder:
             )
             if not row:
                 return None
-            result = {k: (str(v) if hasattr(v, "hex") else v) for k, v in dict(row).items()}
+            result = {k: (str(v) if isinstance(v, UUID) else v) for k, v in dict(row).items()}
             await self.cache.set_json(cache_key, result, ttl=self.CACHE_TTL)
             return result
 
@@ -520,6 +521,6 @@ class PromptBuilder:
             )
             if not row:
                 return None
-            result = {k: (str(v) if hasattr(v, "hex") else v) for k, v in dict(row).items()}
+            result = {k: (str(v) if isinstance(v, UUID) else v) for k, v in dict(row).items()}
             await self.cache.set_json(cache_key, result, ttl=self.CACHE_TTL)
             return result

@@ -42,7 +42,7 @@ class AICoreBehaviorLLM:
                 "agent_id": agent_id, "body_id": supplied.get("body_id") or "runtime",
                 "session_id": supplied.get("session_id") or f"{self.user_id}:{character_id}"}
 
-    def decide(self, event, persona, world, current_template, current_interruptible):
+    def _request(self, path, event, persona, world, current_template, current_interruptible):
         payload = event.payload if isinstance(event.payload, dict) else {}
         identity = self.identity_for(persona.agent_id, payload.get("identity"))
         event_data = asdict(event)
@@ -53,13 +53,13 @@ class AICoreBehaviorLLM:
                 "world": world.context_for(persona.agent_id), "event": event_data,
                 "current_template": current_template, "current_interruptible": current_interruptible,
                 "available_actions": list(world.body_actions.get(persona.agent_id, []))[:40]}
-        request = urllib.request.Request(
-            f"{self.base_url}/cognition/decide", data=json.dumps(data, ensure_ascii=False).encode(),
+        return urllib.request.Request(
+            f"{self.base_url}{path}", data=json.dumps(data, ensure_ascii=False).encode(),
             headers={"Content-Type": "application/json", "X-Service-Token": self.service_token,
                      "X-Brand-Id": self.brand_id},
         )
-        with self.opener.open(request, timeout=self.timeout_s) as response:
-            result = json.load(response)
+
+    def _decision(self, result: dict) -> BehaviorDecision:
         raw = dict(result["decision"])
         raw["impact"] = ImpactLevel(raw["impact"])
         fields = BehaviorDecision.__dataclass_fields__
@@ -68,3 +68,36 @@ class AICoreBehaviorLLM:
         decision.provider_status = result.get("provider_status") or {}
         self.last_model = decision.provider_status.get("model") or self.model
         return decision
+
+    def decide(self, event, persona, world, current_template, current_interruptible):
+        request = self._request("/cognition/decide", event, persona, world,
+                                current_template, current_interruptible)
+        with self.opener.open(request, timeout=self.timeout_s) as response:
+            return self._decision(json.load(response))
+
+    def decide_stream(self, event, persona, world, current_template, current_interruptible, *, on_line):
+        """The same decision, streamed: on_line(line) runs for each dialogue line
+        as soon as AI Core has it (before the rest of the decision exists)."""
+        request = self._request("/cognition/decide/stream", event, persona, world,
+                                current_template, current_interruptible)
+        with self.opener.open(request, timeout=self.timeout_s) as response:
+            for raw in response:  # NDJSON, read as it arrives
+                if not raw.strip():
+                    continue
+                item = json.loads(raw)
+                kind = item.get("type")
+                if kind == "line" and isinstance(item.get("line"), dict):
+                    on_line(item["line"])
+                elif kind == "result":
+                    return self._decision(item)
+                elif kind == "error":
+                    raise CognitionStreamError(int(item.get("status") or 503))
+        raise CognitionStreamError(502)  # stream ended without a result
+
+
+class CognitionStreamError(RuntimeError):
+    """An in-band failure of a streamed decision; ``code`` mirrors the HTTP status."""
+
+    def __init__(self, code: int):
+        super().__init__(f"cognition stream failed with status {code}")
+        self.code = code

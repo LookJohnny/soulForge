@@ -9,6 +9,9 @@
    ↓ {"type":"web_hello",...}
      {"type":"text","content","state":"start|sentence|sentence_start|stop"}
      {"type":"control","payload":{"type":"emotion","pad":{p,a,d},...}}
+     {"type":"control","payload":{"type":"expression","weights","readout","text","index"}}
+       —— 紧挨在该句音频之前发；绑定到下一段音频，**开播那一刻**才派发 'cue'
+          （TTS 音频比文字晚到、晚播，按到达时间换表情会抢跑）
      {"type":"control","payload":{"type":"tts","state":"stop"}}
      二进制 Opus 帧（24kHz, 60ms）
 
@@ -31,6 +34,10 @@ export class GatewayClient extends EventTarget {
     this.speaking = false;
 
     this.mic = null; // {stream, track, processor, encoder, reader}
+
+    this._pendingCue = null;     // 等待绑定到下一段音频的表情 cue
+    this._opusCues = new Map();  // Opus 帧 timestamp → cue（解码输出异步）
+    this._cueTimers = new Set();
   }
 
   // ── 连接 ─────────────────────────────────────────────
@@ -74,13 +81,14 @@ export class GatewayClient extends EventTarget {
       const state = msg.state || '';
       if (state === 'start') this._setSpeaking(true);
       else if (state === 'sentence') this._emit('sentence', { text: msg.content });
-      else if (state === 'stop') this._drainThenStop();
+      else if (state === 'stop') { this._pendingCue = null; this._drainThenStop(); }
       else if (!state && msg.content) this._emit('sentence', { text: msg.content });
       return;
     }
     if (msg.type === 'control') {
       const p = msg.payload ?? {};
       if (p.type === 'emotion') this._emit('emotion', p);
+      else if (p.type === 'expression') this._queueCue(p);
       else if (p.type === 'tts' && p.state === 'stop') this._drainThenStop();
       else if (p.type === 'reaction') this._emit('reaction', p);
       // 通用分发：relationship / event / memory … 由页面按 `control:<type>` 订阅
@@ -111,10 +119,12 @@ export class GatewayClient extends EventTarget {
     const u8 = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
     const isMp3 = (u8[0] === 0xff && (u8[1] & 0xe0) === 0xe0) || (u8[0] === 0x49 && u8[1] === 0x44 && u8[2] === 0x33); // frame sync / 'ID3'
     const isWav = u8[0] === 0x52 && u8[1] === 0x49 && u8[2] === 0x46 && u8[3] === 0x46; // 'RIFF'
-    if (isMp3 || isWav) { this._decodeClip(buf); return; }
+    const cue = this._pendingCue; this._pendingCue = null;
+    if (isMp3 || isWav) { this._decodeClip(buf, cue); return; }
     if (!this.decoder || this.decoder.state !== 'configured') this._makeDecoder();
     if (!this.decoder) return;
     try {
+      if (cue) this._opusCues.set(this._ts, cue);
       this.decoder.decode(new EncodedAudioChunk({ type: 'key', timestamp: this._ts, data: buf }));
       this._ts += 60000;
     } catch (e) { this._emit('error', e); this._makeDecoder(); }
@@ -129,20 +139,38 @@ export class GatewayClient extends EventTarget {
     });
     this.decoder.configure({ codec: 'opus', sampleRate: 48000, numberOfChannels: 1 });
     this._ts = 0;
+    this._opusCues?.clear();
   }
 
   /** 整段 MP3/WAV：顺序排队播放，保持句间连续。 */
-  _decodeClip(buf) {
+  _decodeClip(buf, cue = null) {
     const seq = (this._clipChain ??= Promise.resolve());
     this._clipChain = seq.then(async () => {
       let audio;
       try { audio = await this.audioCtx.decodeAudioData(buf.slice(0)); }
-      catch (e) { this._emit('error', new Error('音频解码失败: ' + (e?.message ?? e))); return; }
-      this._schedule(audio);
+      catch (e) {
+        this._emit('error', new Error('音频解码失败: ' + (e?.message ?? e)));
+        if (cue) this._fireCue(cue, null, 0);   // 没有声音也别丢掉这句的表情
+        return;
+      }
+      this._schedule(audio, cue);
     });
   }
 
-  _schedule(buffer) {
+  /** 表情 cue：有音频时间线就等绑定的音频；没有（未开声音 / 纯文字）立即派发。 */
+  _queueCue(cue) {
+    if (!this.audioCtx) { this._fireCue(cue, null, 0); return; }
+    this._pendingCue = cue; // 新句覆盖旧句：上一句若没有音频（TTS 失败），它的 cue 作废
+  }
+
+  _fireCue(cue, duration, delaySec) {
+    const fire = () => this._emit('cue', { ...cue, duration });
+    if (delaySec <= 0.005) { fire(); return; }
+    const id = setTimeout(() => { this._cueTimers.delete(id); fire(); }, delaySec * 1000);
+    this._cueTimers.add(id);
+  }
+
+  _schedule(buffer, cue = null, cueDuration = buffer.duration) {
     const ctx = this.audioCtx;
     const src = ctx.createBufferSource();
     src.buffer = buffer;
@@ -150,6 +178,8 @@ export class GatewayClient extends EventTarget {
     const now = ctx.currentTime;
     if (this.playHead < now + 0.02) this.playHead = now + 0.08;
     src.start(this.playHead);
+    // 这句的表情在它的声音真正响起时切换（AudioContext 时钟 → 墙钟延时）
+    if (cue) this._fireCue(cue, cueDuration, this.playHead - now);
     this.playHead += buffer.duration;
     this.sources.add(src);
     src.onended = () => {
@@ -164,8 +194,10 @@ export class GatewayClient extends EventTarget {
     frame.copyTo(pcm, { planeIndex: 0, format: 'f32-planar' });
     const buffer = this.audioCtx.createBuffer(1, n, frame.sampleRate);
     buffer.copyToChannel(pcm, 0);
+    const cue = this._opusCues.get(frame.timestamp);
+    if (cue) this._opusCues.delete(frame.timestamp);
     frame.close();
-    this._schedule(buffer);
+    this._schedule(buffer, cue ?? null, null); // 裸 Opus 逐帧到达：句长未知，持续到下一句/说完
   }
 
   _drainThenStop() {
@@ -176,6 +208,10 @@ export class GatewayClient extends EventTarget {
   _stopPlayback() {
     for (const s of this.sources) { try { s.stop(); } catch { /* already ended */ } }
     this.sources.clear();
+    for (const id of this._cueTimers) clearTimeout(id);
+    this._cueTimers.clear();
+    this._opusCues.clear();
+    this._pendingCue = null;
     this.playHead = 0;
     this._stopPending = false;
     this._setSpeaking(false);

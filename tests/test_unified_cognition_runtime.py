@@ -101,18 +101,20 @@ def test_runtime_restores_authoritative_mood_from_store():
 
 @pytest.mark.asyncio
 async def test_one_core_call_yields_action_and_only_requesting_voice_speaks():
-    requests = []
+    requests, paths = [], []
 
     class CoreHandler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
 
         def do_POST(self):
-            assert self.path == "/cognition/decide"
+            # a user utterance streams its decision; other events use /decide
+            assert self.path in ("/cognition/decide", "/cognition/decide/stream")
             assert self.headers["X-Service-Token"] == "test-only"
             requests.append(
                 json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             )
+            paths.append(self.path)
             result = {
                 "decision": asdict(decision()),
                 "authoritative_state": {
@@ -127,6 +129,14 @@ async def test_one_core_call_yields_action_and_only_requesting_voice_speaks():
                 },
             }
             body = json.dumps(result).encode()
+            if self.path.endswith("/stream"):
+                lines = [
+                    json.dumps({"type": "line", "line": line}, ensure_ascii=False)
+                    for line in result["decision"]["dialogue"]
+                ]
+                body = "\n".join(
+                    [*lines, json.dumps({"type": "result", **result})]
+                ).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -172,6 +182,7 @@ async def test_one_core_call_yields_action_and_only_requesting_voice_speaks():
             result = await first.process_utterance("我喜欢蓝色，向我挥手")
             elapsed = asyncio.get_running_loop().time() - start
             assert len(requests) == 1
+            assert paths == ["/cognition/decide/stream"]  # the user's turn streamed
             assert requests[0]["identity"]["body_id"] == "voice-one"
             assert "wave" in requests[0]["available_actions"]
             assert result["text"] == "我记得，也向你挥手。"
@@ -244,8 +255,10 @@ async def test_sentence_tts_uses_current_emotion_and_frozen_character(monkeypatc
         },
     }
     orchestrator = PipelineOrchestrator.__new__(PipelineOrchestrator)
-    orchestrator._runtime_decision = AsyncMock(
-        return_value=(bridge, {"text": command["dialogue"], "commands": [command]})
+    orchestrator._runtime_stream = stream_of(
+        AsyncMock(
+            return_value=(bridge, {"text": command["dialogue"], "commands": [command]})
+        )
     )
     orchestrator.synthesize_tts = AsyncMock(return_value=b"audio")
     stream = orchestrator.process_text_stream(session, "测试")
@@ -270,3 +283,16 @@ async def test_sentence_tts_uses_current_emotion_and_frozen_character(monkeypatc
     assert done.stages["first_audio_ms"] is not None
     assert not bridge.confirm_spoken.called
     await stream.aclose()
+
+
+def stream_of(decide):
+    """Replay a stubbed whole decision (bridge, {"commands": ...}) as the Runtime's
+    stream: each line, then the completion carrying the turn's cognitive state."""
+
+    async def _stream(session, text):
+        bridge, decision = await decide(session, text)
+        for command in decision.get("commands", []):
+            yield "command", command, bridge
+        yield "complete", {"type": "decision_complete"}, bridge
+
+    return _stream
