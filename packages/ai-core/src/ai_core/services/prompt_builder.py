@@ -146,8 +146,15 @@ class PromptBuilder:
         sensations: str | None = None,
         mid_session_thought: str | None = None,
         structured_output: bool | None = True,
+        defer_dynamic: bool = False,
     ) -> dict:
         """Build complete system prompt and voice config.
+
+        defer_dynamic: keep the system prompt identical across turns (the current
+        moment, mood, relationship numbers and memories are left out of it) and
+        return them as "dynamic_prompt" for the caller to place after the
+        conversation history. A local model then reuses the cached prefill of the
+        whole static head and the history instead of re-reading ~2k tokens.
 
         Args:
             emotion_state: Character's current emotion for prompt injection.
@@ -345,24 +352,51 @@ class PromptBuilder:
         safe_palette = [_sanitize_user_field(str(p), max_length=24) for p in raw_palette][:20]
 
         # Render template with PersonaContext-driven variables
+        now = {
+            "current_emotion": current_emotion,
+            "current_emotion_description": current_emotion_description,
+            "user_mood_instruction": user_mood_instruction,
+            "touch_context": touch_context or "",
+            "time_context": time_context or "",
+            "sensations": sensations or "",
+            "relationship_state_block": relationship_state_block,
+            "memory_context": memory_context,
+        }
+        dynamic_prompt = ""
+        if defer_dynamic:
+            dynamic_prompt = (
+                self.env.get_template("now_block.jinja2")
+                .render(**now, user_ref=pctx.user_ref, transparent_ai=transparent_ai)
+                .strip()
+            )
+            now = {
+                "current_emotion": False,
+                "current_emotion_description": "",
+                "user_mood_instruction": "",
+                "touch_context": "",
+                "time_context": "",
+                "sensations": "",
+                "relationship_state_block": "",
+                "memory_context": [],
+            }
         system_prompt = template.render(
             name=safe_nickname,
             archetype=archetype,
             species=base.get("species") or "",
             backstory=base.get("backstory", ""),
             personality_description=personality_desc,
-            current_emotion=current_emotion,
-            current_emotion_description=current_emotion_description,
-            user_mood_instruction=user_mood_instruction,
-            touch_context=touch_context or "",
-            time_context=time_context or "",
-            sensations=sensations or "",
+            current_emotion=now["current_emotion"],
+            current_emotion_description=now["current_emotion_description"],
+            user_mood_instruction=now["user_mood_instruction"],
+            touch_context=now["touch_context"],
+            time_context=now["time_context"],
+            sensations=now["sensations"],
             mid_session_thought=mid_session_thought or "",
             catchphrases=base.get("catchphrases", []),
             suffix=base.get("suffix", ""),
             relationship=base.get("relationship", pctx.rel_default),
             relationship_description=relationship_description,
-            relationship_state_block=relationship_state_block,
+            relationship_state_block=now["relationship_state_block"],
             event_context=event_context or "",
             user_title=safe_user_title,
             user_ref=pctx.user_ref,
@@ -370,7 +404,7 @@ class PromptBuilder:
             interests=safe_interests,
             persona_interests=safe_persona_interests,
             transparent_ai=transparent_ai,
-            memory_context=memory_context,
+            memory_context=now["memory_context"],
             proactive_trigger=proactive_trigger,
             scene_prompt=scene_prompt,
             response_length_instruction=RESPONSE_LENGTH_MAP.get(
@@ -425,6 +459,7 @@ class PromptBuilder:
 
         return {
             "system_prompt": system_prompt,
+            "dynamic_prompt": dynamic_prompt,
             "voice_id": voice_id,
             "voice_speed": voice_speed,
             "pitch_rate": pitch_rate,

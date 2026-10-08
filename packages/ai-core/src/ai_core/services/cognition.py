@@ -184,6 +184,16 @@ def safe_reason(cause: BaseException | None) -> str:
     return str(cause).split(":", 1)[0].split("'", 1)[0].strip()[:80]
 
 
+_PUNCT = re.compile(r"[\s，。！？!?,.~…、：:；;\"'“”‘’（）()「」]+")
+
+
+def echoes(line: str, user_text: str) -> bool:
+    """A line that only repeats what the user just said."""
+    a, b = _PUNCT.sub("", line), _PUNCT.sub("", user_text)
+    # the whole line is a contiguous piece of at least half of what the user said
+    return bool(a) and bool(b) and (a == b or (len(a) >= 4 and a in b and len(a) >= 0.5 * len(b)))
+
+
 _MAX_LINES = 3
 _MAX_LINE_CHARS = 500
 
@@ -339,6 +349,9 @@ class CognitionService:
                 last_interaction_at=rel_state.get("last_interaction_at"),
             ),
             structured_output=None,
+            # Static system prompt; the moment, mood, relationship numbers and
+            # memories go in the last message (see below), after the history.
+            defer_dynamic=True,
         )
         actions = list(dict.fromkeys(available_actions or []))[:40]
         contract = (
@@ -351,9 +364,8 @@ class CognitionService:
             "template_to_call 只能从 available_templates 选择。"
             "优先最小计划改动；不可打断的活动要 defer。"
             "可额外返回 pad:{p,a,d}（各在 -1..1）和 state_changes 关系增量提议。"
-            "当前PAD="
-            + json.dumps(pad_state.to_dict(), ensure_ascii=False)
-            + "\n"
+            "最后一条消息先是你自己此刻的状态与记忆（属于你，不是观测），"
+            "再是本轮观测 JSON。\n"
             + COGNITION_SCHEMA_HINT
             + "\n每条 dialogue.agent 必须逐字等于 "
             + json.dumps(agent_id)
@@ -364,7 +376,9 @@ class CognitionService:
             # quiet_observation even for a direct question. Keep turn intent
             # explicit, without a canned reply or a second model call.
             contract += (
-                "\n当前是 user_utterance：用户正在直接对你说话，event.text 是需要回应的原话。"
+                "\n当前是 user_utterance：用户正在直接对你说话，"
+                "最后一条消息末尾「用户对你说」就是需要回应的原话。"
+                "回应它，不要复述它。"
                 "请在 dialogue 中自然、具体地回应这一句话，延续人格和上下文。"
                 "当前活动或观察模式不构成忽略用户问话的理由。"
                 "只有用户明确要求你保持安静时，才可不出声；不要把普通问话当成自主观察。"
@@ -397,11 +411,25 @@ class CognitionService:
             "available_actions": actions,
             "available_templates": sorted(TEMPLATE_REGISTRY),
             "world": _compact(world),
-            "event": {**_compact(event), "text": text[:4000]},
+            # A user's words are given as a sentence, not as event.text: next to a
+            # reply that opens with "text": "...", a small model copied the
+            # observation's "text" value back as its answer.
+            "event": (
+                {k: v for k, v in _compact(event).items() if k != "text"}
+                if is_user_turn
+                else {**_compact(event), "text": text[:4000]}
+            ),
         }
         llm_args = {
             "system_prompt": prompt["system_prompt"] + contract,
-            "user_input": json.dumps(observation, ensure_ascii=False),
+            # Per-turn content last: the system prompt and history stay a shared
+            # prefix between turns (a local model reuses their cached prefill).
+            "user_input": (prompt.get("dynamic_prompt") or "").strip()
+            + "\n当前PAD="
+            + json.dumps(pad_state.to_dict(), ensure_ascii=False)
+            + "\n\n## 本轮观测（JSON）\n"
+            + json.dumps(observation, ensure_ascii=False)
+            + (f"\n\n用户对你说：「{text[:4000]}」" if is_user_turn else ""),
             "history": history,
             "json_mode": True,
             "max_tokens": 1400,
@@ -582,9 +610,19 @@ class CognitionService:
             # inline (not background): the next turn's prompt reads this history
             if is_user_turn:
                 turns = history + [{"role": "user", "content": text}]
-                if reply:
-                    turns = turns + [{"role": "assistant", "content": reply}]
-                await self.cache.set_json(f"{bond_key}:history", turns[-_HISTORY_LIMIT:], ttl=86400)
+                # An echo of the user never enters history: a small model imitates
+                # its own past replies, and one parroted line made the next ones parrot.
+                kept = " ".join(
+                    line["text"] for line in decision.dialogue if not echoes(line["text"], text)
+                )
+                if kept:
+                    turns = turns + [{"role": "assistant", "content": kept}]
+                if len(turns) > _HISTORY_LIMIT:
+                    # Trim in blocks, not a sliding window: dropping the oldest pair
+                    # every turn shifted the whole history and broke the prefix a
+                    # local model reuses. Most turns now only append.
+                    turns = turns[-(_HISTORY_LIMIT // 2) :]
+                await self.cache.set_json(f"{bond_key}:history", turns, ttl=86400)
 
         _, (rel_state, pad_state, emotion_state), _ = await asyncio.gather(
             bookkeeping(), state_chain(), remember_exchange()
