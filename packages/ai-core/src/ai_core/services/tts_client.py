@@ -8,6 +8,7 @@ from typing import Any
 
 import structlog
 
+from ai_core.config import settings
 from ai_core.services import provider_health as observed
 from ai_core.services.tts.registry import create_tts_provider
 
@@ -98,6 +99,34 @@ class TTSClient:
         if self._fish is None:
             with contextlib.suppress(Exception):
                 self._fish = create_tts_provider(provider="fish")
+        # Circuit breaker per provider: monotonic time until which a provider that
+        # just failed is skipped in favour of the fallback. Without it an
+        # unreachable primary cost its full connect timeout (~10 s) on EVERY
+        # sentence before the fallback spoke.
+        self._open_until: dict[str, float] = {}
+        self.breaker_s = settings.tts_breaker_s
+
+    def _usable(self, provider) -> bool:
+        return time.monotonic() >= self._open_until.get(provider.name, 0.0)
+
+    async def _with_fallback(self, method: str, voice: str | None, *args) -> bytes:
+        primary, fallback = self._route(voice)
+        if fallback and not self._usable(primary):
+            return await _observe_synthesis(fallback, method, *args)
+        try:
+            audio = await _observe_synthesis(primary, method, *args)
+        except Exception as e:
+            if not fallback:
+                raise
+            self._open_until[primary.name] = time.monotonic() + self.breaker_s
+            logger.warning(
+                "tts.primary_failed_using_fallback",
+                error_type=type(e).__name__,
+                skip_primary_s=self.breaker_s,
+            )
+            return await _observe_synthesis(fallback, method, *args)
+        self._open_until.pop(primary.name, None)
+        return audio
 
     def _route(self, voice: str | None):
         """Pick (primary, fallback) for this request by voice style.
@@ -126,36 +155,18 @@ class TTSClient:
         speed = _coerce_float(speed, 1.0, 0.5, 2.0)
         ssml_pitch = _coerce_float(ssml_pitch, 1.0, 0.5, 2.0)
         ssml_rate = _coerce_float(ssml_rate, 1.0, 0.5, 2.0)
-        primary, fallback = self._route(voice)
-        try:
-            return await _observe_synthesis(
-                primary,
-                "synthesize",
-                text,
-                voice,
-                speed,
-                pitch_rate,
-                speech_rate,
-                ssml_pitch,
-                ssml_rate,
-                ssml_effect,
-            )
-        except Exception as e:
-            if fallback:
-                logger.warning("tts.primary_failed_using_fallback", error_type=type(e).__name__)
-                return await _observe_synthesis(
-                    fallback,
-                    "synthesize",
-                    text,
-                    voice,
-                    speed,
-                    pitch_rate,
-                    speech_rate,
-                    ssml_pitch,
-                    ssml_rate,
-                    ssml_effect,
-                )
-            raise
+        return await self._with_fallback(
+            "synthesize",
+            voice,
+            text,
+            voice,
+            speed,
+            pitch_rate,
+            speech_rate,
+            ssml_pitch,
+            ssml_rate,
+            ssml_effect,
+        )
 
     async def synthesize_to_wav(
         self,
@@ -172,36 +183,18 @@ class TTSClient:
         speed = _coerce_float(speed, 1.0, 0.5, 2.0)
         ssml_pitch = _coerce_float(ssml_pitch, 1.0, 0.5, 2.0)
         ssml_rate = _coerce_float(ssml_rate, 1.0, 0.5, 2.0)
-        primary, fallback = self._route(voice)
-        try:
-            return await _observe_synthesis(
-                primary,
-                "synthesize_to_wav",
-                text,
-                voice,
-                speed,
-                pitch_rate,
-                speech_rate,
-                ssml_pitch,
-                ssml_rate,
-                ssml_effect,
-            )
-        except Exception as e:
-            if fallback:
-                logger.warning("tts.primary_failed_using_fallback", error_type=type(e).__name__)
-                return await _observe_synthesis(
-                    fallback,
-                    "synthesize_to_wav",
-                    text,
-                    voice,
-                    speed,
-                    pitch_rate,
-                    speech_rate,
-                    ssml_pitch,
-                    ssml_rate,
-                    ssml_effect,
-                )
-            raise
+        return await self._with_fallback(
+            "synthesize_to_wav",
+            voice,
+            text,
+            voice,
+            speed,
+            pitch_rate,
+            speech_rate,
+            ssml_pitch,
+            ssml_rate,
+            ssml_effect,
+        )
 
     def supports_streaming(self) -> bool:
         """True when the active provider can stream audio chunk-by-chunk."""

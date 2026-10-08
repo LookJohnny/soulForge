@@ -15,8 +15,8 @@ import re
 from dataclasses import asdict
 from typing import Any
 
+import structlog
 from soulforge_harness.runtime.llm_interface import (
-    DECISION_SCHEMA_HINT,
     BehaviorDecision,
     validate_decision,
 )
@@ -25,6 +25,7 @@ from soulforge_harness.runtime.templates import TEMPLATE_REGISTRY
 
 from ai_core.config import settings
 from ai_core.services.content_filter import ContentFilter
+from ai_core.services.decision_stream import DialogueStream, stream_prefill
 from ai_core.services.relationship import relationship_payload
 from ai_core.services.time_awareness import build_time_prompt
 
@@ -35,12 +36,33 @@ _DECLARATION = re.compile(
     re.IGNORECASE,
 )
 _QUESTION = re.compile(r"[?？]|(?:什么|是不是|是否|谁|吗|么)")
+logger = structlog.get_logger()
 _SENSOR_KINDS = {k.value for k in VISION_EVENT_KINDS} | {EventKind.MULTIMODAL_CONTEXT.value}
 _HISTORY_LIMIT = 16
+# The unified decision contract. Unlike the Runtime's direct-provider schema it
+# asks for no memory_update (facts are stored from the user's own words) and
+# caps the free-text fields that are only logged: every output token is decode
+# time on a local model, and these were most of a decision's length.
+COGNITION_SCHEMA_HINT = """Respond ONLY with JSON, in this field order (dialogue first, then
+EVERY other field — the object is not complete after the dialogue):
+{
+  "dialogue": [{"agent": str, "text": str, "emotion": str}],
+  "selected_intent": str, "emotional_read": str (≤8字),
+  "plan_delta": "none|micro|insert|hour|day", "impact": 1|2|3|4,
+  "template_to_call": str, "template_params": object,
+  "motion_style": str, "interrupt_policy": "resume|drop|reschedule|defer",
+  "reason": str (≤12字), "body_actions": [str]
+}
+body_actions: 0-2 entries chosen ONLY from AVAILABLE ACTIONS (use [] when none
+fit or the list is absent); the body performs them after your dialogue."""
 
 
 class CognitionUnavailable(RuntimeError):
     """The model did not return a usable decision; callers must report failure."""
+
+
+class CognitionPreempted(RuntimeError):
+    """Optional background work gave the model up to a user's turn (local models)."""
 
 
 class CognitionInputRejected(ValueError):
@@ -155,15 +177,85 @@ def _parse_decision(raw: str, agent_id: str, current_template: str, actions: lis
         raise CognitionUnavailable("model returned an invalid behavior decision") from exc
 
 
+_MAX_LINES = 3
+_MAX_LINE_CHARS = 500
+
+
+def _lenient_decision(dialogue: list[dict], current_template: str) -> BehaviorDecision:
+    """A minimal valid decision around speech that was already streamed out.
+
+    Once a line has been spoken it cannot be taken back, so a later malformed
+    non-speech field (impact, template, ...) degrades to the quietest plan
+    instead of failing the whole turn."""
+    return BehaviorDecision(
+        selected_intent="respond",
+        emotional_read="",
+        plan_delta="none",
+        impact=ImpactLevel.LOW,
+        template_to_call=current_template,
+        template_params={},
+        dialogue=dialogue,
+        motion_style="neutral",
+        interrupt_policy="resume",
+        memory_update={},
+        reason="lenient: streamed speech kept, other fields invalid",
+        body_actions=[],
+    )
+
+
 class CognitionService:
-    def __init__(self, *, builder, memory, relationships, emotion, llm, cache):
+    def __init__(self, *, builder, memory, relationships, emotion, llm, cache, tone_reader=None):
         self.builder = builder
+        # Optional Nous Tone reader: per-sentence expression readouts of the
+        # spoken lines (a read of finished text, not a second completion).
+        self.tone_reader = tone_reader
         self.memory = memory
         self.relationships = relationships
         self.emotion = emotion
         self.llm = llm
         self.cache = cache
         self.filter = ContentFilter()
+
+    def _admit_line(self, element, agent_id: str) -> dict | None:
+        """Validate and filter one streamed dialogue element; None = not spoken."""
+        if not isinstance(element, dict):
+            return None
+        text, emotion = element.get("text"), element.get("emotion", "neutral")
+        if not isinstance(text, str) or element.get("agent", agent_id) != agent_id:
+            return None  # never speak for someone else
+        text = self.filter.filter_output(text.strip()[:_MAX_LINE_CHARS])
+        if not text.strip():
+            return None
+        return {
+            "agent": agent_id,
+            "text": text,
+            "emotion": emotion if isinstance(emotion, str) else "neutral",
+        }
+
+    async def _stream_decision(
+        self, llm_args: dict, agent_id: str, user_text: str, expect_speech: bool, out, on_line
+    ) -> str:
+        """Generate the decision as a stream; hand over each dialogue line as it completes."""
+        stream = DialogueStream()
+        prefill = stream_prefill(agent_id, expect_speech=expect_speech)
+        reads = self.tone_reader is not None and self.tone_reader.enabled
+        async for chunk in self.llm.chat_stream(**llm_args, prefill=prefill):
+            for element in stream.feed(chunk):
+                if len(out) >= _MAX_LINES:
+                    continue
+                line = self._admit_line(element, agent_id)
+                if line is None:
+                    continue
+                if reads:
+                    tone = await self.tone_reader.read_line(line["text"], user_text)
+                    if tone:
+                        line["tone_readout"] = tone
+                out.append(line)
+                await on_line(line)
+        # A provider that honors the prefill streams it as the reply's opening;
+        # one that ignores it streams its own complete object. Either way the
+        # generated text is the whole decision.
+        return stream.text
 
     async def decide(
         self,
@@ -176,7 +268,14 @@ class CognitionService:
         current_template: str = "idle",
         current_interruptible: bool = True,
         available_actions: list[str] | None = None,
+        on_line=None,
     ) -> dict:
+        """One authoritative decision.
+
+        on_line: optional async callback. When given, the decision is generated
+        as a stream and each dialogue line is passed to it (filtered, with its
+        tone readout) the moment it is complete, before the rest of the decision
+        exists. The returned decision's dialogue is exactly the lines passed."""
         # `persona` is a compatibility field only. DB/file projection owns all
         # personality fields; a body cannot override name, traits or backstory.
         user_id, character_id = str(identity["user_id"]), str(identity["character_id"])
@@ -244,12 +343,11 @@ class CognitionService:
             "身体动作只能从 available_actions 选择；不输出关节、执行器或硬件原始命令。"
             "template_to_call 只能从 available_templates 选择。"
             "优先最小计划改动；不可打断的活动要 defer。"
-            "memory_update 必须为 {}，长期事实由服务按真实用户原话保存。"
             "可额外返回 pad:{p,a,d}（各在 -1..1）和 state_changes 关系增量提议。"
             "当前PAD="
             + json.dumps(pad_state.to_dict(), ensure_ascii=False)
             + "\n"
-            + DECISION_SCHEMA_HINT
+            + COGNITION_SCHEMA_HINT
             + "\n每条 dialogue.agent 必须逐字等于 "
             + json.dumps(agent_id)
             + "，不能填写角色姓名。"
@@ -270,18 +368,17 @@ class CognitionService:
                 "（按当前事件自行决定，不要照抄意图）："
                 + json.dumps(
                     {
+                        "dialogue": [],
                         "selected_intent": "quiet_observation",
                         "emotional_read": "calm",
                         "plan_delta": "none",
                         "impact": 1,
                         "template_to_call": current_template,
                         "template_params": {},
-                        "dialogue": [],
                         "body_actions": [],
                         "motion_style": "neutral",
                         "interrupt_policy": "resume",
-                        "memory_update": {},
-                        "reason": "No response is needed",
+                        "reason": "无需回应",
                     }
                 )
             )
@@ -295,44 +392,124 @@ class CognitionService:
             "world": _compact(world),
             "event": {**_compact(event), "text": text[:4000]},
         }
-        raw = await self.llm.chat(
-            system_prompt=prompt["system_prompt"] + contract,
-            user_input=json.dumps(observation, ensure_ascii=False),
-            history=history,
-            json_mode=True,
-            max_tokens=1400,
+        llm_args = {
+            "system_prompt": prompt["system_prompt"] + contract,
+            "user_input": json.dumps(observation, ensure_ascii=False),
+            "history": history,
+            "json_mode": True,
+            "max_tokens": 1400,
+            # A user is waiting on this turn; autonomous events can queue behind it.
+            "priority": 1 if is_user_turn else 0,
+        }
+        streamed: list[dict] = []
+        # Noticing an arrival or a proactive musing is optional: on a shared local
+        # model it yields to a user who starts talking (the Runtime drops it too).
+        from soulforge_harness.runtime.models import Event as RuntimeEvent
+        from soulforge_harness.runtime.runtime import event_class
+
+        droppable = (
+            event_class(
+                RuntimeEvent(
+                    t_min=0.0,
+                    kind=EventKind(kind),
+                    source=str(event.get("source") or ""),
+                    text=text,
+                    payload=event.get("payload") or {},
+                )
+            )
+            == "droppable"
         )
-        decision, explicit_pad, changes = _parse_decision(raw, agent_id, current_template, actions)
+        if on_line is None:
+            # Where the provider supports it (local models), the reply opens as a
+            # decision object: a small model cannot drift into the plain-text
+            # replies of its history or echo the observation JSON back.
+            try:
+                raw = await self.llm.chat(
+                    **llm_args,
+                    prefill=stream_prefill(agent_id, expect_speech=is_user_turn),
+                    **({"preemptible": True} if droppable else {}),
+                )
+            except Exception as exc:
+                if getattr(exc, "status_code", None) == 409:
+                    raise CognitionPreempted("background decision preempted") from exc
+                raise
+        else:
+            raw = await self._stream_decision(
+                llm_args, agent_id, text if is_user_turn else "", is_user_turn, streamed, on_line
+            )
+        try:
+            decision, explicit_pad, changes = _parse_decision(
+                raw, agent_id, current_template, actions
+            )
+        except CognitionUnavailable as exc:
+            if not streamed:
+                raise
+            logger.warning(
+                "cognition.lenient_after_stream",
+                reason=str(exc.__cause__)[:160],
+                lines=len(streamed),
+            )
+            decision, explicit_pad, changes = _lenient_decision([], current_template), None, None
+            decision = validate_decision(decision, current_template, actions)
+        if on_line is not None:
+            decision.dialogue = streamed  # exactly what was spoken
         if kind in _SENSOR_KINDS:
             # The runtime owns cryptographically attested hazard handling.
             decision.impact = ImpactLevel.LOW
             decision.plan_delta = "micro"
         if not current_interruptible and decision.impact < ImpactLevel.CRITICAL:
             decision.interrupt_policy = "defer"
-        for line in decision.dialogue:
-            line["text"] = self.filter.filter_output(line["text"])
-        decision.dialogue = [line for line in decision.dialogue if line["text"].strip()]
+        if on_line is None:  # streamed lines were filtered before they were sent
+            for line in decision.dialogue:
+                line["text"] = self.filter.filter_output(line["text"])
+            decision.dialogue = [line for line in decision.dialogue if line["text"].strip()]
         reply = " ".join(line["text"] for line in decision.dialogue)
+        # Tone readouts run alongside the state writes below; each line carries
+        # them to its speak_line so the face follows every synthesized sentence.
+        tone_task = None
+        if (
+            on_line is None
+            and decision.dialogue
+            and self.tone_reader is not None
+            and self.tone_reader.enabled
+        ):
+            tone_task = asyncio.ensure_future(
+                asyncio.gather(
+                    *(
+                        self.tone_reader.read_line(line["text"], text if is_user_turn else "")
+                        for line in decision.dialogue
+                    )
+                )
+            )
         # Never allow ungoverned model memory proposals to be replayed by a body.
         decision.memory_update = {}
 
-        await self.memory.record_raw_event(
-            {
-                "user_id": user_id,
-                "character_id": character_id,
-                # A body is not necessarily a provisioned hardware-device row.
-                "session_id": identity["session_id"][:100],
-                "event_type": kind,
-                "source": str(event.get("source") or "runtime")[:50],
-                "content": text or f"runtime event: {kind}",
-                "payload": {"event": _compact(event.get("payload") or {}), "dialogue": reply},
-                "context": {"agent_id": agent_id, "body_id": identity["body_id"]},
-            }
-        )
-
-        if is_user_turn:
-            declarations = declared_memories(text)
-            if declarations:
+        async def bookkeeping() -> None:
+            """The raw event log and declared memories. Best effort: the reply was
+            already generated, and a logging failure used to turn it into a 503."""
+            try:
+                await self.memory.record_raw_event(
+                    {
+                        "user_id": user_id,
+                        "character_id": character_id,
+                        # A body is not necessarily a provisioned hardware-device row.
+                        "session_id": identity["session_id"][:100],
+                        "event_type": kind,
+                        "source": str(event.get("source") or "runtime")[:50],
+                        "content": text or f"runtime event: {kind}",
+                        "payload": {
+                            "event": _compact(event.get("payload") or {}),
+                            "dialogue": reply,
+                        },
+                        "context": {"agent_id": agent_id, "body_id": identity["body_id"]},
+                    }
+                )
+            except Exception as exc:
+                logger.warning("cognition.raw_event_failed", error_type=type(exc).__name__)
+            declarations = declared_memories(text) if is_user_turn else []
+            if not declarations:
+                return
+            try:
                 if await self.memory._has_new_schema():
                     await self.memory._store_new_memories(
                         end_user_id=user_id,
@@ -347,39 +524,58 @@ class CognitionService:
                         user_id, character_id, identity["session_id"], text, declarations
                     )
                 await self.cache.delete(f"memories:{user_id}:{character_id}")
-            turn = await self.relationships.apply_turn(
-                user_id,
-                character_id,
-                user_mood=user_mood,
-                user_text=text,
-                llm_suggestion=changes,
-            )
-            rel_state = turn.state
-            await self.emotion.set_user_mood(bond_key, user_mood)
+            except Exception as exc:
+                logger.warning("cognition.declared_memory_failed", error_type=type(exc).__name__)
 
-        emotion_args = {
-            "session_id": bond_key,
-            "user_mood": user_mood if is_user_turn else None,
-            "personality": prompt.get("personality"),
-            "relationship_stage": rel_state["stage"],
-            "cause": "用户对话" if is_user_turn else f"事件:{kind}",
-        }
-        if explicit_pad is not None:
-            pad_state, emotion_state = await self.emotion.update_with_explicit_pad(
-                **emotion_args, pad_values=explicit_pad
-            )
-        else:
-            pad_state, emotion_state = await self.emotion.update_with_pad(
-                **emotion_args,
-                text_emotion=self.emotion.detect_emotion(
-                    reply, previous=emotion_state, user_mood=user_mood if is_user_turn else None
-                ),
-            )
-        if is_user_turn:
-            history = history + [{"role": "user", "content": text}]
-            if reply:
-                history = history + [{"role": "assistant", "content": reply}]
-            await self.cache.set_json(f"{bond_key}:history", history[-_HISTORY_LIMIT:], ttl=86400)
+        async def state_chain():
+            """Relationship -> user mood -> PAD (PAD reads the possibly new stage)."""
+            rel = rel_state
+            if is_user_turn:
+                turn = await self.relationships.apply_turn(
+                    user_id,
+                    character_id,
+                    user_mood=user_mood,
+                    user_text=text,
+                    llm_suggestion=changes,
+                )
+                rel = turn.state
+                await self.emotion.set_user_mood(bond_key, user_mood)
+            emotion_args = {
+                "session_id": bond_key,
+                "user_mood": user_mood if is_user_turn else None,
+                "personality": prompt.get("personality"),
+                "relationship_stage": rel["stage"],
+                "cause": "用户对话" if is_user_turn else f"事件:{kind}",
+            }
+            if explicit_pad is not None:
+                pad, emo = await self.emotion.update_with_explicit_pad(
+                    **emotion_args, pad_values=explicit_pad
+                )
+            else:
+                pad, emo = await self.emotion.update_with_pad(
+                    **emotion_args,
+                    text_emotion=self.emotion.detect_emotion(
+                        reply, previous=emotion_state, user_mood=user_mood if is_user_turn else None
+                    ),
+                )
+            return rel, pad, emo
+
+        async def remember_exchange() -> None:
+            # inline (not background): the next turn's prompt reads this history
+            if is_user_turn:
+                turns = history + [{"role": "user", "content": text}]
+                if reply:
+                    turns = turns + [{"role": "assistant", "content": reply}]
+                await self.cache.set_json(f"{bond_key}:history", turns[-_HISTORY_LIMIT:], ttl=86400)
+
+        _, (rel_state, pad_state, emotion_state), _ = await asyncio.gather(
+            bookkeeping(), state_chain(), remember_exchange()
+        )
+
+        if tone_task is not None:
+            for line, tone in zip(decision.dialogue, await tone_task, strict=True):
+                if tone:
+                    line["tone_readout"] = tone
 
         data = asdict(decision)
         data["impact"] = int(decision.impact)

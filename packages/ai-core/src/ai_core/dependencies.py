@@ -65,6 +65,19 @@ async def get_llm_client() -> LLMClient:
     return _llm_client
 
 
+_tone_reader = None
+
+
+def get_tone_reader():
+    """Per-sentence tone readouts (Nous Tone); disabled when no tone server is configured."""
+    global _tone_reader
+    if _tone_reader is None:
+        from ai_core.services.tone_reader import ToneReader
+
+        _tone_reader = ToneReader()
+    return _tone_reader
+
+
 async def get_tts_client() -> TTSClient:
     global _tts_client
     if _tts_client is None:

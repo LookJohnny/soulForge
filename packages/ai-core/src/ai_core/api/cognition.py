@@ -7,6 +7,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from soulforge_harness.runtime.identity import RuntimeIdentity
 from soulforge_harness.runtime.models import EventKind
@@ -19,11 +20,13 @@ from ai_core.dependencies import (
     get_memory_service,
     get_prompt_builder,
     get_relationship_engine,
+    get_tone_reader,
 )
 from ai_core.middleware.rate_limit import limiter
 from ai_core.services.character_projection import validate_runtime_identity
 from ai_core.services.cognition import (
     CognitionInputRejected,
+    CognitionPreempted,
     CognitionService,
     CognitionUnavailable,
 )
@@ -81,9 +84,7 @@ class CognitionRequest(BaseModel):
         return value
 
 
-@router.post("/decide")
-@limiter.limit("60/minute")
-async def decide(req: CognitionRequest, request: Request):
+def _brand_and_identity(req: CognitionRequest, request: Request) -> tuple[str, dict]:
     auth = getattr(request.state, "auth", None)
     if not auth or auth.source != "service" or not auth.brand_id:
         raise HTTPException(status_code=403, detail="Internal service authentication required")
@@ -94,46 +95,121 @@ async def decide(req: CognitionRequest, request: Request):
     identity = req.identity.model_dump(mode="json")
     if req.event.target_agent not in (None, identity["agent_id"]):
         raise HTTPException(status_code=422, detail="Event targets a different agent")
-    try:
-        pool = await get_pool()
-        await validate_runtime_identity(pool, brand_id, RuntimeIdentity(**identity))
-        builder, memory, relationships, llm = await asyncio.gather(
-            get_prompt_builder(), get_memory_service(), get_relationship_engine(), get_llm_client()
+    return brand_id, identity
+
+
+async def _service(brand_id: str, identity: dict) -> CognitionService:
+    pool = await get_pool()
+    await validate_runtime_identity(pool, brand_id, RuntimeIdentity(**identity))
+    builder, memory, relationships, llm = await asyncio.gather(
+        get_prompt_builder(), get_memory_service(), get_relationship_engine(), get_llm_client()
+    )
+    return CognitionService(
+        builder=builder,
+        memory=memory,
+        relationships=relationships,
+        llm=llm,
+        emotion=get_emotion_engine(),
+        cache=get_cache(),
+        tone_reader=get_tone_reader(),
+    )
+
+
+def _decide_args(req: CognitionRequest, brand_id: str, identity: dict) -> dict:
+    return {
+        "identity": identity,
+        "brand_id": brand_id,
+        "persona": req.persona,
+        "world": req.world,
+        "event": req.event.model_dump(mode="json"),
+        "current_template": req.current_template,
+        "current_interruptible": req.current_interruptible,
+        "available_actions": req.available_actions,
+    }
+
+
+def _http_error(exc: Exception) -> HTTPException:
+    """The one mapping from a failed decision to a status (shared by both endpoints)."""
+    if isinstance(exc, HTTPException):
+        return exc
+    if isinstance(exc, PermissionError):
+        return HTTPException(status_code=403, detail="Runtime identity is not authorized")
+    if isinstance(exc, CognitionPreempted):
+        return HTTPException(status_code=409, detail={"code": "preempted"})
+    if isinstance(exc, CognitionInputRejected):
+        return HTTPException(status_code=400, detail=str(exc))
+    if isinstance(exc, CognitionUnavailable):
+        # The reason is our own validation message (or a JSON parser position),
+        # never user input: it tells which contract rule a model keeps missing.
+        logger.warning(
+            "cognition.invalid_decision",
+            error_type=type(exc.__cause__).__name__,
+            reason=str(exc.__cause__)[:160],
         )
-        service = CognitionService(
-            builder=builder,
-            memory=memory,
-            relationships=relationships,
-            llm=llm,
-            emotion=get_emotion_engine(),
-            cache=get_cache(),
-        )
-        return await service.decide(
-            identity=identity,
-            brand_id=brand_id,
-            persona=req.persona,
-            world=req.world,
-            event=req.event.model_dump(mode="json"),
-            current_template=req.current_template,
-            current_interruptible=req.current_interruptible,
-            available_actions=req.available_actions,
-        )
-    except HTTPException:
-        raise
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail="Runtime identity is not authorized") from exc
-    except CognitionInputRejected as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except CognitionUnavailable as exc:
-        logger.warning("cognition.invalid_decision", error_type=type(exc.__cause__).__name__)
-        raise HTTPException(
+        return HTTPException(
             status_code=503,
             detail={
                 "code": "invalid_behavior_decision",
                 "message": "Model output failed behavior validation",
             },
-        ) from exc
+        )
+    # No mock speech, provider URL, credential, or user content in errors.
+    logger.warning("cognition.unavailable", error_type=type(exc).__name__)
+    return HTTPException(status_code=503, detail="Cognition is temporarily unavailable")
+
+
+@router.post("/decide")
+@limiter.limit("60/minute")
+async def decide(req: CognitionRequest, request: Request):
+    brand_id, identity = _brand_and_identity(req, request)
+    try:
+        service = await _service(brand_id, identity)
+        return await service.decide(**_decide_args(req, brand_id, identity))
     except Exception as exc:
-        # No mock speech, provider URL, credential, or user content in errors.
-        logger.warning("cognition.unavailable", error_type=type(exc).__name__)
-        raise HTTPException(status_code=503, detail="Cognition is temporarily unavailable") from exc
+        raise _http_error(exc) from exc
+
+
+@router.post("/decide/stream")
+@limiter.limit("60/minute")
+async def decide_stream(req: CognitionRequest, request: Request):
+    """The same decision, streamed as NDJSON so speech starts before it is complete.
+
+    {"type": "line", "line": {agent, text, emotion, tone_readout?}}
+        each dialogue line, as soon as it is complete
+    {"type": "result", ...}
+        the /decide response; its dialogue is exactly the streamed lines
+    {"type": "error", "status": int, "detail": ...}
+        failure (after any lines, which were already spoken)
+    Authentication and identity errors are ordinary HTTP errors before the stream starts."""
+    brand_id, identity = _brand_and_identity(req, request)
+    try:
+        service = await _service(brand_id, identity)
+    except Exception as exc:
+        raise _http_error(exc) from exc
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def on_line(line: dict) -> None:
+        await queue.put({"type": "line", "line": line})
+
+    async def run() -> None:
+        try:
+            result = await service.decide(**_decide_args(req, brand_id, identity), on_line=on_line)
+            await queue.put({"type": "result", **result})
+        except Exception as exc:
+            error = _http_error(exc)
+            await queue.put({"type": "error", "status": error.status_code, "detail": error.detail})
+        finally:
+            await queue.put(None)
+
+    async def body():
+        task = asyncio.create_task(run())
+        try:
+            while (item := await queue.get()) is not None:
+                yield json.dumps(item, ensure_ascii=False) + "\n"
+        finally:
+            if not task.done():
+                task.cancel()  # the runtime hung up: stop generating
+
+    return StreamingResponse(
+        body(), media_type="application/x-ndjson", headers={"X-Accel-Buffering": "no"}
+    )

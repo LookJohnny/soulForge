@@ -21,8 +21,14 @@ class LLMClient:
         history: list[dict] | None = None,
         json_mode: bool = False,
         max_tokens: int | None = None,
+        priority: int = 0,
+        prefill: str = "",
+        preemptible: bool = False,
     ) -> str:
-        """Non-streaming chat completion."""
+        """Non-streaming chat completion.
+
+        priority > 0: a user is waiting (a local model serves it first);
+        prefill: text the reply must begin with, where the provider supports it."""
         start = time.monotonic()
         try:
             text = await self._provider.generate(
@@ -33,6 +39,9 @@ class LLMClient:
                 top_p=settings.llm_top_p,
                 max_tokens=max_tokens if max_tokens is not None else settings.llm_max_tokens,
                 json_mode=json_mode,
+                priority=priority,
+                prefill=prefill,
+                preemptible=preemptible,
             )
         except Exception as exc:
             observed.provider_health.record_failure(
@@ -54,6 +63,9 @@ class LLMClient:
         user_input: str,
         history: list[dict] | None = None,
         json_mode: bool = False,
+        priority: int = 0,
+        max_tokens: int | None = None,
+        prefill: str = "",
     ) -> AsyncIterator[str]:
         """Streaming chat completion, yields text chunks."""
         start, emitted = time.monotonic(), False
@@ -64,8 +76,10 @@ class LLMClient:
                 history=history,
                 temperature=settings.llm_temperature,
                 top_p=settings.llm_top_p,
-                max_tokens=settings.llm_max_tokens,
+                max_tokens=max_tokens if max_tokens is not None else settings.llm_max_tokens,
                 json_mode=json_mode,
+                priority=priority,
+                prefill=prefill,
             ):
                 emitted = emitted or bool(chunk and chunk.strip())
                 yield chunk

@@ -20,8 +20,14 @@ class LLMProvider(ABC):
         top_p: float = 0.9,
         max_tokens: int = 256,
         json_mode: bool = False,
+        priority: int = 0,
+        prefill: str = "",
+        preemptible: bool = False,
     ) -> str:
-        """Non-streaming text generation."""
+        """Non-streaming text generation.
+
+        priority: queue position on a shared local model; prefill: text the reply must
+        begin with (returned as part of it). Providers that cannot honor them ignore them."""
         ...
 
     @abstractmethod
@@ -35,7 +41,10 @@ class LLMProvider(ABC):
         top_p: float = 0.9,
         max_tokens: int = 256,
         json_mode: bool = False,
+        priority: int = 0,
+        prefill: str = "",
     ) -> AsyncIterator[str]:
-        """Streaming text generation, yields text chunks."""
+        """Streaming text generation, yields text chunks (a supported prefill is the
+        start of the first chunk)."""
         ...
         yield ""  # pragma: no cover

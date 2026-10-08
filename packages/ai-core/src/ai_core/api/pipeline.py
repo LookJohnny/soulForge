@@ -257,6 +257,7 @@ async def chat(req: ChatRequest, request: Request):
     ai_raw = await llm.chat(
         system_prompt=prompt_result["system_prompt"],
         user_input=user_text,
+        priority=1,  # a user is waiting on this reply
     )
     sw.mark("llm")
 
@@ -763,6 +764,7 @@ async def chat_stream(req: ChatRequest, request: Request):
             system_prompt=prompt_result["system_prompt"],
             user_input=llm_input,
             history=history,
+            priority=1,  # a user is waiting on this reply
         ):
             stage_ms.setdefault("llm_first_token", (time.monotonic() - start) * 1000)
             buffer += chunk
@@ -1121,6 +1123,7 @@ async def touch_event(req: TouchEventRequest, request: Request):
                 user_input=pctx.touch_silent_input()
                 if pctx
                 else "（对方没有说话，只是通过触摸和你互动。用一句简短的话或声音回应。）",
+                priority=1,  # a touch reply is a live reaction
             )
 
             text_response = content_filter.filter_output(text_response)

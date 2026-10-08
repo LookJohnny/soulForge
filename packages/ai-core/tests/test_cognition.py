@@ -354,6 +354,8 @@ def api_app(monkeypatch, stack, source="service", authorized=True):
     monkeypatch.setattr(api, "get_llm_client", AsyncMock(return_value=stack.llm))
     monkeypatch.setattr(api, "get_cache", lambda: stack.cache)
     monkeypatch.setattr(api, "get_emotion_engine", lambda: stack.emotion)
+    # never reach a real tone server from tests, whatever .env selects
+    monkeypatch.setattr(api, "get_tone_reader", lambda: stack.service.tone_reader)
     return app
 
 

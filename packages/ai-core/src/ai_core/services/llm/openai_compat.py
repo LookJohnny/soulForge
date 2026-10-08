@@ -1,6 +1,7 @@
 """Unified OpenAI-compatible LLM provider.
 
-Covers: DashScope/Qwen, DeepSeek, Moonshot/Kimi, GLM-4, OpenAI, local Ollama.
+Covers: DashScope/Qwen, DeepSeek, Moonshot/Kimi, GLM-4, OpenAI, local Ollama,
+local Nous Tone.
 All use the same OpenAI SDK with different base_url + api_key.
 """
 
@@ -31,14 +32,34 @@ class OpenAICompatProvider(LLMProvider):
 
     name = "openai_compat"
 
-    def __init__(self, base_url: str, api_key: str, model: str):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        model: str,
+        extra_body: dict | None = None,
+        supports_priority: bool = False,
+        supports_prefill: bool = False,
+        max_retries: int | None = None,
+    ):
         self.model = model
+        # Provider-specific request fields (e.g. Nous Tone "tone"/"tone_target").
+        self.extra_body = dict(extra_body or {})
+        # Only a server that queues by "priority" (Nous Tone) gets the field;
+        # hosted APIs reject unknown request arguments.
+        self.supports_priority = supports_priority
+        self.supports_prefill = supports_prefill
         # Use a custom httpx client to bypass system SOCKS proxy, with timeout
         http_client = httpx.AsyncClient(
             proxy=None,
             timeout=httpx.Timeout(settings.llm_timeout, connect=10.0),
         )
-        self.client = AsyncOpenAI(base_url=base_url, api_key=api_key, http_client=http_client)
+        # max_retries=0 for a local model: the SDK's silent retries re-ran a slow
+        # generation up to 3x (~90 s) while the Runtime had long given up.
+        extra = {} if max_retries is None else {"max_retries": max_retries}
+        self.client = AsyncOpenAI(
+            base_url=base_url, api_key=api_key, http_client=http_client, **extra
+        )
         logger.info("llm.provider_init", provider=self.name, base_url=base_url, model=model)
 
     def _build_messages(
@@ -49,6 +70,12 @@ class OpenAICompatProvider(LLMProvider):
             messages.extend(history)
         messages.append({"role": "user", "content": user_input})
         return messages
+
+    def _body(self, priority: int) -> dict:
+        body = dict(self.extra_body)
+        if self.supports_priority and priority:
+            body["priority"] = int(priority)
+        return body
 
     @retry(
         stop=stop_after_attempt(3),
@@ -66,6 +93,9 @@ class OpenAICompatProvider(LLMProvider):
         top_p: float = 0.9,
         max_tokens: int = 256,
         json_mode: bool = False,
+        priority: int = 0,
+        prefill: str = "",
+        preemptible: bool = False,
     ) -> str:
         messages = self._build_messages(system_prompt, user_input, history)
         kwargs: dict = dict(
@@ -77,6 +107,13 @@ class OpenAICompatProvider(LLMProvider):
         )
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
+        body = self._body(priority)
+        if prefill and self.supports_prefill:
+            body["prefill"] = prefill
+        if preemptible and self.supports_priority:
+            body["preemptible"] = True  # background work: a waiting user takes the model
+        if body:
+            kwargs["extra_body"] = body
         resp = await self.client.chat.completions.create(**kwargs)
         return resp.choices[0].message.content or ""
 
@@ -94,6 +131,8 @@ class OpenAICompatProvider(LLMProvider):
         top_p: float = 0.9,
         max_tokens: int = 256,
         json_mode: bool = False,
+        priority: int = 0,
+        prefill: str = "",
     ) -> AsyncIterator[str]:
         messages = self._build_messages(system_prompt, user_input, history)
         kwargs: dict = dict(
@@ -106,6 +145,11 @@ class OpenAICompatProvider(LLMProvider):
         )
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
+        body = self._body(priority)
+        if prefill and self.supports_prefill:
+            body["prefill"] = prefill
+        if body:
+            kwargs["extra_body"] = body
         stream = await self.client.chat.completions.create(**kwargs)
         async for chunk in stream:
             delta = chunk.choices[0].delta
