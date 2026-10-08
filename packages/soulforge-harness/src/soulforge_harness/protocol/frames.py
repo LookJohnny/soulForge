@@ -189,6 +189,10 @@ class DecisionComplete:
     agent_id: str
     error: str = ""
     provider_health: dict[str, Any] = field(default_factory=dict)
+    # The agent's authoritative mood/relationship after this decision. A streamed
+    # turn may speak every line before the decision (and its state) exists, so
+    # the completion is where a voice body learns the turn's final PAD.
+    cognitive_state: dict[str, Any] = field(default_factory=dict)
     type: str = "decision_complete"
 
 

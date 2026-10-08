@@ -40,29 +40,34 @@ class Replanner:
         day_plan: DayPlan,
         hour_plan: HourPlan,
         minute: float,
+        correlation: str | None = None,
     ) -> PlanDelta:
         delta = self._apply(decision, event, persona, day_plan, hour_plan, minute)
         # every step born from this one decision shares a correlation id, so a
         # body can align speech, gaze and motion of the same beat
+        correlation = correlation or self.correlation_for(event)
+        for action in delta.micro_actions:
+            action.correlation_id = correlation
+        return delta
+
+    @staticmethod
+    def correlation_for(event: Event) -> str:
+        """Perception/Gateway events carry an event_id. Reusing it as the action
+        correlation lets persistent bodies route a turn's actions (including lines
+        spoken before the decision completed) to the right turn. Untrusted or
+        oversized values fall back to a server-generated id."""
         import uuid
 
-        # Perception/Gateway events carry an event_id. Reusing it as the action
-        # correlation lets persistent bodies route unsolicited visual/audio
-        # reactions to the correct turn. Untrusted/oversized values fall back
-        # to a server-generated id.
         candidate = (
             event.payload.get("event_id") if isinstance(event.payload, dict) else None
         )
-        correlation = (
+        return (
             candidate
             if isinstance(candidate, str)
             and 1 <= len(candidate) <= 64
             and all(ch.isalnum() or ch in "-_" for ch in candidate)
             else uuid.uuid4().hex[:12]
         )
-        for action in delta.micro_actions:
-            action.correlation_id = correlation
-        return delta
 
     def _apply(
         self,
@@ -267,6 +272,24 @@ class Replanner:
         ]
 
     @staticmethod
+    def speak_line_action(line: dict, motion_style: str = "neutral", gaze: str = "user") -> MicroAction:
+        return MicroAction(
+            name="speak_line",
+            dialogue=line["text"],
+            params={
+                "emotion": line.get("emotion", "neutral"),
+                "motion_style": motion_style,
+                **(
+                    {"tone_readout": line["tone_readout"]}
+                    if isinstance(line.get("tone_readout"), dict)
+                    else {}
+                ),
+            },
+            gaze_target=gaze,
+            duration_s=2.8,
+        )
+
+    @staticmethod
     def _speak_actions(
         decision: BehaviorDecision, gaze: str = "user"
     ) -> list[MicroAction]:
@@ -277,6 +300,13 @@ class Replanner:
                 params={
                     "emotion": line.get("emotion", "neutral"),
                     "motion_style": decision.motion_style,
+                    # Per-sentence tone readouts (AI Core + Nous Tone), when present:
+                    # the gateway cues each synthesized sentence's expression.
+                    **(
+                        {"tone_readout": line["tone_readout"]}
+                        if isinstance(line.get("tone_readout"), dict)
+                        else {}
+                    ),
                 },
                 gaze_target=gaze,
                 duration_s=2.8,

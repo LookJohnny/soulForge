@@ -772,7 +772,9 @@ def validate_decision(
 class SafeDecisionLLM:
     """Bounded decision workers; every fallback is observable and recoverable."""
 
-    def __init__(self, inner, timeout_s=8.0, fallback=None, conversation_timeout_s=None):
+    supports_streaming = True  # decide(..., on_line=...) relays streamed dialogue lines
+
+    def __init__(self, inner, timeout_s=8.0, fallback=None, conversation_timeout_s=None, max_workers=2):
         import concurrent.futures
         import threading
         from soulforge_harness.runtime.provider_health import ProviderHealthRegistry
@@ -781,8 +783,11 @@ class SafeDecisionLLM:
         self.timeout_s = timeout_s
         self.conversation_timeout_s = conversation_timeout_s or timeout_s * 2
         self.fallback = fallback or MockBehaviorLLM()
-        self._pool = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="behavior-llm")
-        self._slots = threading.BoundedSemaphore(2)
+        # Slots bound concurrent provider calls, including calls a timeout
+        # abandoned (a thread cannot be killed). Hosts that decide for several
+        # agents at once size this above their own concurrency.
+        self._pool = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="behavior-llm")
+        self._slots = threading.BoundedSemaphore(max_workers)
         self.last_fallback_reason = None
         self.last_call = {}
         self.health = ProviderHealthRegistry()
@@ -794,8 +799,12 @@ class SafeDecisionLLM:
     def health_snapshot(self):
         return self.health.snapshot()
 
-    def decide(self, event, persona, world, current_template, current_interruptible):
+    def decide(self, event, persona, world, current_template, current_interruptible, *, on_line=None):
+        """on_line: stream the decision when the provider can (decide_stream), handing
+        each dialogue line over as it arrives. Once a line has been handed over, a
+        failure or timeout keeps the spoken lines instead of adding fallback speech."""
         import concurrent.futures
+        import threading
         import time
 
         payload = event.payload if isinstance(event.payload, dict) else {}
@@ -808,13 +817,28 @@ class SafeDecisionLLM:
         self.last_fallback_reason = None
         future = None
         available = getattr(world, "body_actions", {}).get(persona.agent_id, [])
+        streamed: list[dict] = []
+        closed = threading.Event()  # set when this call returns: later lines are dropped
+
+        def relay(line):
+            if closed.is_set():
+                return
+            streamed.append(line)
+            on_line(line)
+
+        stream = on_line is not None and hasattr(lane, "decide_stream")
         try:
             if isinstance(lane, MockBehaviorLLM):
                 raise RuntimeError("mock_configured")
             if not self._slots.acquire(blocking=False):
                 raise RuntimeError("decision_workers_busy")
             try:
-                future = self._pool.submit(inner.decide, event, persona, world, current_template, current_interruptible)
+                if stream:
+                    future = self._pool.submit(lane.decide_stream, event, persona, world,
+                                               current_template, current_interruptible, on_line=relay)
+                else:
+                    future = self._pool.submit(inner.decide, event, persona, world,
+                                               current_template, current_interruptible)
             except Exception:
                 self._slots.release()
                 raise
@@ -826,6 +850,7 @@ class SafeDecisionLLM:
             self.last_call = {"provider": name, "model": model, "fallback": False,
                               "latency_ms": round(latency, 1), "fallback_count": self.health.snapshot()["fallback_count"]}
             decision.provider_status = {**decision.provider_status, **self.last_call, "status": "ok"}
+            closed.set()
             return decision
         except concurrent.futures.TimeoutError:
             if future is not None:
@@ -841,12 +866,38 @@ class SafeDecisionLLM:
             else:
                 code = getattr(exc, "code", None)
                 reason = f"HTTP_{code}" if isinstance(code, int) else type(exc).__name__
+        closed.set()
         self.last_fallback_reason = reason
         latency = (time.monotonic() - started) * 1000
         self.health.record_failure(name, model, reason, latency_ms=latency)
         self.last_call = {"provider": name, "model": model, "fallback": True,
                           "fallback_reason": reason, "latency_ms": round(latency, 1),
                           "fallback_count": self.health.snapshot()["fallback_count"]}
+        if streamed:
+            # Lines already reached the body: keep exactly them, add no canned speech.
+            decision = BehaviorDecision(
+                selected_intent="respond", emotional_read="", plan_delta="none",
+                impact=ImpactLevel.LOW, template_to_call=current_template, template_params={},
+                dialogue=list(streamed), motion_style="neutral", interrupt_policy="resume",
+                memory_update={}, reason=f"[stream cut: {reason}] spoken lines kept", body_actions=[],
+            )
+            decision.provider_status = {**self.last_call, "status": "degraded"}
+            return decision
+        from soulforge_harness.runtime.runtime import event_class
+
+        if reason != "mock_configured" and event_class(event) == "droppable":
+            # Nobody is waiting on an optional musing (noticing an arrival, a
+            # proactive line): a failed or preempted one is a quiet beat, not a
+            # canned line out of nowhere. Perception and user turns keep the
+            # deterministic fallback, and a configured mock is the brain itself.
+            decision = BehaviorDecision(
+                selected_intent="quiet_observation", emotional_read="", plan_delta="none",
+                impact=ImpactLevel.LOW, template_to_call=current_template, template_params={},
+                dialogue=[], motion_style="neutral", interrupt_policy="resume",
+                memory_update={}, reason=f"[quiet fallback: {reason}]", body_actions=[],
+            )
+            decision.provider_status = {**self.last_call, "status": "degraded"}
+            return decision
         decision = self.fallback.decide(event, persona, world, current_template, current_interruptible)
         decision.reason = f"[fallback: {reason}] {decision.reason}"
         decision.provider_status = {**self.last_call, "status": "degraded"}

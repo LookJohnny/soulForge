@@ -13,6 +13,7 @@ from __future__ import annotations
 import copy
 import json
 import math
+import time
 from collections import OrderedDict, deque
 from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Callable
@@ -212,6 +213,45 @@ PROP_BOUND_TEMPLATES = frozenset(
 )  # need the stove / the plants
 
 
+@dataclass
+class Turn:
+    """One agent's handling of one event, split for concurrent hosts:
+    prepare (host thread) -> think (any thread; the only slow part) -> commit (host thread)."""
+
+    event: Event
+    agent_id: str
+    minute: float
+    payload: dict
+    current_template: str
+    interruptible: bool
+    deferred_decision: BehaviorDecision | None = None
+    # streaming: a user utterance may speak each line as soon as it is decided
+    stream: bool = False
+    correlation: str = ""
+    spoken: list = field(default_factory=list)  # line texts already dispatched early
+
+
+def event_class(event: Event) -> str:
+    """Scheduling class of an event.
+
+    "user": someone outside the runtime is waiting (an utterance, a body's touch or
+    sensor report carrying a reply body); it goes first and is never dropped.
+    "droppable": optional ambient awareness (noticing an arrival, a proactive
+    presence line); a host may drop it under load or when a user turn preempts it.
+    "ambient": runtime-internal work that must still complete in order
+    (conversation turns, deferred motion), only scheduled behind user turns."""
+    payload = event.payload if isinstance(event.payload, dict) else {}
+    if isinstance(event, _DeferredActionEvent) or payload.get("conversation"):
+        return "ambient"
+    if event.kind == EventKind.USER_UTTERANCE or payload.get("reply_body_id"):
+        return "user"
+    if event.source == "user" and not payload.get("proactive"):
+        return "user"
+    if event.kind == EventKind.AGENT_STATE or payload.get("proactive"):
+        return "droppable"
+    return "ambient"
+
+
 class CompanionRuntime:
     def __init__(
         self,
@@ -222,7 +262,12 @@ class CompanionRuntime:
         trace_limit: int = 20000,
         memory_store=None,
         social_policy=None,
+        ambient_min_interval_s: float = 0.0,
     ):
+        """ambient_min_interval_s: wall-clock seconds between ambient decisions
+        (characters noticing each other's arrival). 0 = no limit. A local model
+        serves one completion at a time; without a budget these reactions keep it
+        busy and a user's utterance waits behind them."""
         if not personas:
             raise ValueError("CompanionRuntime needs at least one persona")
         from soulforge_harness.runtime.memory_store import InMemoryMemoryStore
@@ -233,6 +278,10 @@ class CompanionRuntime:
         self.replanner = Replanner()
         self.adapter = adapter or (lambda agent_id, action: None)
         self.event_queue: deque[Event] = deque(maxlen=1000)  # backpressure, drop-oldest
+        if not math.isfinite(ambient_min_interval_s) or ambient_min_interval_s < 0:
+            raise ValueError("ambient_min_interval_s must be a finite number >= 0")
+        self.ambient_min_interval_s = float(ambient_min_interval_s)
+        self._last_ambient_decision: dict[str, float] = {}
         # Keep the event itself alive with its decision: an integer id alone
         # could accidentally match a later object after Python reuses an id.
         self._deferred_decisions: OrderedDict[
@@ -586,11 +635,59 @@ class CompanionRuntime:
                 )
 
     def handle_event_now(self, event: Event, minute: float) -> None:
-        """Public synchronous event handling — hosts run this off the tick path
-        (worker thread) so LLM latency never stalls the action loop."""
+        """Synchronous event handling (prepare, think, commit in one call).
+
+        Concurrent hosts call prepare_event / think / commit themselves: only
+        think() may leave the host thread, so all runtime state is mutated on
+        one thread."""
         self._handle_event(event, minute)
 
     def _handle_event(self, event: Event, minute: float) -> None:
+        for turn in self.prepare_event(event, minute):
+            self.commit(turn, self.think(turn), minute)
+
+    def think(self, turn: Turn, on_line=None) -> BehaviorDecision:
+        """The slow part: one model decision. Reads the runtime, never mutates it.
+
+        on_line: for a streaming turn, called (from this thread) with each dialogue
+        line as soon as it is decided; the host hops to its own thread and calls
+        speak_early. Only decision makers that support streaming receive it."""
+        if turn.deferred_decision is not None:
+            return turn.deferred_decision
+        args = (turn.event, self.personas[turn.agent_id], self.world,
+                turn.current_template, turn.interruptible)
+        if on_line is not None and turn.stream and getattr(self.llm, "supports_streaming", False):
+            return self.llm.decide(*args, on_line=on_line)
+        return self.llm.decide(*args)
+
+    def speak_early(self, turn: Turn, line: dict, minute: float) -> None:
+        """Dispatch one streamed line now (host thread), ahead of the decision's commit."""
+        if turn.agent_id not in self.personas or not isinstance(line.get("text"), str):
+            return
+        action = Replanner.speak_line_action(line)
+        action.correlation_id = turn.correlation
+        context = {}
+        if turn.payload.get("identity"):
+            context["identity"] = turn.payload["identity"]
+        if turn.payload.get("reply_body_id"):
+            context["reply_body_id"] = turn.payload["reply_body_id"]
+        action.params = {**action.params, **context, "streamed": True}
+        turn.spoken.append(line["text"])
+        self._dispatch_micro(turn.agent_id, action, minute)
+
+    def _drop_spoken(self, turn: Turn, delta: PlanDelta) -> None:
+        """Lines a streaming turn already spoke are not spoken again at commit."""
+        pending = list(turn.spoken)
+        kept = []
+        for action in delta.micro_actions:
+            if action.name == "speak_line" and action.dialogue in pending:
+                pending.remove(action.dialogue)
+                continue
+            kept.append(action)
+        delta.micro_actions = kept
+
+    def prepare_event(self, event: Event, minute: float) -> list[Turn]:
+        """Validate and route an event; returns the agents' turns to think about."""
         deferred_decision = None
         if isinstance(event, _DeferredActionEvent):
             cached = self._deferred_decisions.pop(id(event), None)
@@ -599,7 +696,7 @@ class CompanionRuntime:
                 # user turn and run cognition or persist that turn again.
                 self._log(minute, event.target_agent or "*", "event_dropped",
                           {"reason": "deferred decision expired"})
-                return
+                return []
             deferred_decision = cached[1]
         self._log(
             minute,
@@ -617,8 +714,9 @@ class CompanionRuntime:
                 "event_dropped",
                 {"reason": "unknown target agent"},
             )
-            return
+            return []
         targets = [event.target_agent] if event.target_agent else list(self.personas)
+        turns: list[Turn] = []
         for agent_id in targets:
             if deferred_decision is None and not self.conversations.accepts(event, agent_id):
                 self._log(
@@ -628,96 +726,95 @@ class CompanionRuntime:
                     {"reason": "not this agent's turn"},
                 )
                 continue
+            if (deferred_decision is None and self.ambient_min_interval_s > 0
+                    and event_class(event) == "droppable"):
+                now = time.monotonic()
+                if now - self._last_ambient_decision.get(agent_id, -math.inf) < self.ambient_min_interval_s:
+                    # Noticing an arrival is optional; a user's turn or a
+                    # conversation turn is not (both are other classes).
+                    self._log(minute, agent_id, "event_dropped", {"reason": "ambient budget"})
+                    continue
+                self._last_ambient_decision[agent_id] = now
+            if agent_id not in self.hour_plans:
+                self._ensure_hour_plans(minute)  # a soul installed since the last tick
             persona = self.personas[agent_id]
-            hour_plan = self.hour_plans[agent_id]
-            activity = hour_plan.activity_at(minute)
-            current_template = activity.template_id if activity else "idle"
-            history = self.recent_dialogue.setdefault(agent_id, deque(maxlen=8))
+            activity = self.hour_plans[agent_id].activity_at(minute)
             if deferred_decision is None:
+                history = self.recent_dialogue.setdefault(agent_id, deque(maxlen=8))
                 if event.kind == EventKind.USER_UTTERANCE and event.text:
                     history.append(("用户", event.text[:120]))
                 persona.meta["recent_dialogue"] = list(history)
-                decision = self.llm.decide(
-                    event,
-                    persona,
-                    self.world,
-                    current_template,
-                    activity.interruptible if activity else True,
-                )
+            turns.append(Turn(
+                event=event,
+                agent_id=agent_id,
+                minute=minute,
+                payload=payload,
+                current_template=activity.template_id if activity else "idle",
+                interruptible=activity.interruptible if activity else True,
+                deferred_decision=deferred_decision,
+                stream=deferred_decision is None and event.kind == EventKind.USER_UTTERANCE,
+                correlation=Replanner.correlation_for(event),
+            ))
+        return turns
 
-                if decision.cognitive_state:
-                    state = decision.cognitive_state
-                    self._apply_cognitive_state(persona, state)
-                    self.memory_store.remember(agent_id, "semantic", "cognitive_state", state)
-                if decision.provider_status.get("fallback"):
-                    self._log(minute, agent_id, "provider_fallback", dict(decision.provider_status))
-            else:
-                decision = deferred_decision
+    def commit(self, turn: Turn, decision: BehaviorDecision, minute: float) -> None:
+        """Apply a decision to the CURRENT plan and world (host thread only)."""
+        event, agent_id, payload = turn.event, turn.agent_id, turn.payload
+        deferred_decision = turn.deferred_decision
+        if agent_id not in self.personas:
+            self._log(minute, agent_id, "event_dropped", {"reason": "agent removed during decision"})
+            return
+        persona = self.personas[agent_id]
+        hour_plan = self.hour_plans[agent_id]
+        activity = hour_plan.activity_at(minute)
+        history = self.recent_dialogue.setdefault(agent_id, deque(maxlen=8))
+        if deferred_decision is None:
+            if decision.cognitive_state:
+                state = decision.cognitive_state
+                self._apply_cognitive_state(persona, state)
+                self.memory_store.remember(agent_id, "semantic", "cognitive_state", state)
+            if decision.provider_status.get("fallback"):
+                self._log(minute, agent_id, "provider_fallback", dict(decision.provider_status))
+        else:
+            decision = deferred_decision
 
-            # -- deterministic action-catalog gate (never delegated to the LLM):
-            # a requested body action executes only if a connected body offered
-            # it. SafeDecisionLLM already filters; this is the choke point that
-            # also covers hosts driving a bare decision model.
-            allowed = set(self.world.body_actions.get(agent_id, ()))
-            decision.body_actions = [
-                a for a in decision.body_actions if a in allowed
-            ][:2]
-            # an explicit gesture request must never be lost to a model that
-            # answered in prose: keyword-match it deterministically, still
-            # behind the same catalog gate
-            if (deferred_decision is None and not decision.body_actions
-                    and event.kind == EventKind.USER_UTTERANCE):
-                from soulforge_harness.runtime.llm_interface import MockBehaviorLLM
+        # -- deterministic action-catalog gate (never delegated to the LLM):
+        # a requested body action executes only if a connected body offered
+        # it. SafeDecisionLLM already filters; this is the choke point that
+        # also covers hosts driving a bare decision model.
+        allowed = set(self.world.body_actions.get(agent_id, ()))
+        decision.body_actions = [
+            a for a in decision.body_actions if a in allowed
+        ][:2]
+        # an explicit gesture request must never be lost to a model that
+        # answered in prose: keyword-match it deterministically, still
+        # behind the same catalog gate
+        if (deferred_decision is None and not decision.body_actions
+                and event.kind == EventKind.USER_UTTERANCE):
+            from soulforge_harness.runtime.llm_interface import MockBehaviorLLM
 
-                requested = MockBehaviorLLM._match_performance(event.text.lower())
-                if requested and requested in allowed:
-                    decision.body_actions = [requested]
-            # the Joi moment must include physically coming over, whatever the
-            # model chose to say
-            if (
-                payload.get("proactive") == "loneliness"
-                and "approach_user" in allowed
-                and "approach_user" not in decision.body_actions
-            ):
-                decision.body_actions = (
-                    ["approach_user"] + decision.body_actions
-                )[:2]
+            requested = MockBehaviorLLM._match_performance(event.text.lower())
+            if requested and requested in allowed:
+                decision.body_actions = [requested]
+        # the Joi moment must include physically coming over, whatever the
+        # model chose to say
+        if (
+            payload.get("proactive") == "loneliness"
+            and "approach_user" in allowed
+            and "approach_user" not in decision.body_actions
+        ):
+            decision.body_actions = (
+                ["approach_user"] + decision.body_actions
+            )[:2]
 
-            # Vision/sound labels, OCR and provider text are untrusted sensor
-            # data.  An LLM can never promote them into a physical emergency.
-            # A signed, multi-frame confirmation instead selects a fixed
-            # deterministic safe-stop decision, independent of the LLM output.
-            if event.kind in VISION_EVENT_KINDS:
-                if _trusted_confirmed_hazard(event):
-                    decision = _confirmed_hazard_decision(event, persona)
-                elif decision.impact > ImpactLevel.LOW:
-                    self._log(
-                        minute,
-                        agent_id,
-                        "decision",
-                        {
-                            "impact": "LOW",
-                            "scope": "clamped",
-                            "reason": (
-                                "unattested perception cannot exceed LOW; "
-                                f"impact {decision.impact.name} rejected"
-                            ),
-                            "intent": "ignore_unconfirmed_sensor_escalation",
-                            "emotional_read": decision.emotional_read,
-                            "interrupt_policy": "resume",
-                        },
-                    )
-                    continue
-
-            # -- deterministic perception guard: low-confidence sensor events can
-            # never escalate past LOW, regardless of what any LLM decided
-            confidence = event.payload.get("confidence")
-            if (
-                event.payload.get("perception")
-                and confidence is not None
-                and float(confidence) < 0.6
-                and decision.impact > ImpactLevel.LOW
-            ):
+        # Vision/sound labels, OCR and provider text are untrusted sensor
+        # data.  An LLM can never promote them into a physical emergency.
+        # A signed, multi-frame confirmation instead selects a fixed
+        # deterministic safe-stop decision, independent of the LLM output.
+        if event.kind in VISION_EVENT_KINDS:
+            if _trusted_confirmed_hazard(event):
+                decision = _confirmed_hazard_decision(event, persona)
+            elif decision.impact > ImpactLevel.LOW:
                 self._log(
                     minute,
                     agent_id,
@@ -726,105 +823,136 @@ class CompanionRuntime:
                         "impact": "LOW",
                         "scope": "clamped",
                         "reason": (
-                            f"perception confidence {confidence} below threshold: "
-                            f"impact {decision.impact.name} clamped, no physical escalation"
+                            "unattested perception cannot exceed LOW; "
+                            f"impact {decision.impact.name} rejected"
                         ),
-                        "intent": decision.selected_intent,
+                        "intent": "ignore_unconfirmed_sensor_escalation",
                         "emotional_read": decision.emotional_read,
                         "interrupt_policy": "resume",
                     },
                 )
-                continue
+                return
 
-            # -- deterministic interruption enforcement (never delegated to the LLM).
-            # Must run BEFORE replanner.apply: applying a delta has side effects.
-            if (
-                activity is not None
-                and not activity.interruptible
-                and decision.impact < ImpactLevel.CRITICAL
-            ):
-                safe_at = activity.start_min + activity.duration_min + 0.01
-                scheduled = _DeferredActionEvent(
-                    t_min=safe_at,
-                    kind=event.kind,
-                    source=event.source,
-                    text=event.text,
-                    payload={**event.payload, "_deferred_from": minute},
-                    target_agent=agent_id,
-                )
-                remaining = copy.deepcopy(decision)
-                remaining.dialogue = []
-                remaining.memory_update = {}
-                remaining.cognitive_state = {}
-                self._deferred_decisions[id(scheduled)] = (scheduled, remaining)
-                while len(self._deferred_decisions) > _MAX_DEFERRED_DECISIONS:
-                    self._deferred_decisions.popitem(last=False)
-                self.push_event(scheduled)
-                if deferred_decision is None:
-                    # LOW replanning has no plan mutations. Retain only its
-                    # speech so neither gaze nor pause/resume disturbs the
-                    # current physical activity. Cognition/state happen once.
-                    speech = replace(decision, impact=ImpactLevel.LOW,
-                                     body_actions=[])
-                    delta = self.replanner.apply(
-                        speech, event, persona, self.day_plans[agent_id], hour_plan, minute
-                    )
-                    delta.micro_actions = [a for a in delta.micro_actions if a.name == "speak_line"]
-                    for action in delta.micro_actions:
-                        action.gaze_target = None
-                    self._attach_decision_context(delta, decision, payload)
-                    self._apply_delta(agent_id, delta, minute)
-                    for spoken in decision.dialogue[:1]:
-                        history.append((persona.name, str(spoken["text"])[:120]))
-                    self.conversations.after_decision(agent_id, event, decision, minute)
-                self._log(
-                    minute,
-                    agent_id,
-                    "decision",
-                    {
-                        "impact": decision.impact.name,
-                        "scope": "deferred",
-                        "reason": (
-                            f"activity {activity.template_id} is non-interruptible; "
-                            f"event deferred to safe breakpoint at {safe_at:.0f}"
-                        ),
-                        "intent": "hold_until_safe_breakpoint",
-                        "emotional_read": decision.emotional_read,
-                        "interrupt_policy": "defer",
-                    },
-                )
-                continue
-
-            for spoken in decision.dialogue[:1]:
-                text = spoken.get("text") if isinstance(spoken, dict) else None
-                if text:
-                    history.append((persona.name, str(text)[:120]))
-
-            delta = self.replanner.apply(
-                decision, event, persona, self.day_plans[agent_id], hour_plan, minute
+        # -- deterministic perception guard: low-confidence sensor events can
+        # never escalate past LOW, regardless of what any LLM decided
+        confidence = event.payload.get("confidence")
+        if (
+            event.payload.get("perception")
+            and confidence is not None
+            and float(confidence) < 0.6
+            and decision.impact > ImpactLevel.LOW
+        ):
+            self._log(
+                minute,
+                agent_id,
+                "decision",
+                {
+                    "impact": "LOW",
+                    "scope": "clamped",
+                    "reason": (
+                        f"perception confidence {confidence} below threshold: "
+                        f"impact {decision.impact.name} clamped, no physical escalation"
+                    ),
+                    "intent": decision.selected_intent,
+                    "emotional_read": decision.emotional_read,
+                    "interrupt_policy": "resume",
+                },
             )
-            self._attach_decision_context(delta, decision, payload)
-            self._apply_delta(agent_id, delta, minute)
+            return
+
+        # -- deterministic interruption enforcement (never delegated to the LLM).
+        # Must run BEFORE replanner.apply: applying a delta has side effects.
+        if (
+            activity is not None
+            and not activity.interruptible
+            and decision.impact < ImpactLevel.CRITICAL
+        ):
+            safe_at = activity.start_min + activity.duration_min + 0.01
+            scheduled = _DeferredActionEvent(
+                t_min=safe_at,
+                kind=event.kind,
+                source=event.source,
+                text=event.text,
+                payload={**event.payload, "_deferred_from": minute},
+                target_agent=agent_id,
+            )
+            remaining = copy.deepcopy(decision)
+            remaining.dialogue = []
+            remaining.memory_update = {}
+            remaining.cognitive_state = {}
+            self._deferred_decisions[id(scheduled)] = (scheduled, remaining)
+            while len(self._deferred_decisions) > _MAX_DEFERRED_DECISIONS:
+                self._deferred_decisions.popitem(last=False)
+            self.push_event(scheduled)
             if deferred_decision is None:
+                # LOW replanning has no plan mutations. Retain only its
+                # speech so neither gaze nor pause/resume disturbs the
+                # current physical activity. Cognition/state happen once.
+                speech = replace(decision, impact=ImpactLevel.LOW,
+                                 body_actions=[])
+                delta = self.replanner.apply(
+                    speech, event, persona, self.day_plans[agent_id], hour_plan, minute,
+                    correlation=turn.correlation,
+                )
+                delta.micro_actions = [a for a in delta.micro_actions if a.name == "speak_line"]
+                self._drop_spoken(turn, delta)
+                for action in delta.micro_actions:
+                    action.gaze_target = None
+                self._attach_decision_context(delta, decision, payload)
+                self._apply_delta(agent_id, delta, minute)
+                for spoken in decision.dialogue[:1]:
+                    history.append((persona.name, str(spoken["text"])[:120]))
                 self.conversations.after_decision(agent_id, event, decision, minute)
             self._log(
                 minute,
                 agent_id,
                 "decision",
                 {
-                    "impact": delta.impact.name,
-                    "scope": delta.scope,
-                    "reason": delta.reason,
-                    "intent": decision.selected_intent,
-                    "emotional_read": decision.emotional_read,
-                    "interrupt_policy": decision.interrupt_policy,
-                    "body_actions": list(decision.body_actions),
-                    "provider_status": dict(decision.provider_status),
-                    "llm": getattr(
-                        getattr(self.llm, "inner", self.llm), "last_model", None
+                    "impact": decision.impact.name,
+                    "scope": "deferred",
+                    "reason": (
+                        f"activity {activity.template_id} is non-interruptible; "
+                        f"event deferred to safe breakpoint at {safe_at:.0f}"
                     ),
+                    "intent": "hold_until_safe_breakpoint",
+                    "emotional_read": decision.emotional_read,
+                    "interrupt_policy": "defer",
                 },
             )
+            return
+
+        for spoken in decision.dialogue[:1]:
+            text = spoken.get("text") if isinstance(spoken, dict) else None
+            if text:
+                history.append((persona.name, str(text)[:120]))
+
+        delta = self.replanner.apply(
+            decision, event, persona, self.day_plans[agent_id], hour_plan, minute,
+            correlation=turn.correlation,
+        )
+        self._drop_spoken(turn, delta)
+        self._attach_decision_context(delta, decision, payload)
+        self._apply_delta(agent_id, delta, minute)
+        if deferred_decision is None:
+            self.conversations.after_decision(agent_id, event, decision, minute)
+        self._log(
+            minute,
+            agent_id,
+            "decision",
+            {
+                "impact": delta.impact.name,
+                "scope": delta.scope,
+                "reason": delta.reason,
+                "intent": decision.selected_intent,
+                "emotional_read": decision.emotional_read,
+                "interrupt_policy": decision.interrupt_policy,
+                "body_actions": list(decision.body_actions),
+                "provider_status": dict(decision.provider_status),
+                "llm": decision.provider_status.get("model") or getattr(
+                    getattr(self.llm, "inner", self.llm), "last_model", None
+                ),
+            },
+        )
 
     @staticmethod
     def _attach_decision_context(delta: PlanDelta, decision: BehaviorDecision, payload: dict) -> None:
