@@ -61,6 +61,11 @@ class AudioHandler:
             self._decoders.pop(session.session_id, None)
         else:
             self._decoders[session.session_id] = opuslib.Decoder(16000, 1)
+        # A second start (device "listen start" after the gateway re-armed)
+        # must not leak the previous recognizer's connection.
+        previous = self._asr_sessions.pop(session.session_id, None)
+        if previous:
+            previous.abort()
         # Start streaming ASR session
         if self._dashscope_api_key:
             asr = StreamingASR(api_key=self._dashscope_api_key, model=self._asr_model)

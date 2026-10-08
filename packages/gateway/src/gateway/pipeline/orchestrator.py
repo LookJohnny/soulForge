@@ -21,6 +21,24 @@ from gateway.session import Session
 logger = logging.getLogger(__name__)
 
 
+# ai-core /tts/synthesize accepts at most this many characters per request
+_TTS_MAX_CHARS = 500
+
+
+def _tts_sentences(line: str) -> list[str]:
+    """Split a line into TTS sentences (same rule as ai-core's tone reader), and
+    break any run-on sentence longer than the TTS limit at commas/spaces."""
+    out = []
+    for sentence in re.findall(r"[^。！？!?]+[。！？!?]*", line):
+        while len(sentence) > _TTS_MAX_CHARS:
+            head = sentence[:_TTS_MAX_CHARS]
+            cut = max(head.rfind(c) for c in "，,；; ") + 1 or _TTS_MAX_CHARS
+            out.append(sentence[:cut])
+            sentence = sentence[cut:]
+        out.append(sentence)
+    return out
+
+
 @dataclass
 class StreamChunk:
     """A single chunk from the streaming pipeline.
@@ -51,6 +69,9 @@ class StreamChunk:
     relationship: dict | None = None
     # Only populated on 'event' chunks (visual-novel scene card)
     event: dict | None = None
+    # Only populated on 'sentence' chunks with a tone readout (Nous Tone):
+    # {"weights": {expression: 0..1}, "readout": {attribute: p}, "source": ...}
+    expression: dict | None = None
     latency_ms: int = 0
     stages: dict | None = None  # ai-core per-stage latency breakdown (ms)
     # Opaque receipt for the downstream playback sink.  The sink calls
@@ -191,6 +212,116 @@ class PipelineOrchestrator:
             decision = await bridge.process_utterance(text)
         return bridge, decision
 
+    async def _runtime_stream(self, session: Session, text: str):
+        """Yield (kind, frame, bridge) for this user turn as the Runtime dispatches it."""
+        bridge = self._runtime_bridge(session)
+        identity = await self.bind_runtime_session(session, bridge=bridge)
+        payload = {"identity": identity} if identity else None
+        async for kind, data in bridge.stream_utterance(text, payload=payload):
+            yield kind, data, bridge
+
+    async def _runtime_text_stream(self, session: Session, text: str):
+        """Character Runtime path: synthesize each line the moment it is dispatched.
+
+        A streamed decision speaks line by line before it is complete, so TTS of
+        the first line overlaps the generation of the rest. The turn's mood (PAD)
+        rides the first command that carries it, or the completion frame."""
+        started = time.monotonic()
+        first_line_ms = first_audio_ms = None
+        turn_character, turn_brand = session.character_id, session.brand_id
+        reply: list[str] = []
+        index = 0
+        mood_sent = False
+        unhanded: set[str] = set()  # receipts registered but not yet in a yielded chunk
+        last_receipt = None
+        try:
+            async for kind, data, bridge in self._runtime_stream(session, text):
+                params = data.get("params") or {}
+                state = data.get("cognitive_state") if kind == "complete" else params.get("cognitive_state")
+                if state and not mood_sent:
+                    mood_sent = True
+                    yield StreamChunk(
+                        text="",
+                        audio_data=None,
+                        index=-1,
+                        kind="emotion",
+                        emotion=state.get("emotion", ""),
+                        pad=state.get("pad"),
+                    )
+                    if state.get("relationship"):
+                        yield StreamChunk(
+                            text="",
+                            audio_data=None,
+                            index=-1,
+                            kind="relationship",
+                            relationship=state["relationship"],
+                        )
+                if kind == "complete":
+                    break
+                if first_line_ms is None:
+                    first_line_ms = round((time.monotonic() - started) * 1000)
+                identity = params.get("identity") or {}
+                turn_character = identity.get("character_id") or turn_character
+                line = data.get("dialogue") or ""
+                receipt = self._register_playback([data], bridge)
+                if receipt:
+                    unhanded.add(receipt)
+                    last_receipt = receipt
+                for sentence in _tts_sentences(line):
+                    if not sentence.strip():
+                        continue
+                    try:
+                        audio = await self.synthesize_tts(
+                            sentence, turn_character, turn_brand, emotion=self._beat_emotion([data])
+                        )
+                    except Exception:
+                        if receipt:
+                            unhanded.discard(receipt)
+                            await self.confirm_playback(
+                                receipt, played=False, detail="TTS synthesis raised an error"
+                            )
+                        raise
+                    if audio is None and receipt:
+                        unhanded.discard(receipt)
+                        await self.confirm_playback(
+                            receipt, played=False, detail="TTS synthesis failed"
+                        )
+                        receipt = None
+                    if audio is not None and first_audio_ms is None:
+                        first_audio_ms = round((time.monotonic() - started) * 1000)
+                    unhanded.discard(receipt)
+                    yield StreamChunk(
+                        text=sentence,
+                        audio_data=audio,
+                        index=index,
+                        kind="sentence",
+                        playback_receipt=receipt,
+                        expression=self._sentence_expression(data, sentence, index),
+                    )
+                    index += 1
+                reply.append(line)
+            yield StreamChunk(
+                text="",
+                audio_data=None,
+                index=index,
+                kind="done",
+                is_done=True,
+                full_text="".join(reply),
+                user_text=text,
+                playback_receipt=last_receipt,
+                latency_ms=round((time.monotonic() - started) * 1000),
+                stages={
+                    "decision_ms": first_line_ms,  # first line decided (streamed)
+                    "decision_complete_ms": round((time.monotonic() - started) * 1000),
+                    "first_audio_ms": first_audio_ms,
+                },
+            )
+        finally:
+            for receipt in unhanded:  # never reached the device
+                await self.confirm_playback(
+                    receipt, played=False, detail="speech stream interrupted before handoff"
+                )
+
     async def process_external_utterance(self, text: str, *, body_id: str, session_id: str) -> dict:
         """External video is a voice body of the same runtime and durable user."""
         from gateway.pipeline.character_bridge import CharacterBridge
@@ -315,10 +446,12 @@ class PipelineOrchestrator:
         bridge = owners.get(receipt) or getattr(self, "_character_bridge", None)
         if not command_ids or bridge is None:
             return False
-        for command_id in command_ids:
-            await bridge.confirm_spoken(command_id, played=played, detail=detail)
+        # Consume the receipt BEFORE awaiting: two concurrent confirmations (the
+        # consumer and a generator's finally) used to both send observations.
         pending.pop(receipt, None)
         owners.pop(receipt, None)
+        for command_id in command_ids:
+            await bridge.confirm_spoken(command_id, played=played, detail=detail)
         return True
 
     async def process_next_runtime_dialogue(
@@ -375,6 +508,7 @@ class PipelineOrchestrator:
             index=0,
             kind="sentence",
             playback_receipt=receipt,
+            expression=self._sentence_expression(command, text, 0) if text else None,
         )
 
     async def process_audio(self, session: Session, audio_data: bytes) -> dict:
@@ -571,6 +705,41 @@ class PipelineOrchestrator:
             logger.warning("orchestrator.runtime_voice_load_failed", exc_info=True)
         cls._runtime_voice_cache = (voice, speed)
         return cls._runtime_voice_cache
+
+    @staticmethod
+    def _sentence_expression(command: dict, sentence: str, index: int) -> dict | None:
+        """The expression cue for one synthesized sentence of a speak_line.
+
+        AI Core reads each sentence with the same split used here, so a match is
+        exact; the line-level reading covers any sentence that does not match
+        (e.g. text changed by a filter). Without a readout there is no cue and
+        the face stays on PAD."""
+        tone = (command.get("params") or {}).get("tone_readout")
+        if not isinstance(tone, dict):
+            return None
+        source, pick = "line", tone
+        for entry in tone.get("sentences") or ():
+            if isinstance(entry, dict) and str(entry.get("text", "")).strip() == sentence.strip():
+                source, pick = "sentence", entry
+                break
+        weights = pick.get("expression")
+        if not isinstance(weights, dict):
+            return None
+        clean = {
+            str(k): max(0.0, min(1.0, float(v)))
+            for k, v in weights.items()
+            if type(v) in (int, float) and v == v
+        }
+        if not clean:
+            return None
+        readout = pick.get("readout") if isinstance(pick.get("readout"), dict) else {}
+        cue = {"weights": clean, "readout": readout, "source": source, "index": index, "text": sentence}
+        # The line's own declared emotion: what the face shows for the part of
+        # a sentence the readout cannot attribute to any tone (its neutral share).
+        declared = (command.get("params") or {}).get("emotion")
+        if isinstance(declared, str) and declared.strip():
+            cue["declared"] = declared.strip()[:32]
+        return cue
 
     @staticmethod
     def _beat_emotion(commands: list | None) -> str | None:
@@ -914,107 +1083,8 @@ class PipelineOrchestrator:
         # Runtime; only TTS synthesis still rides ai-core. The legacy chat LLM
         # is bypassed — one utterance is never processed by two brains.
         if settings.character_runtime_url:
-            started = time.monotonic()
-            bridge, decision = await self._runtime_decision(session, text)
-            decided_ms = round((time.monotonic() - started) * 1000)
-            reply = decision["text"]
-            commands = decision.get("commands", [])
-            turn_identity = next(
-                (
-                    c.get("params", {}).get("identity")
-                    for c in commands
-                    if c.get("params", {}).get("identity")
-                ),
-                {},
-            )
-            turn_character = turn_identity.get("character_id") or session.character_id
-            turn_brand = session.brand_id
-            receipt = self._register_playback(commands, bridge)
-            state = next(
-                (
-                    c.get("params", {}).get("cognitive_state")
-                    for c in commands
-                    if c.get("params", {}).get("cognitive_state")
-                ),
-                {},
-            )
-            handed_off = False
-            first_audio_ms = None
-            index = 0
-            try:
-                # Same-turn mood reaches the body before its first audio clip.
-                if state:
-                    yield StreamChunk(
-                        text="",
-                        audio_data=None,
-                        index=-1,
-                        kind="emotion",
-                        emotion=state.get("emotion", ""),
-                        pad=state.get("pad"),
-                    )
-                    if state.get("relationship"):
-                        yield StreamChunk(
-                            text="",
-                            audio_data=None,
-                            index=-1,
-                            kind="relationship",
-                            relationship=state["relationship"],
-                        )
-                # The decision is already validated as a whole. Synthesize each
-                # sentence with its own beat emotion instead of buffering all TTS.
-                # This is sentence TTS pipelining, not token-streamed cognition.
-                lines = commands or [{"dialogue": reply}]
-                for command in lines:
-                    line = command.get("dialogue") or ""
-                    for sentence in re.findall(r"[^。！？!?]+[。！？!?]*", line):
-                        if not sentence.strip():
-                            continue
-                        audio = await self.synthesize_tts(
-                            sentence,
-                            turn_character,
-                            turn_brand,
-                            emotion=self._beat_emotion([command]),
-                        )
-                        if audio is None and receipt:
-                            await self.confirm_playback(
-                                receipt, played=False, detail="TTS synthesis failed"
-                            )
-                            receipt = None
-                        if audio is not None and first_audio_ms is None:
-                            first_audio_ms = round((time.monotonic() - started) * 1000)
-                        yield StreamChunk(
-                            text=sentence,
-                            audio_data=audio,
-                            index=index,
-                            kind="sentence",
-                            playback_receipt=receipt,
-                        )
-                        index += 1
-                handed_off = True
-                yield StreamChunk(
-                    text="",
-                    audio_data=None,
-                    index=index,
-                    kind="done",
-                    is_done=True,
-                    full_text=reply,
-                    user_text=text,
-                    playback_receipt=receipt,
-                    latency_ms=round((time.monotonic() - started) * 1000),
-                    stages={"decision_ms": decided_ms, "first_audio_ms": first_audio_ms},
-                )
-            except Exception:
-                if receipt:
-                    await self.confirm_playback(
-                        receipt, played=False, detail="TTS synthesis raised an error"
-                    )
-                    receipt = None
-                raise
-            finally:
-                if not handed_off and receipt:
-                    await self.confirm_playback(
-                        receipt, played=False, detail="speech stream interrupted before handoff"
-                    )
+            async for chunk in self._runtime_text_stream(session, text):
+                yield chunk
             return
 
         payload = {

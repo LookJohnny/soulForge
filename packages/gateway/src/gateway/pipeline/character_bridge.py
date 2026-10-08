@@ -15,6 +15,7 @@ The bridge holds no persona/memory state; it is a body, not a brain.
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict
 import json
 import uuid
 from dataclasses import dataclass, field
@@ -52,6 +53,7 @@ class CharacterBridge:
     )
 
     def __post_init__(self) -> None:
+        self._expired: OrderedDict[str, None] = OrderedDict()  # turns the gateway gave up on
         self.url = self.url or settings.character_runtime_url
         self.agent_id = self.agent_id or settings.character_runtime_agent
         self.timeout_s = self.timeout_s or settings.character_runtime_timeout_s
@@ -145,6 +147,23 @@ class CharacterBridge:
                     continue
                 correlation = data.get("correlation_id")
                 waiter = self._waiters.get(correlation)
+                if waiter is None and correlation and correlation in self._expired:
+                    # The gateway gave up on this turn (deadline). Speaking it now
+                    # would answer the previous question in the middle of the
+                    # next one, so the late line is refused, not queued.
+                    await socket.send(
+                        _frame(
+                            {
+                                "type": "observation",
+                                "command_id": data.get("command_id", ""),
+                                "agent_id": self.agent_id,
+                                "status": "rejected",
+                                "detail": "late: the turn's deadline had passed",
+                                "body_id": self.body_id,
+                            }
+                        )
+                    )
+                    continue
                 if waiter is None and self._unsolicited.full():
                     await socket.send(
                         _frame(
@@ -213,7 +232,15 @@ class CharacterBridge:
             require_dialogue=True,
         )
 
-    async def process_event(
+    async def stream_utterance(self, text: str, *, payload: dict[str, Any] | None = None):
+        """Yield ("command", action) for each line of this turn as it is dispatched
+        (a streamed decision speaks before it is complete), then ("complete", frame)."""
+        async for item in self.stream_event(
+            "user_utterance", source="user", text=text, payload=payload, require_dialogue=True
+        ):
+            yield item
+
+    async def stream_event(
         self,
         kind: str,
         *,
@@ -221,8 +248,13 @@ class CharacterBridge:
         text: str = "",
         payload: dict[str, Any] | None = None,
         require_dialogue: bool = False,
-    ) -> dict[str, Any]:
-        """Send one typed event; a completed touch may legitimately be silent."""
+    ):
+        """Send one typed event; yield its dialogue commands as they arrive.
+
+        The turn ends at decision_complete (the runtime sends it after every action
+        of the turn), or at the deadline. A consumer that stops early (barge-in)
+        expires the turn, so its remaining lines are refused rather than spoken
+        later as unsolicited speech."""
         async with self._lock:  # one in-flight decision per body
             socket = await self._ensure_connected()
             event_payload = dict(payload or {})
@@ -232,15 +264,9 @@ class CharacterBridge:
             event_payload["event_id"] = event_id
             inbox: asyncio.Queue = asyncio.Queue()
             self._waiters[event_id] = inbox
-            dialogue_parts: list[str] = []
-            commands: list[dict[str, Any]] = []
-            provider_health: dict[str, Any] = {}
-            completed = False
+            spoke = completed = False
             loop = asyncio.get_event_loop()
             deadline = loop.time() + self.timeout_s
-            # collect until the decision's dialogue arrives (correlation closes
-            # after a short quiet period) or the deadline hits
-            quiet_after = None
             try:
                 await socket.send(
                     _frame(
@@ -254,8 +280,8 @@ class CharacterBridge:
                         }
                     )
                 )
-                while loop.time() < deadline:
-                    budget = (quiet_after or deadline) - loop.time()
+                while True:
+                    budget = deadline - loop.time()
                     if budget <= 0:
                         break
                     try:
@@ -263,26 +289,59 @@ class CharacterBridge:
                     except asyncio.TimeoutError:
                         break
                     if data.get("type") == "decision_complete":
-                        if data.get("error"):
+                        if data.get("error") and not spoke:
                             raise RuntimeError("runtime decision failed: " + str(data["error"]))
-                        provider_health = data.get("provider_health", {})
+                        # An error after dialogue (e.g. a broadcast failure after the
+                        # decision committed) must not discard lines already accepted.
                         completed = True
+                        if not spoke and require_dialogue:
+                            raise RuntimeNoDialogueError("runtime completed decision without dialogue")
+                        yield "complete", data
                         break
-                    commands.append(data)
-                    dialogue_parts.append(data["dialogue"])
-                    quiet_after = loop.time() + 0.6  # flush trailing speech
+                    spoke = True
+                    yield "command", data
             finally:
                 self._waiters.pop(event_id, None)
-            if not dialogue_parts and completed and require_dialogue:
-                raise RuntimeNoDialogueError("runtime completed decision without dialogue")
-            if not dialogue_parts and not completed:
+                if not completed:
+                    self._expire(event_id)
+            if not spoke and not completed:
                 raise TimeoutError("runtime returned no dialogue before the deadline")
-            return {
-                "text": "".join(dialogue_parts),
-                "correlation_id": event_id,
-                "commands": commands,
-                "provider_health": provider_health,
-            }
+
+    async def process_event(
+        self,
+        kind: str,
+        *,
+        source: str,
+        text: str = "",
+        payload: dict[str, Any] | None = None,
+        require_dialogue: bool = False,
+    ) -> dict[str, Any]:
+        """Send one typed event and collect the whole turn (a completed touch may
+        legitimately be silent). Streaming consumers use stream_event."""
+        commands: list[dict[str, Any]] = []
+        complete: dict[str, Any] = {}
+        event_id = None
+        async for item_kind, data in self.stream_event(
+            kind, source=source, text=text, payload=payload, require_dialogue=require_dialogue
+        ):
+            if item_kind == "complete":
+                complete = data
+            else:
+                commands.append(data)
+            event_id = data.get("correlation_id") or event_id
+        return {
+            "text": "".join(c["dialogue"] for c in commands),
+            "correlation_id": event_id,
+            "commands": commands,
+            "provider_health": complete.get("provider_health", {}),
+            "cognitive_state": complete.get("cognitive_state", {}),
+        }
+
+    def _expire(self, event_id: str) -> None:
+        """Remember a turn the gateway stopped waiting for (bounded)."""
+        self._expired[event_id] = None
+        while len(self._expired) > 256:
+            self._expired.popitem(last=False)
 
     async def next_unsolicited(self, *, timeout_s: float | None = None) -> dict[str, Any]:
         """Wait for dialogue caused by perception/system events, not a voice turn."""

@@ -66,7 +66,7 @@ async def test_done_stages_reach_gateway_latency_endpoint_after_voice_delivery(m
     orchestrator = pipeline_module.PipelineOrchestrator.__new__(
         pipeline_module.PipelineOrchestrator
     )
-    orchestrator._runtime_decision = AsyncMock(side_effect=decide)
+    orchestrator._runtime_stream = stream_of(decide)
     orchestrator.synthesize_tts = AsyncMock(side_effect=synthesize)
     server = server_module.WebSocketServer.__new__(server_module.WebSocketServer)
     server.orchestrator = orchestrator
@@ -100,3 +100,16 @@ async def test_done_stages_reach_gateway_latency_endpoint_after_voice_delivery(m
         assert "first_audio_ms" not in snapshot["last_turn"]
         assert "first_word" not in snapshot["last_turn"]
         assert ws.send_bytes.await_count == 1
+
+
+def stream_of(decide):
+    """Replay a stubbed whole decision (bridge, {"commands": ...}) as the Runtime's
+    stream: each line, then the completion carrying the turn's cognitive state."""
+
+    async def _stream(session, text):
+        bridge, decision = await decide(session, text)
+        for command in decision.get("commands", []):
+            yield "command", command, bridge
+        yield "complete", {"type": "decision_complete"}, bridge
+
+    return _stream
