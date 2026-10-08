@@ -31,6 +31,15 @@ def load_environment(root: Path, overrides: dict[str, str] | None = None) -> dic
     env.update(configured)
     if overrides is not None:
         env.update(overrides)
+    if env.get("LLM_PROVIDER") == "nous_tone":
+        # A local model decides a turn in seconds, not the ~1 s of a hosted API:
+        # widen every hop's budget unless the file sets its own.
+        for key in ("LLM_TIMEOUT", "SOULFORGE_COGNITION_TIMEOUT_S", "RUNTIME_LLM_TIMEOUT"):
+            env.setdefault(key, "120")
+        # the gateway waits on the whole Runtime decision, so it outlasts cognition
+        env.setdefault("CHARACTER_RUNTIME_TIMEOUT_S", "150")
+        # characters noticing each other's arrival: at most one such decision a minute
+        env.setdefault("RUNTIME_AMBIENT_MIN_INTERVAL_S", "60")
     defaults = {"AI_CORE_URL": "http://127.0.0.1:8100", "GATEWAY_PORT": "8081",
                 "CHARACTER_RUNTIME_URL": "ws://127.0.0.1:8765", "CHARACTER_RUNTIME_AGENT": "joi",
                 "STUDIO_PORT": "8899", "SOULFORGE_MEMORY_BACKEND": "ai-core",
@@ -68,6 +77,25 @@ def _local_endpoint(value: str, scheme: str, name: str) -> int:
     return _port(str(url.port or (80 if scheme == "http" else 8765)), name)
 
 
+def tone_port(env: dict[str, str]) -> int:
+    """Port of the local Nous Tone server named by LLM_BASE_URL (http://127.0.0.1:<port>/v1)."""
+    url = urlsplit(env.get("LLM_BASE_URL") or "http://127.0.0.1:7880/v1")
+    if (url.scheme != "http" or url.hostname not in {"127.0.0.1", "localhost"}
+            or url.path.rstrip("/") != "/v1" or url.query or url.fragment or url.username or url.password):
+        raise ValueError("LLM_BASE_URL must be http://127.0.0.1:<port>/v1 for a launcher-managed Nous Tone")
+    return _port(str(url.port or 80), "LLM_BASE_URL")
+
+
+def tone_command(env: dict[str, str], port: int, python: str) -> list[str]:
+    """Nous Tone server: NOUS_TONE_MODEL [+ NOUS_TONE_PACKS steering packs] + NOUS_TONE_READOUT probe."""
+    packs = [p for p in re.split(r"[\s,]+", env.get("NOUS_TONE_PACKS", "")) if p]
+    command = [env.get("NOUS_TONE_PYTHON") or python, "-m", "nous_tone.server", env["NOUS_TONE_MODEL"], *packs,
+               "--host", "127.0.0.1", "--port", str(port)]
+    if env.get("NOUS_TONE_READOUT"):
+        command += ["--readout", env["NOUS_TONE_READOUT"]]
+    return command
+
+
 def validate(env: dict[str, str]) -> dict[str, int]:
     for key in ("SOULFORGE_BRAND_ID", "SERVICE_TOKEN", "GATEWAY_API_TOKEN"):
         if not env.get(key, "").strip() or env[key].strip().lower() in {
@@ -100,8 +128,27 @@ def validate(env: dict[str, str]) -> dict[str, int]:
             raise ValueError("SELFHOST_MEDIA_TOKEN must be a random secret of at least 24 characters")
         if _local_endpoint(env["SELFHOST_MEDIA_URL"], "http", "SELFHOST_MEDIA_URL") != ports["media-body"]:
             raise ValueError("SELFHOST_MEDIA_URL must match SELFHOST_MEDIA_PORT")
+    if env.get("NOUS_TONE_DIR"):
+        # Launcher-managed local model (AI-Emotion-Experiment/tone). Without
+        # NOUS_TONE_DIR a Nous Tone server you run yourself is used as is.
+        if env.get("LLM_PROVIDER") != "nous_tone":
+            raise ValueError("NOUS_TONE_DIR requires LLM_PROVIDER=nous_tone")
+        if not (Path(env["NOUS_TONE_DIR"]) / "nous_tone" / "server.py").is_file():
+            raise ValueError("NOUS_TONE_DIR must point at the tone/ directory containing nous_tone/")
+        paths = [env.get("NOUS_TONE_MODEL", "")] + [p for p in re.split(r"[\s,]+", env.get("NOUS_TONE_PACKS", "")) if p]
+        paths += [env["NOUS_TONE_READOUT"]] if env.get("NOUS_TONE_READOUT") else []
+        if not paths[0] or not all(Path(p).is_dir() for p in paths):
+            raise ValueError("NOUS_TONE_MODEL, NOUS_TONE_PACKS and NOUS_TONE_READOUT must be existing directories")
+        if env.get("NOUS_TONE_PYTHON") and not Path(env["NOUS_TONE_PYTHON"]).is_file():
+            raise ValueError("NOUS_TONE_PYTHON must be an existing interpreter")
+        ports = {"tone": tone_port(env), **ports}
     if len(set(ports.values())) != len(ports):
         raise ValueError("Service ports must be distinct")
+    try:
+        if not 0 <= float(env.get("RUNTIME_AMBIENT_MIN_INTERVAL_S") or 0) < 86400:
+            raise ValueError
+    except ValueError:
+        raise ValueError("RUNTIME_AMBIENT_MIN_INTERVAL_S must be a number of seconds >= 0") from None
     for key in ("RUNTIME_TIME_SCALE", "RUNTIME_LLM_TIMEOUT"):
         try:
             if not 0 < float(env[key]) < 86400:
@@ -114,7 +161,8 @@ def validate(env: dict[str, str]) -> dict[str, int]:
 
 
 def service_commands(env: dict[str, str], ports: dict[str, int], python: str) -> list[tuple[str, list[str]]]:
-    commands = [
+    commands = [("tone", tone_command(env, ports["tone"], python))] if "tone" in ports else []
+    commands += [
         ("ai-core", [python, "-m", "uvicorn", "ai_core.main:app", "--host", "127.0.0.1", "--port", str(ports["ai-core"])]),
         ("runtime", [python, "-m", "engine.server.server", "--host", "127.0.0.1", "--port", str(ports["runtime"]),
                      "--time-scale", env["RUNTIME_TIME_SCALE"], "--llm-timeout", env["RUNTIME_LLM_TIMEOUT"]]),
@@ -123,7 +171,9 @@ def service_commands(env: dict[str, str], ports: dict[str, int], python: str) ->
                     "--runtime-url", env["CHARACTER_RUNTIME_URL"].rstrip("/")]),
     ]
     if env["RUNTIME_SOCIAL"].lower() == "true":
-        commands[1][1].append("--social")
+        dict(commands)["runtime"].append("--social")
+    if float(env.get("RUNTIME_AMBIENT_MIN_INTERVAL_S") or 0) > 0:
+        dict(commands)["runtime"] += ["--ambient-min-interval", env["RUNTIME_AMBIENT_MIN_INTERVAL_S"]]
     if "media-body" in ports:
         commands.append(("media-body", ["bash", str(ROOT / "scripts/selfhost-up.sh")]))
     if env["LIVE_TUNNEL_PROVIDER"] != "none":
@@ -134,7 +184,8 @@ def service_commands(env: dict[str, str], ports: dict[str, int], python: str) ->
 def health(name: str, port: int) -> bool:
     # A CPU media process may run with GPU unavailable. Full GPU readiness is
     # exposed separately by its authenticated /health and the Studio page.
-    path = "/api/status" if name == "studio" else "/livez" if name == "media-body" else "/health"
+    path = ("/api/status" if name == "studio" else "/livez" if name == "media-body"
+            else "/v1/models" if name == "tone" else "/health")
     try:
         with build_opener(ProxyHandler({})).open(f"http://127.0.0.1:{port}{path}", timeout=2) as response:
             data = json.load(response)
@@ -144,6 +195,8 @@ def health(name: str, port: int) -> bool:
             # Readiness is separate from provider success. A new provider may
             # remain unknown until a real conversation, without blocking boot.
             return data.get("ready") is True
+        if name == "tone":
+            return data.get("object") == "list" and bool(data.get("data"))
         if name == "ai-core":
             return data.get("status") == "ok" and data.get("database") == "ok" and data.get("redis") == "ok"
         return data.get("status") == "ok"
@@ -209,7 +262,10 @@ class LiveStack:
     def spawn(self, name: str, command: list[str]) -> subprocess.Popen:
         log = (self.directory / f"{name}.log").open("ab")
         self.logs.append(log)
-        proc = subprocess.Popen(command, cwd=self.root, env=self.env, stdin=subprocess.DEVNULL,
+        env = self.env
+        if name == "tone":  # nous_tone lives in its own repo and interpreter
+            env = {**self.env, "PYTHONPATH": os.pathsep.join(filter(None, [self.env["NOUS_TONE_DIR"], self.env.get("PYTHONPATH")]))}
+        proc = subprocess.Popen(command, cwd=self.root, env=env, stdin=subprocess.DEVNULL,
                                 stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
                                 close_fds=True)
         self.children.append((name, proc))
@@ -242,7 +298,8 @@ class LiveStack:
     def _start_services(self) -> None:
         for name, command in service_commands(self.env, self.ports, sys.executable):
             proc = self.spawn(name, command)
-            self.wait_ready(name, proc)
+            # loading a local model's weights takes far longer than a web service
+            self.wait_ready(name, proc, timeout=300 if name == "tone" else 60)
         provider = self.env["LIVE_TUNNEL_PROVIDER"]
         if provider != "none":
             executable = shutil.which(provider)

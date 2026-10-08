@@ -34,6 +34,10 @@ the Runtime identity helper otherwise derives a stable user for the brand.
 These are trusted installation settings. An external OpenAI `user` field is
 only a conversation label, never authority to access another end user's memory.
 
+To run the chat brain on a local open model (Nous Tone) with per-sentence avatar
+expressions, see [local-model-expression.md](local-model-expression.md): the
+launcher then also starts the model server and widens these limits.
+
 The response time limits are nested: gateway waits up to 35 seconds for Runtime
 (`CHARACTER_RUNTIME_TIMEOUT_S`), Runtime allows 30 seconds for a decision
 (`RUNTIME_LLM_TIMEOUT`), and its AI Core HTTP client allows 25 seconds
