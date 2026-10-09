@@ -9,7 +9,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](packages/soulforge-harness/pyproject.toml)
 [![Status: Alpha](https://img.shields.io/badge/status-alpha-orange.svg)](#roadmap)
 
-[Quickstart](#quickstart) · [MacBook + Windows 5080](docs/macbook-windows-5080.md) · [架构](#architecture) · [自建视频状态](#self-hosted-joi) · [规范](spec/) · [愿景](docs/VISION.md) · [开发文档](docs/DEVELOPER.md)
+[Quickstart](#quickstart) · [MacBook + Windows 5080](docs/macbook-windows-5080.md) · [架构](#architecture) · [视频形象](#托管视频形象vidu-s2) · [自建视频状态](#self-hosted-joi) · [规范](spec/) · [愿景](docs/VISION.md) · [开发文档](docs/DEVELOPER.md)
 
 </div>
 
@@ -29,6 +29,8 @@ SoulForge 是这一层的基础设施——身份、记忆、情绪、关系的*
 - 🔌 **模型中立、本地优先** — SDK 核心与服务部署分离，可连接 OpenAI 兼容模型；完整语音/视频栈需要额外依赖与模型配置
 
 2026-09-07 更新：Live 栈已接入统一认知、持久记忆、provider 降级观测、角色配置投影与受保护的媒体接口。自建真人视频已完成服务接线与离线测试，**尚未在 GPU 上验收，不代表已达到电影级自然度**。
+
+2026-09-21 更新：托管视频形象（Vidu S2）三个版本均已真机跑通，其中[身体版](#托管视频形象vidu-s2)让统一认知直接驱动画面——台词、PAD 情绪、关系阶段都来自 `/cognition/decide`，Vidu 只是一个身体。**感知驱动的主动搭话仍未端到端验证。**
 
 ## Quickstart
 
@@ -116,6 +118,30 @@ Mac 安装可选媒体服务：`./scripts/selfhost-up.sh --install`。在根 `.e
 - 当前等待完整句子音频，每句重置运动状态；未实现跨句身体连续性、自然倾听、语义眼神/手势控制，也不是端到端 token 级流式。
 
 按[MacBook + Windows 5080 指南](docs/macbook-windows-5080.md)部署；模型目录与接口见 [GPU worker](docs/self-hosted-gpu-worker.md)，实测边界见[施工记录](docs/self-hosted-joi-implementation.md)与[延迟计划](docs/cognition-latency-plan.md)。模型权重和授权参考头像需另行准备，不随仓库分发。
+
+### 托管视频形象：Vidu S2
+
+自建视频还在等 GPU 验收，托管方案先把"看得见的她"跑通了。三个版本并存，区别在**谁思考、谁出声**：
+
+| 版本 | 大脑 | 声音 | 脚本 |
+|---|---|---|---|
+| 实时版 | Vidu 的 LLM | Vidu 的 ASR/TTS | [`scripts/vidu_web.py`](scripts/vidu_web.py) |
+| 组件版 | 调用方 | SoulForge TTS | [`scripts/vidu_component.py`](scripts/vidu_component.py) |
+| **身体版** | **统一认知** | **SoulForge TTS** | [`scripts/vidu_body.py`](scripts/vidu_body.py) |
+
+身体版是"一个大脑、很多身体"在视频上的落地：一句话变成 Runtime 事件，`/cognition/decide` 给出唯一决策，Vidu 只负责把它演出来。角色不在 Vidu 那边——换个身体，记忆和关系跟着走。
+
+已在真机验证：
+
+- 三个版本都出了画面和声音。身体版的台词带 PAD 情绪与关系阶段，三轮对话内可当场从 `STRANGER` 跨到 `ACQUAINTANCE`，同一个问题在两个阶段答法不同。
+- **披露边界**：敏感记忆进得了检索包（能影响行为），但内容不出进程，只转成不解释原因的行为指令。策略顺序上 `HIGH/CRITICAL` 的判断在 `can_surface_directly` 之前，敏感记忆无法被误开放。
+- 实时版把记忆经代理注入 `avatar.persona` 与 `memory_retrieval` 回调，API key 不进浏览器。
+
+尚未验证，**不要据此演示**：感知驱动的主动搭话、多身体同时发声（协议上 `reply_body_id` 决定台词只发给发起方）、离线版。向量检索在未配置向量库时退化为词面匹配。
+
+计费按会话秒数计（组件版 1 credit/秒），所以 `--dry-run` 只起网页与 Runtime 身体、不建会话，排查网络零成本。局域网部署时服务器同端口兼容 http 与 https：浏览器自己决定用哪个，而麦克风只在安全上下文里存在。
+
+接口与实测边界见 [Vidu S2 实时版](docs/vidu-s2-realtime.md) 与[厂商对比](docs/video-avatar-providers.md)，录制流程见 [demo 剧本](docs/demo-script.md)。
 
 ## The .soul format
 

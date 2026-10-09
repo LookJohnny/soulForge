@@ -26,12 +26,23 @@ def test_empty_voice_routes_to_primary():
     assert c._route("")[0].name == "edge"
 
 
-def test_fish_nickname_and_clone_id_route_to_fish():
+def test_clone_id_routes_to_fish():
+    """Voice cloning lives in Fish, so a clone id must reach it whatever the
+    configured provider is."""
     c = _client()
-    primary, fallback = c._route("longshuo")
+    primary, fallback = c._route("ac202cdab88e4879b6be98902b236f0e")
     assert primary.name == "fish"
     assert fallback.name == "edge"
-    assert c._route("ac202cdab88e4879b6be98902b236f0e")[0].name == "fish"
+
+
+def test_cosyvoice_preset_routes_to_the_configured_provider():
+    """prompt_builder yields ``fish_audio_id or dashscope_voice_id``, so a name
+    like "longshuo" means the profile has no Fish clone — it is a DashScope
+    voice. Routing it to Fish (the old "anything not Neural is Fish's" rule)
+    sent every CosyVoice request to the wrong provider."""
+    c = _client()
+    for voice in ("longshuo", "longxiaochun_v2", "longcheng_v3"):
+        assert c._route(voice)[0].name == "edge", voice
 
 
 def test_without_fish_provider_stays_on_primary():

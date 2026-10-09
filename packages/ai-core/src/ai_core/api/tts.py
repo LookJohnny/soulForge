@@ -5,7 +5,7 @@ import os
 
 import structlog
 from fastapi import APIRouter, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from ai_core.dependencies import get_prompt_builder, get_tts_client
@@ -117,6 +117,29 @@ async def preview_tts(req: TTSPreviewRequest, request: Request):
         "format": "wav",
         "voice": req.voice or "default",
     }
+
+
+@router.post("/stream")
+@limiter.limit("60/minute")
+async def stream_tts(req: TTSPreviewRequest, request: Request):
+    """Stream synthesized audio as the provider produces it.
+
+    The existing endpoints wait for the whole clip. Driving a talking avatar that
+    way means the face sits still for as long as the sentence takes to
+    synthesize — measured at 16.7s for 6.8s of speech through Fish. A caller that
+    forwards these chunks can start the mouth moving on the first one instead.
+
+    Chunks are whatever the provider emits (MP3 for Fish); providers without
+    streaming yield one chunk, so callers need no special case.
+    """
+    tts = await get_tts_client()
+
+    async def chunks():
+        async for chunk in tts.synthesize_stream(text=req.text, voice=req.voice, speed=req.speed):
+            if chunk:
+                yield chunk
+
+    return StreamingResponse(chunks(), media_type="audio/mpeg")
 
 
 @router.post("/preview.wav")

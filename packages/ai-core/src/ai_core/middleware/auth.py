@@ -155,6 +155,14 @@ async def _verify_api_key(key: str) -> dict | None:
 PUBLIC_PATHS = frozenset({"/health"})
 # Introspection/metrics endpoints leak schema and usage data — public only in dev
 DEV_PUBLIC_PATHS = frozenset({"/metrics", "/metrics/latency", "/docs", "/openapi.json", "/redoc"})
+# Paths that authenticate themselves and must bypass this middleware.
+#
+# Vidu's external retrieval protocol forwards a per-session string verbatim as the
+# Authorization header, so it cannot present a JWE or an sk- API key. These routes
+# verify their own HMAC-signed session token instead (see
+# ai_core.services.vidu_session_token) and reject anything unsigned with 401 —
+# bypassing here is not the same as being unauthenticated.
+SELF_AUTHENTICATED_PATHS = frozenset({"/vidu/memory/retrieve"})
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -169,6 +177,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Skip auth for public endpoints
         if path in PUBLIC_PATHS:
+            return await call_next(request)
+        # Routes that verify their own signed session token
+        if path in SELF_AUTHENTICATED_PATHS:
             return await call_next(request)
         if settings.environment != "production" and path in DEV_PUBLIC_PATHS:
             return await call_next(request)

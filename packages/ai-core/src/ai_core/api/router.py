@@ -14,6 +14,7 @@ from ai_core.api.runtime_state import router as runtime_state_router
 from ai_core.api.soul_packs import router as soul_packs_router
 from ai_core.api.soul_quiz import router as soul_quiz_router
 from ai_core.api.tts import router as tts_router
+from ai_core.api.vidu_retrieval import router as vidu_router
 from ai_core.api.voice_clone import router as voice_clone_router
 
 api_router = APIRouter()
@@ -32,3 +33,4 @@ api_router.include_router(soul_packs_router)
 api_router.include_router(soul_quiz_router)
 api_router.include_router(idol_router)
 api_router.include_router(voice_clone_router)
+api_router.include_router(vidu_router)
